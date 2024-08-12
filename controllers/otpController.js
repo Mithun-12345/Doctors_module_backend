@@ -22,25 +22,35 @@ exports.sendOTP = asyncHandler(async (req, res) => {
 
     if (findPhone) {
       const otp = generateOTP();
-      const otpDocument = new OTP({ phone, otp });
 
-      await otpDocument.save();
+      // Update existing OTP if it exists
+      await OTP.findOneAndUpdate(
+        { phone },
+        {
+          otp,
+          expiresAt: Date.now() + 30 * 1000, // 30 seconds
+        },
+        { upsert: true } // Create a new document if one doesn't exist
+      );
 
-      client.messages
-        .create({
-          body: `Your OTP is ${otp}`,
-          from: "+14159692428", // Replace with your Twilio phone number
-          to: phone,
-        })
-        .then(() => {
-          res.status(200).json({ success: true, message: "OTP sent successfully" });
-        })
-        .catch((err) => {
-          console.error("Twilio error:", err);
-          res.status(500).json({ success: false, error: "Failed to send OTP" });
-        });
+      // Send OTP via Twilio
+      // client.messages
+      //   .create({
+      //     body: `Your OTP is ${otp}`,
+      //     from: "+14159692428", // Replace with your Twilio phone number
+      //     to: phone,
+      //   })
+      //   .then(() => {
+      //     res.status(200).json({ success: true, message: "OTP sent successfully" });
+      //   })
+      //   .catch((err) => {
+      //     console.error("Twilio error:", err);
+      //     res.status(500).json({ success: false, error: "Failed to send OTP" });
+      //   });
     } else {
-      res.status(400).json({ success: false, message: "Phone number not registered" });
+      res
+        .status(400)
+        .json({ success: false, message: "Phone number not registered" });
     }
   } catch (err) {
     console.error("Server error:", err);
@@ -52,9 +62,19 @@ exports.verifyOTP = asyncHandler(async (req, res) => {
   const { phone, userOTP } = req.body;
 
   try {
-    const otpDocument = await OTP.findOne({ phone, otp: userOTP });
+    const otpDocument = await OTP.findOne({
+      phone,
+      otp: userOTP,
+      expiresAt: { $gt: Date.now() }, // Check if OTP is not expired
+    });
 
     if (otpDocument) {
+      // Update OTP field to null or an empty string after successful verification
+      await OTP.updateOne(
+        { phone, otp: userOTP },
+        { $set: { otp: '', expiresAt: Date.now() } } // Set OTP to empty and update expiresAt to current time
+      );
+
       const accessToken = jwt.sign(
         {
           user: {
@@ -65,11 +85,9 @@ exports.verifyOTP = asyncHandler(async (req, res) => {
         { expiresIn: "15m" }
       );
 
-      await OTP.deleteOne({ _id: otpDocument._id });
-
       res.status(200).json({ success: true, accessToken });
     } else {
-      res.status(401).json({ success: false, error: "Invalid OTP" });
+      res.status(401).json({ success: false, error: "Invalid or expired OTP" });
     }
   } catch (err) {
     console.error("Server error:", err);

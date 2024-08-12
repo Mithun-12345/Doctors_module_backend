@@ -1,0 +1,7 @@
+in otp page, write logic for old patients who enter the app. they should be redirected to home page.
+also in otp page, for new patient, check if he is a chronic guy from the first form and redirect to the home page; frontend
+remove the chronic form logic where it checks first form
+also remove the unwanted logic for patient profile; backend
+add refresh tokens
+call log backend
+appointment backend

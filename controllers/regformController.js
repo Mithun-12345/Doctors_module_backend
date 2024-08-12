@@ -6,19 +6,19 @@ exports.sendForm = asyncHandler(async (req, res) => {
     req.body;
 
   // Basic validation
-  if (
-    !name ||
-    !age ||
-    !phone ||
-    !email ||
-    !gender ||
-    !diseaseName ||
-    !diseaseType
-  ) {
-    return res.status(400).json({
-      message: "All fields are required",
-    });
-  }
+  // if (
+  //   !name ||
+  //   !age ||
+  //   !phone ||
+  //   !email ||
+  //   !gender ||
+  //   !diseaseName ||
+  //   !diseaseType
+  // ) {
+  //   return res.status(400).json({
+  //     message: "All fields are required",
+  //   });
+  // }
 
   // Check if the patient with the given phone already exists
   const existingPatient = await Patient.findOne({ phone });

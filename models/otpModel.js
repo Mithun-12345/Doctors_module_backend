@@ -11,10 +11,9 @@ const otpSchema = new mongoose.Schema({
     type: String,
     required: true,
   },
-  createdAt: {
+  expiresAt: {
     type: Date,
-    default: Date.now,
-    expires: "15m", // Automatically delete OTP after 15 minutes
+    required: true // Ensure expiry time is required
   },
 });
 

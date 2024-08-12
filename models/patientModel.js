@@ -35,3 +35,5 @@ const patientSchema = new mongoose.Schema(
 );
 
 module.exports = mongoose.model("Patients", patientSchema);
+
+//add field for result of model - acute / chronic
