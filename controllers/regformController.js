@@ -49,20 +49,16 @@ exports.sendForm = asyncHandler(async (req, res) => {
   });
 });
 
-
 exports.patientDetails = asyncHandler(async (req, res) => {
   // Extract phone number from route parameters
-  const { phone } = req.params;
+  const phone = req.user.phone;
 
-  // Basic validation: Ensure phone number is provided
   if (!phone) {
-    return res.status(400).json({
-      message: "Phone number is required",
-    });
+    return res.status(400).json({ message: "Phone number not available" });
   }
 
   // Find the patient by phone number
-  const patient = await Patient.findOne({ phone });
+  const patient = await Patient.find({ phone });
 
   if (!patient) {
     // If patient not found, return a 404 response
@@ -72,7 +68,5 @@ exports.patientDetails = asyncHandler(async (req, res) => {
   }
 
   // Return the patient details
-  res.status(200).json({
-    patient,
-  });
+  res.status(200).json({ patient });
 });

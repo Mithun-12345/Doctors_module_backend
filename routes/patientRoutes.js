@@ -9,7 +9,7 @@ const validateToken = require("../middlewares/validateTokenHandler");
 const router = express.Router();
 
 router.post("/sendRegForm", sendForm);
-router.post("/sendChronicForm", validateToken,sendChronicForm);
-router.get("/details/:phone", validateToken, patientDetails);
+router.post("/sendChronicForm", validateToken, sendChronicForm);
+router.get("/details", validateToken, patientDetails);
 
 module.exports = router;

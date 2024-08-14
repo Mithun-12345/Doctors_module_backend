@@ -47,6 +47,9 @@ exports.sendOTP = asyncHandler(async (req, res) => {
       //     console.error("Twilio error:", err);
       //     res.status(500).json({ success: false, error: "Failed to send OTP" });
       //   });
+      res
+        .status(200)
+        .json({ success: true, message: "OTP sent successfully", otp });
     } else {
       res
         .status(400)
@@ -72,7 +75,7 @@ exports.verifyOTP = asyncHandler(async (req, res) => {
       // Update OTP field to null or an empty string after successful verification
       await OTP.updateOne(
         { phone, otp: userOTP },
-        { $set: { otp: '', expiresAt: Date.now() } } // Set OTP to empty and update expiresAt to current time
+        { $set: { otp: "", expiresAt: Date.now() } } // Set OTP to empty and update expiresAt to current time
       );
 
       const accessToken = jwt.sign(
