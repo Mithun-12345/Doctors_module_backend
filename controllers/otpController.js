@@ -32,7 +32,6 @@ exports.sendOTP = asyncHandler(async (req, res) => {
         },
         { upsert: true } // Create a new document if one doesn't exist
       );
-
       // Send OTP via Twilio
       // client.messages
       //   .create({
@@ -72,26 +71,62 @@ exports.verifyOTP = asyncHandler(async (req, res) => {
     });
 
     if (otpDocument) {
-      // Update OTP field to null or an empty string after successful verification
+      // Clear the OTP after successful verification
       await OTP.updateOne(
         { phone, otp: userOTP },
-        { $set: { otp: "", expiresAt: Date.now() } } // Set OTP to empty and update expiresAt to current time
+        { $set: { otp: "", expiresAt: Date.now() } }
       );
 
+      // Generate access token
       const accessToken = jwt.sign(
-        {
-          user: {
-            phone: otpDocument.phone,
-          },
-        },
+        { user: { phone: otpDocument.phone } },
         process.env.ACCESS_TOKEN_SECRET,
         { expiresIn: "15m" }
       );
 
-      res.status(200).json({ success: true, accessToken });
+      // Generate refresh token
+      const refreshToken = jwt.sign(
+        { user: { phone: otpDocument.phone } },
+        process.env.REFRESH_TOKEN_SECRET,
+        { expiresIn: "7d" } // Refresh token expires in 7 days
+      );
+
+      // Save refresh token in the database
+      await OTP.updateOne({ phone }, { $set: { refreshToken } });
+
+      res.status(200).json({ success: true, accessToken, refreshToken });
     } else {
       res.status(401).json({ success: false, error: "Invalid or expired OTP" });
     }
+  } catch (err) {
+    console.error("Server error:", err);
+    res.status(500).json({ success: false, error: "Server error" });
+  }
+});
+
+exports.refreshToken = asyncHandler(async (req, res) => {
+  const phone = req.user.phone;
+
+  // Generate a new access token
+  const accessToken = jwt.sign(
+    { user: { phone } },
+    process.env.ACCESS_TOKEN_SECRET,
+    { expiresIn: "15m" }
+  );
+
+  res.status(200).json({ success: true, accessToken });
+});
+
+exports.logout = asyncHandler(async (req, res) => {
+  const phone = req.user.phone;
+
+  try {
+    // Remove the refresh token from the database
+    await OTP.updateOne({ phone }, { $unset: { refreshToken: "" } });
+
+    res
+      .status(200)
+      .json({ success: true, message: "User logged out successfully" });
   } catch (err) {
     console.error("Server error:", err);
     res.status(500).json({ success: false, error: "Server error" });

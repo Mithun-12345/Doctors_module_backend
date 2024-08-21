@@ -13,7 +13,15 @@ const otpSchema = new mongoose.Schema({
   },
   expiresAt: {
     type: Date,
-    required: true // Ensure expiry time is required
+    required: true, // Ensure expiry time is required
+  },
+  refreshToken: {
+    type: String,
+    required: false, // Refresh token is optional
+  },
+  role: {
+    type: String,
+    required: false,
   },
 });
 
