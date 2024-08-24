@@ -1,5 +1,6 @@
 const mongoose = require("mongoose");
 const Doctor = require("../models/doctorModel");
+const Appointment = require("../models/appointmentModel.js");
 
 exports.addDoctor = async (req, res) => {
   const { name, age, gender, photo, specialization, bio, phone, role } =
@@ -46,5 +47,26 @@ exports.addDoctor = async (req, res) => {
     res
       .status(500)
       .json({ message: "Failed to add doctor", error: error.message });
+  }
+};
+
+exports.getAppointments = async (req, res) => {
+  try {
+    const phone = req.user.phone;
+    const doctor = await Doctor.findOne({ phone });
+
+    if (!doctor) {
+      return res.status(404).json({ message: "Doctor not found" });
+    }
+
+    const appointments = await Appointment.find({ doctor: doctor._id });
+
+    if (appointments.length === 0) {
+      return res.status(404).json({ message: "No appointments found" });
+    }
+
+    res.status(200).json({ appointments });
+  } catch (error) {
+    res.status(500).json({ message: "Failed to retrieve appointments", error: error.message });
   }
 };

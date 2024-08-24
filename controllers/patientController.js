@@ -65,7 +65,7 @@ exports.patientDetails = asyncHandler(async (req, res) => {
   }
 
   // Find the patient by phone number
-  const patient = await Patient.find({ phone });
+  const patient = await Patient.findOne({ phone });
 
   if (!patient) {
     // If patient not found, return a 404 response
@@ -194,12 +194,16 @@ exports.bookAppointment = asyncHandler(async (req, res) => {
 
   // Check if the appointment date is in the past
   if (appointmentDateObj < currentDate) {
-    return res.status(400).json({ message: "Cannot book appointments in the past" });
+    return res
+      .status(400)
+      .json({ message: "Cannot book appointments in the past" });
   }
 
   // Check if the appointment date is beyond one month from the current date
   if (appointmentDateObj > oneMonthLater) {
-    return res.status(400).json({ message: "Appointments can only be booked within a month" });
+    return res
+      .status(400)
+      .json({ message: "Appointments can only be booked within a month" });
   }
 
   // Get existing appointments for the given date

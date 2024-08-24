@@ -27,7 +27,7 @@ const appointmentSchema = new mongoose.Schema(
       default: "pending",
     },
     payment: {
-      required: true,
+      required: false,
       type: Number,
     },
   },
