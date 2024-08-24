@@ -1,13 +1,19 @@
 const mongoose = require("mongoose");
 
 const doctorSchema = new mongoose.Schema({
-  phone:String,
-  name: String,
-  age: Number,
-  gender: String,
-  photo: String,
-  specialization: String,
-  bio: String,
+  phone: { type: String, required: true, unique: true },
+  name: { type: String, required: false },
+  age: { type: Number, required: false },
+  gender: { type: String, required: false },
+  photo: { type: String },
+  specialization: { type: String, required: false },
+  bio: { type: String },
+  role: {
+    type: String,
+    enum: ["admin-doctor", "assistant-doctor"], // Enum for the role field
+    default: "assistant-doctor", // Default value if no role is provided
+    required: true,
+  },
 });
 
-module.exports = new mongoose.model("Doctor", doctorSchema);
+module.exports = mongoose.model("Doctor", doctorSchema);

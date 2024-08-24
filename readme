@@ -6,3 +6,4 @@ while i make an appointment the doctor should be able to see the patient's detai
 patient should be able to see his appointments; doctor should be able to see his appointments
 redirection of appointment to assistant doctor
 cancellation of appointment
+the otp page shouldn't check for cases involving doctors like if they have filled the first form

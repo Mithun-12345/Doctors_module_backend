@@ -22,6 +22,8 @@ const otpSchema = new mongoose.Schema({
   role: {
     type: String,
     required: false,
+    enum: ["patient", "doctor"],
+    default: "patient",
   },
 });
 

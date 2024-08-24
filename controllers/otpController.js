@@ -5,6 +5,7 @@ require("dotenv").config();
 
 const OTP = require("../models/otpModel");
 const regForm = require("../models/patientModel");
+const Doctor = require("../models/doctorModel");
 
 const accountSid = process.env.TWILIO_ACCOUNT_SID;
 const authToken = process.env.TWILIO_AUTH_TOKEN;
@@ -18,9 +19,10 @@ exports.sendOTP = asyncHandler(async (req, res) => {
   const { phone } = req.body;
 
   try {
-    const findPhone = await regForm.findOne({ phone });
+    const findDoctor = await Doctor.findOne({ phone });
 
-    if (findPhone) {
+    if (findDoctor) {
+      // Skip the registration form check and proceed with sending OTP
       const otp = generateOTP();
 
       // Update existing OTP if it exists
@@ -32,6 +34,7 @@ exports.sendOTP = asyncHandler(async (req, res) => {
         },
         { upsert: true } // Create a new document if one doesn't exist
       );
+
       // Send OTP via Twilio
       // client.messages
       //   .create({
@@ -50,9 +53,43 @@ exports.sendOTP = asyncHandler(async (req, res) => {
         .status(200)
         .json({ success: true, message: "OTP sent successfully", otp });
     } else {
-      res
-        .status(400)
-        .json({ success: false, message: "Phone number not registered" });
+      const findPhone = await regForm.findOne({ phone });
+
+      if (findPhone) {
+        const otp = generateOTP();
+
+        // Update existing OTP if it exists
+        await OTP.findOneAndUpdate(
+          { phone },
+          {
+            otp,
+            expiresAt: Date.now() + 30 * 1000, // 30 seconds
+          },
+          { upsert: true } // Create a new document if one doesn't exist
+        );
+
+        // Send OTP via Twilio
+        // client.messages
+        //   .create({
+        //     body: `Your OTP is ${otp}`,
+        //     from: "+14159692428", // Replace with your Twilio phone number
+        //     to: phone,
+        //   })
+        //   .then(() => {
+        //     res.status(200).json({ success: true, message: "OTP sent successfully" });
+        //   })
+        //   .catch((err) => {
+        //     console.error("Twilio error:", err);
+        //     res.status(500).json({ success: false, error: "Failed to send OTP" });
+        //   });
+        res
+          .status(200)
+          .json({ success: true, message: "OTP sent successfully", otp });
+      } else {
+        res
+          .status(400)
+          .json({ success: false, message: "Phone number not registered" });
+      }
     }
   } catch (err) {
     console.error("Server error:", err);
