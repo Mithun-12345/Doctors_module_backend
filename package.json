@@ -1,32 +1,32 @@
 {
-  "homepage": "https://github.com/Adrin-Bershik-C-J/maars",
-  "name": "new-folder",
-  "version": "1.0.0",
-  "main": "index.js",
-  "scripts": {
-    "start": "nodemon index.js",
-    "test": "echo \"Error: no test specified\" && exit 1",
-    "predeploy": "npm run build",
-    "deploy": "gh-pages -d build"
-  },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
-  "description": "",
-  "dependencies": {
-    "cors": "^2.8.5",
-    "dotenv": "^16.4.5",
-    "express": "^4.19.2",
-    "express-async-handler": "^1.2.0",
-    "express-rate-limit": "^7.4.0",
-    "express-validator": "^7.1.0",
-    "jsonwebtoken": "^9.0.2",
-    "mongoose": "^8.5.1",
-    "nodemon": "^3.1.4",
-    "razorpay": "^2.9.4",
-    "twilio": "^5.2.2"
-  },
-  "devDependencies": {
-    "gh-pages": "^6.1.1"
+    "homepage": "https://github.com/Adrin-Bershik-C-J/maars",
+    "name": "new-folder",
+    "version": "1.0.0",
+    "main": "index.js",
+    "scripts": {
+      "start": "nodemon index.js",
+      "test": "echo \"Error: no test specified\" && exit 1",
+      "predeploy": "npm run build",
+      "deploy": "gh-pages -d build"
+    },
+    "keywords": [],
+    "author": "",
+    "license": "ISC",
+    "description": "",
+    "dependencies": {
+      "cors": "^2.8.5",
+      "dotenv": "^16.4.5",
+      "express": "^4.19.2",
+      "express-async-handler": "^1.2.0",
+      "express-rate-limit": "^7.4.0",
+      "express-validator": "^7.1.0",
+      "jsonwebtoken": "^9.0.2",
+      "mongoose": "^8.5.1",
+      "nodemon": "^3.1.4",
+      "razorpay": "^2.9.4",
+      "twilio": "^5.2.2"
+    },
+    "devDependencies": {
+      "gh-pages": "^6.1.1"
+    }
   }
-}
