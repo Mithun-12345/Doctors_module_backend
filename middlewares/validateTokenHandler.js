@@ -13,6 +13,11 @@ const validateToken = asyncHandler(async (req, res, next) => {
       throw new Error("User is not authorized or token is missing");
     }
 
+    // Debugging: Log the token and secret
+    console.log("authHeader:", authHeader);
+    console.log("Token received:", token);
+    console.log("Secret used for verification:", process.env.ACCESS_TOKEN_SECRET);
+
     jwt.verify(token, process.env.ACCESS_TOKEN_SECRET, (err, decoded) => {
       if (err) {
         res.status(401);

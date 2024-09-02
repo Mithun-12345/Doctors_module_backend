@@ -30,8 +30,12 @@ const appointmentSchema = new mongoose.Schema(
       required: false,
       type: Number,
     },
+    isChronic: {
+      type: Boolean,
+      default: false,
+    },
   },
   { timestamps: true }
 );
 
-module.exports = new mongoose.model("Appointment", appointmentSchema);
+module.exports = mongoose.model('Appointment', appointmentSchema, 'appointments');

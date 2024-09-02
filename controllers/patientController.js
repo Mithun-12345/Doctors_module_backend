@@ -1,11 +1,10 @@
 const asyncHandler = require("express-async-handler");
 const Patient = require("../models/patientModel");
-const chronicPatient = require("../models/chronicModel");
+const ChronicPatient = require("../models/chronicModel");
 const Appointment = require("../models/appointmentModel");
 const Doctor = require("../models/doctorModel");
 
 //Initial Form
-
 exports.sendForm = asyncHandler(async (req, res) => {
   const { name, age, phone, email, gender, diseaseName, diseaseType } =
     req.body;
@@ -55,34 +54,35 @@ exports.sendForm = asyncHandler(async (req, res) => {
 });
 
 //Patient Profile
-
 exports.patientDetails = asyncHandler(async (req, res) => {
-  // Extract phone number from route parameters
   const phone = req.user.phone;
 
   if (!phone) {
     return res.status(400).json({ message: "Phone number not available" });
   }
 
-  // Find the patient by phone number
+  // Fetch the patient
   const patient = await Patient.findOne({ phone });
 
   if (!patient) {
-    // If patient not found, return a 404 response
-    return res.status(404).json({
-      message: "Patient not found",
-    });
+    return res.status(404).json({ message: "Patient not found" });
   }
 
-  // Return the patient details
-  res.status(200).json({ patient });
+  let chronicPatient = false;
+  if (patient.diseaseType.toLowerCase() === 'chronic') {
+    const chronicPatientRecord = await ChronicPatient.findOne({ phone });
+    if (chronicPatientRecord) {
+      chronicPatient = true;
+    }
+  }
+
+  res.status(200).json({ patient, chronicPatient });
 });
 
-//Chronic Form
 
+//Chronic Form
 exports.sendChronicForm = asyncHandler(async (req, res) => {
-  const {
-    phone,
+  const { 
     name,
     dob,
     age,
@@ -102,148 +102,141 @@ exports.sendChronicForm = asyncHandler(async (req, res) => {
     bodyType,
     clinicReferral,
   } = req.body;
+  const phone = req.user.phone;
 
   // Check if the patient with the provided phone number exists
   const existingPatient = await Patient.findOne({ phone });
-
-  if (existingPatient.diseaseType != "chronic") {
+  console.log(phone);
+  console.log(existingPatient);
+  if (existingPatient.diseaseType.toLowerCase() != 'chronic') {
     return res.json({ message: "Patient isn't chronic!" });
   }
 
   if (existingPatient) {
-    // Create a new chronic patient document
-    const chronicPatientDocument = new chronicPatient({
-      phone,
-      name,
-      dob,
-      age,
-      weight,
-      height,
-      occupation,
-      country,
-      state,
-      city,
-      complaint,
-      symptoms,
-      associatedDisease,
-      allopathy,
-      diseaseHistory,
-      surgeryHistory,
-      allergies,
-      bodyType,
-      clinicReferral,
-    });
+  // Create a new chronic patient document
+  const chronicPatientDocument = new ChronicPatient({
+    phone,
+    name,
+    dob,
+    age,
+    weight,
+    height,
+    occupation,
+    country,
+    state,
+    city,
+    complaint,
+    symptoms,
+    associatedDisease,
+    allopathy,
+    diseaseHistory,
+    surgeryHistory,
+    allergies,
+    bodyType,
+    clinicReferral,
+  });
 
-    // Save the chronic patient document to the database
-    await chronicPatientDocument.save();
+  // Save the chronic patient document to the "chronics" collection in the database
+  await chronicPatientDocument.save();
 
-    // Send a success response
-    res.status(201).json({
-      message: "Patient data saved successfully",
-      patient: chronicPatientDocument,
-    });
-  } else {
-    // Send an error response if the initial form is not filled
-    res.status(400).json({ message: "First fill in the initial form" });
+  // Send a success response
+  res.status(201).json({
+    success: true,
+    message: "Chronic patient data saved successfully",
+    patient: chronicPatientDocument,
+  });
   }
 });
 
-//Book Appointment
+// Check Available Slots
+exports.checkAvailableSlots = asyncHandler(async (req, res) => {
+  const { appointmentDate } = req.body;
+  const phone = req.user.phone;
 
+  const patient = await Patient.findOne({ phone });
+  const diseaseType = patient.diseaseType.toLowerCase();
+
+  const timeSlots = ["10:00", "11:00", "12:00", "13:00", "14:00", "15:00", "16:00", "17:00"];
+  const appointments = await Appointment.find({ appointmentDate });
+
+  const isMorningSlot = (slot) => timeSlots.indexOf(slot) < 4;
+
+  const availableSlots = timeSlots.filter(slot => {
+    const isBooked = appointments.some(appt => appt.timeSlot === slot);
+
+    if (isBooked) return false;
+
+    if (diseaseType === "chronic") {
+      // If chronic patient, check if there is a chronic booking in the morning or afternoon session
+      const chronicBookingInMorning = appointments.some(appt => appt.isChronic && isMorningSlot(appt.timeSlot));
+      const chronicBookingInAfternoon = appointments.some(appt => appt.isChronic && !isMorningSlot(appt.timeSlot));
+
+      if ((chronicBookingInMorning && isMorningSlot(slot)) || 
+          (chronicBookingInAfternoon && !isMorningSlot(slot))) {
+        return false;
+      }
+    }
+
+    return true;
+  });
+
+  res.status(200).json({ availableSlots });
+});
+
+// Book appointment
 exports.bookAppointment = asyncHandler(async (req, res) => {
   const phone = req.user.phone;
-  const { appointmentDate, timeSlot, doctorId } = req.body;
+  const { appointmentDate, timeSlot } = req.body;
 
-  // Find the patient by phone number
   const patient = await Patient.findOne({ phone });
   if (!patient) {
     return res.status(404).json({ message: "Patient not found" });
   }
 
-  // Find the doctor by ID
-  const doctor = await Doctor.findById(doctorId);
-  if (!doctor) {
-    return res.status(404).json({ message: "Doctor not found" });
-  }
-
-  const isChronic = patient.diseaseType === "chronic";
-
-  // Define time slots
-  const timeSlots = [
-    "10:00", // Morning slot
-    "11:00",
-    "12:00",
-    "13:00",
-    "14:00", // Afternoon slot
-    "15:00",
-    "16:00",
-    "17:00",
-  ];
-
-  // Check if the requested slot is valid
+  const isChronic = patient.diseaseType.toLowerCase() === "chronic";
+  const timeSlots = ["10:00", "11:00", "12:00", "13:00", "14:00", "15:00", "16:00", "17:00"];
   const requestedSlotIndex = timeSlots.indexOf(timeSlot);
+
   if (requestedSlotIndex === -1) {
     return res.status(400).json({ message: "Invalid time slot" });
   }
 
-  // Check if the appointment date is valid (within the next month and not in the past)
   const currentDate = new Date();
   const appointmentDateObj = new Date(appointmentDate);
   const oneMonthLater = new Date();
   oneMonthLater.setMonth(currentDate.getMonth() + 1);
 
-  // Check if the appointment date is in the past
   if (appointmentDateObj < currentDate) {
-    return res
-      .status(400)
-      .json({ message: "Cannot book appointments in the past" });
+    return res.status(400).json({ message: "Cannot book appointments in the past" });
   }
 
-  // Check if the appointment date is beyond one month from the current date
   if (appointmentDateObj > oneMonthLater) {
-    return res
-      .status(400)
-      .json({ message: "Appointments can only be booked within a month" });
+    return res.status(400).json({ message: "Appointments can only be booked within a month" });
   }
 
-  // Get existing appointments for the given date
   const appointments = await Appointment.find({ appointmentDate });
+  const isMorningSlot = (slot) => timeSlots.indexOf(slot) < 4;
 
   if (isChronic) {
-    // Check if the requested slot is a morning or afternoon slot
-    const isMorningSlot = requestedSlotIndex < 4; // Morning slots are in the first half
-    const isAfternoonSlot = requestedSlotIndex >= 4; // Afternoon slots are in the second half
+    const chronicBookingInMorning = appointments.some(appt => appt.isChronic && isMorningSlot(appt.timeSlot));
+    const chronicBookingInAfternoon = appointments.some(appt => appt.isChronic && !isMorningSlot(appt.timeSlot));
 
-    // Check if a chronic patient has already booked a morning or afternoon slot
-    const chronicMorningBooked = appointments.some(
-      (appt) => appt.isChronic && timeSlots.indexOf(appt.timeSlot) < 4
-    );
-    const chronicAfternoonBooked = appointments.some(
-      (appt) => appt.isChronic && timeSlots.indexOf(appt.timeSlot) >= 4
-    );
+    // For chronic patients, block entire morning or afternoon session
+    if ((isMorningSlot(timeSlot) && chronicBookingInMorning) || 
+        (!isMorningSlot(timeSlot) && chronicBookingInAfternoon)) {
+      return res.status(400).json({ message: "The selected time slot is not available for chronic patients" });
+    }
+  } else {
+    const isSlotBooked = appointments.some((appt) => appt.timeSlot === timeSlot);
 
-    if (
-      (isMorningSlot && chronicMorningBooked) ||
-      (isAfternoonSlot && chronicAfternoonBooked)
-    ) {
-      return res.status(400).json({
-        message:
-          "The selected time slot is already booked for a chronic patient",
-      });
+    // For acute patients, only check if the specific slot is booked
+    if (isSlotBooked) {
+      return res.status(400).json({ message: "Time slot is not available" });
     }
   }
 
-  // Check if the time slot is already booked by any patient
-  const isSlotBooked = appointments.some((appt) => appt.timeSlot === timeSlot);
-
-  if (isSlotBooked) {
-    return res.status(400).json({ message: "Time slot is already booked" });
-  }
-
-  // Create and save the new appointment
   const newAppointment = new Appointment({
     patient: patient._id,
-    doctor: doctor._id,
     appointmentDate,
     timeSlot,
     isChronic,
@@ -256,3 +249,57 @@ exports.bookAppointment = asyncHandler(async (req, res) => {
     appointment: newAppointment,
   });
 });
+
+
+// // Update Appointment
+// exports.updateAppointment = asyncHandler(async (req, res) => {
+//   const { id } = req.params;
+//   const { status } = req.body;
+
+//   const appointment = await Appointment.findById(id);
+//   if (!appointment) {
+//     return res.status(404).json({ message: "Appointment not found" });
+//   }
+
+//   appointment.status = status || appointment.status;
+//   await appointment.save();
+
+//   res.status(200).json({
+//     message: "Appointment updated successfully",
+//     appointment,
+//   });
+// });
+
+// // Get Appointments by Date
+// exports.getAppointmentsByDate = asyncHandler(async (req, res) => {
+//   const { date } = req.query;
+
+//   const appointmentDate = new Date(date);
+//   const appointments = await Appointment.find({ appointmentDate });
+
+//   res.status(200).json(appointments);
+// });
+
+// // Get Appointment by ID
+// exports.getAppointmentById = asyncHandler(async (req, res) => {
+//   const { id } = req.params;
+
+//   const appointment = await Appointment.findById(id);
+//   if (!appointment) {
+//     return res.status(404).json({ message: "Appointment not found" });
+//   }
+
+//   res.status(200).json(appointment);
+// });
+
+// // Cancel Appointment
+// exports.cancelAppointment = asyncHandler(async (req, res) => {
+//   const { id } = req.params;
+
+//   const appointment = await Appointment.findByIdAndDelete(id);
+//   if (!appointment) {
+//     return res.status(404).json({ message: "Appointment not found" });
+//   }
+
+//   res.status(200).json({ message: "Appointment cancelled successfully" });
+// });
