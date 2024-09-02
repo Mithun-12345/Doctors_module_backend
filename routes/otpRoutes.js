@@ -10,9 +10,9 @@ const validateRefreshToken = require("../middlewares/validateRefreshToken");
 
 const router = express.Router();
 
-router.post("/sendOTP", apiLimiter, sendOTP);
+// router.post("/sendOTP", apiLimiter, sendOTP);
 router.post("/verifyOTP", verifyOTP);
 router.post("/refreshToken", validateRefreshToken, refreshToken);
 router.post("/logout", validateRefreshToken, logout);
-
+router.post('/send-otp', apiLimiter, sendOTP);
 module.exports = router;
