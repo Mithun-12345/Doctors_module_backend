@@ -1,7 +1,7 @@
 const asyncHandler = require("express-async-handler");
 const twilio = require("twilio");
 const jwt = require("jsonwebtoken");
-const Chronic = require('../models/chronicModel');
+const Chronic = require("../models/chronicModel");
 require("dotenv").config();
 
 const OTP = require("../models/otpModel");
@@ -25,7 +25,6 @@ const checkPatient = async (phone) => {
     throw new Error("Error checking patient");
   }
 };
-
 
 exports.sendOTP = asyncHandler(async (req, res) => {
   const { phone } = req.body;
@@ -55,7 +54,9 @@ exports.sendOTP = asyncHandler(async (req, res) => {
       //   res.status(500).json({ success: false, error: "Failed to send OTP" });
       // });
 
-      return res.status(200).json({ success: true, message: "OTP sent successfully", otp });
+      return res
+        .status(200)
+        .json({ success: true, message: "OTP sent successfully", otp });
     } else {
       // Check if the phone number is in the patients collection
       const isPatient = await checkPatient(phone);
@@ -63,8 +64,8 @@ exports.sendOTP = asyncHandler(async (req, res) => {
       if (isPatient) {
         const otp = generateOTP();
 
-        console.log('Sending OTP to phone:', phone);
-        console.log('Generated OTP:', otp);
+        console.log("Sending OTP to phone:", phone);
+        console.log("Generated OTP:", otp);
 
         await OTP.findOneAndUpdate(
           { phone },
@@ -72,7 +73,7 @@ exports.sendOTP = asyncHandler(async (req, res) => {
           { upsert: true }
         );
 
-        console.log('OTP sent and saved in the database');
+        console.log("OTP sent and saved in the database");
 
         // Uncomment to use Twilio for sending OTP
         // await client.messages.create({
@@ -81,9 +82,13 @@ exports.sendOTP = asyncHandler(async (req, res) => {
         //   to: phone,
         // });
 
-        return res.status(200).json({ success: true, message: "OTP sent successfully", otp });
+        return res
+          .status(200)
+          .json({ success: true, message: "OTP sent successfully", otp });
       } else {
-        return res.status(400).json({ success: false, message: "Phone number not registered" });
+        return res
+          .status(400)
+          .json({ success: false, message: "Phone number not registered" });
       }
     }
   } catch (err) {
@@ -91,7 +96,6 @@ exports.sendOTP = asyncHandler(async (req, res) => {
     return res.status(500).json({ success: false, error: "Server error" });
   }
 });
-
 
 exports.verifyOTP = asyncHandler(async (req, res) => {
   const { phone, userOTP } = req.body;
@@ -119,7 +123,7 @@ exports.verifyOTP = asyncHandler(async (req, res) => {
       const accessToken = jwt.sign(
         { user: { phone: otpDocument.phone } },
         process.env.ACCESS_TOKEN_SECRET,
-        { expiresIn: "15m" }
+        { expiresIn: "25m" }
       );
 
       // Generate refresh token

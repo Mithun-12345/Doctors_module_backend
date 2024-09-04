@@ -1,9 +1,0 @@
-once a patient fills a first form, his number should get a role of 'patient'; for doctor it is not an issue as admin doctor is the one who add assistant doctor
-it is not otp controller, it is user controller; so roles can be patient/admin doctor/assistant doctor
-doctor also fill otp and enters; concepts similar to patient module
-payment
-while i make an appointment the doctor should be able to see the patient's details
-patient should be able to see his appointments; doctor should be able to see his appointments
-redirection of appointment to assistant doctor
-cancellation of appointment
-the otp page shouldn't check for cases involving doctors like if they have filled the first form

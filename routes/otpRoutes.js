@@ -1,18 +1,14 @@
 const express = require("express");
-const {
-  sendOTP,
-  verifyOTP,
-  refreshToken,
-  logout,
-} = require("../controllers/otpController");
+const otpController = require("../controllers/otpController");
 const apiLimiter = require("../middlewares/rateLimiter");
 const validateRefreshToken = require("../middlewares/validateRefreshToken");
 
 const router = express.Router();
 
 // router.post("/sendOTP", apiLimiter, sendOTP);
-router.post("/verifyOTP", verifyOTP);
-router.post("/refreshToken", validateRefreshToken, refreshToken);
-router.post("/logout", validateRefreshToken, logout);
-router.post('/send-otp', apiLimiter, sendOTP);
+router.post("/verifyOTP", otpController.verifyOTP);
+router.post("/refreshToken", validateRefreshToken, otpController.refreshToken);
+router.post("/logout", validateRefreshToken, otpController.logout);
+router.post('/sendOTP', apiLimiter, otpController.sendOTP);
+
 module.exports = router;

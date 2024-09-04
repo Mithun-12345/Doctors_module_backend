@@ -59,14 +59,64 @@ exports.getAppointments = async (req, res) => {
       return res.status(404).json({ message: "Doctor not found" });
     }
 
-    const appointments = await Appointment.find({ doctor: doctor._id });
+    // Check if the query parameter 'type' is set to 'all'
+    const { type } = req.query;
 
-    if (appointments.length === 0) {
-      return res.status(404).json({ message: "No appointments found" });
+    let appointments;
+
+    if (type === 'all') {
+      // Fetch all appointments
+      appointments = await Appointment.find();
+      
+      if (appointments.length === 0) {
+        return res.status(200).json({ message: "No appointments found", appointments: [] });
+      }
+    } else {
+      // Fetch appointments for the current doctor
+      appointments = await Appointment.find({ doctor: doctor._id });
+      
+      if (appointments.length === 0) {
+        return res.status(200).json({ message: "No appointments found", appointments: [] });
+      }
     }
 
     res.status(200).json({ appointments });
+
   } catch (error) {
-    res.status(500).json({ message: "Failed to retrieve appointments", error: error.message });
+    res.status(500).json({
+      message: "Failed to retrieve appointments",
+      error: error.message,
+    });
+  }
+};
+
+exports.redirectAppointment = async (req, res) => {
+  const { assistantDoctorId, appointmentId } = req.body;
+
+  try {
+    const checkDoctor = await Doctor.findOne({ _id: assistantDoctorId });
+    // Find the appointment by ID
+    const appointment = await Appointment.findById(appointmentId);
+
+    if (!appointment) {
+      return res.status(404).json({ message: "Appointment not found" });
+    }
+    if (!checkDoctor) {
+      return res.status(404).json({ message: "No such doctor found" });
+    }
+    // Update the appointment with the assistant doctor and set status to "redirected"
+    appointment.doctor = assistantDoctorId;
+    appointment.status = "redirected";
+
+    await appointment.save();
+
+    res
+      .status(200)
+      .json({ message: "Appointment redirected successfully", appointment });
+  } catch (e) {
+    res.status(500).json({
+      message: "Failed to redirect appointment",
+      error: e.message,
+    });
   }
 };

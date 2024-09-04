@@ -25,4 +25,4 @@ const chronicSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
-module.exports = mongoose.model("Chronic", chronicSchema, "chronics");
+module.exports = mongoose.model("Chronic", chronicSchema);

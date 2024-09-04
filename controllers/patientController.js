@@ -69,7 +69,8 @@ exports.patientDetails = asyncHandler(async (req, res) => {
   }
 
   let chronicPatient = false;
-  if (patient.diseaseType.toLowerCase() === 'chronic') {
+
+  if (patient.diseaseType.toLowerCase() === "chronic") {
     const chronicPatientRecord = await ChronicPatient.findOne({ phone });
     if (chronicPatientRecord) {
       chronicPatient = true;
@@ -79,10 +80,9 @@ exports.patientDetails = asyncHandler(async (req, res) => {
   res.status(200).json({ patient, chronicPatient });
 });
 
-
 //Chronic Form
 exports.sendChronicForm = asyncHandler(async (req, res) => {
-  const { 
+  const {
     name,
     dob,
     age,
@@ -108,43 +108,43 @@ exports.sendChronicForm = asyncHandler(async (req, res) => {
   const existingPatient = await Patient.findOne({ phone });
   console.log(phone);
   console.log(existingPatient);
-  if (existingPatient.diseaseType.toLowerCase() != 'chronic') {
+  if (existingPatient.diseaseType.toLowerCase() != "chronic") {
     return res.json({ message: "Patient isn't chronic!" });
   }
 
   if (existingPatient) {
-  // Create a new chronic patient document
-  const chronicPatientDocument = new ChronicPatient({
-    phone,
-    name,
-    dob,
-    age,
-    weight,
-    height,
-    occupation,
-    country,
-    state,
-    city,
-    complaint,
-    symptoms,
-    associatedDisease,
-    allopathy,
-    diseaseHistory,
-    surgeryHistory,
-    allergies,
-    bodyType,
-    clinicReferral,
-  });
+    // Create a new chronic patient document
+    const chronicPatientDocument = new ChronicPatient({
+      phone,
+      name,
+      dob,
+      age,
+      weight,
+      height,
+      occupation,
+      country,
+      state,
+      city,
+      complaint,
+      symptoms,
+      associatedDisease,
+      allopathy,
+      diseaseHistory,
+      surgeryHistory,
+      allergies,
+      bodyType,
+      clinicReferral,
+    });
 
-  // Save the chronic patient document to the "chronics" collection in the database
-  await chronicPatientDocument.save();
+    // Save the chronic patient document to the "chronics" collection in the database
+    await chronicPatientDocument.save();
 
-  // Send a success response
-  res.status(201).json({
-    success: true,
-    message: "Chronic patient data saved successfully",
-    patient: chronicPatientDocument,
-  });
+    // Send a success response
+    res.status(201).json({
+      success: true,
+      message: "Chronic patient data saved successfully",
+      patient: chronicPatientDocument,
+    });
   }
 });
 
@@ -156,23 +156,38 @@ exports.checkAvailableSlots = asyncHandler(async (req, res) => {
   const patient = await Patient.findOne({ phone });
   const diseaseType = patient.diseaseType.toLowerCase();
 
-  const timeSlots = ["10:00", "11:00", "12:00", "13:00", "14:00", "15:00", "16:00", "17:00"];
+  const timeSlots = [
+    "10:00",
+    "11:00",
+    "12:00",
+    "13:00",
+    "14:00",
+    "15:00",
+    "16:00",
+    "17:00",
+  ];
   const appointments = await Appointment.find({ appointmentDate });
 
   const isMorningSlot = (slot) => timeSlots.indexOf(slot) < 4;
 
-  const availableSlots = timeSlots.filter(slot => {
-    const isBooked = appointments.some(appt => appt.timeSlot === slot);
+  const availableSlots = timeSlots.filter((slot) => {
+    const isBooked = appointments.some((appt) => appt.timeSlot === slot);
 
     if (isBooked) return false;
 
     if (diseaseType === "chronic") {
       // If chronic patient, check if there is a chronic booking in the morning or afternoon session
-      const chronicBookingInMorning = appointments.some(appt => appt.isChronic && isMorningSlot(appt.timeSlot));
-      const chronicBookingInAfternoon = appointments.some(appt => appt.isChronic && !isMorningSlot(appt.timeSlot));
+      const chronicBookingInMorning = appointments.some(
+        (appt) => appt.isChronic && isMorningSlot(appt.timeSlot)
+      );
+      const chronicBookingInAfternoon = appointments.some(
+        (appt) => appt.isChronic && !isMorningSlot(appt.timeSlot)
+      );
 
-      if ((chronicBookingInMorning && isMorningSlot(slot)) || 
-          (chronicBookingInAfternoon && !isMorningSlot(slot))) {
+      if (
+        (chronicBookingInMorning && isMorningSlot(slot)) ||
+        (chronicBookingInAfternoon && !isMorningSlot(slot))
+      ) {
         return false;
       }
     }
@@ -187,14 +202,30 @@ exports.checkAvailableSlots = asyncHandler(async (req, res) => {
 exports.bookAppointment = asyncHandler(async (req, res) => {
   const phone = req.user.phone;
   const { appointmentDate, timeSlot } = req.body;
-
+  const doctorId = "66c8312667b91b0b7730e725";
   const patient = await Patient.findOne({ phone });
   if (!patient) {
     return res.status(404).json({ message: "Patient not found" });
   }
 
+  // Find the doctor by ID
+  const doctor = await Doctor.findById(doctorId);
+  if (!doctor || doctor.role != "admin-doctor") {
+    return res.status(404).json({ message: "Doctor not found" });
+  }
+
   const isChronic = patient.diseaseType.toLowerCase() === "chronic";
-  const timeSlots = ["10:00", "11:00", "12:00", "13:00", "14:00", "15:00", "16:00", "17:00"];
+
+  const timeSlots = [
+    "10:00",
+    "11:00",
+    "12:00",
+    "13:00",
+    "14:00",
+    "15:00",
+    "16:00",
+    "17:00",
+  ];
   const requestedSlotIndex = timeSlots.indexOf(timeSlot);
 
   if (requestedSlotIndex === -1) {
@@ -207,27 +238,41 @@ exports.bookAppointment = asyncHandler(async (req, res) => {
   oneMonthLater.setMonth(currentDate.getMonth() + 1);
 
   if (appointmentDateObj < currentDate) {
-    return res.status(400).json({ message: "Cannot book appointments in the past" });
+    return res
+      .status(400)
+      .json({ message: "Cannot book appointments in the past" });
   }
 
   if (appointmentDateObj > oneMonthLater) {
-    return res.status(400).json({ message: "Appointments can only be booked within a month" });
+    return res
+      .status(400)
+      .json({ message: "Appointments can only be booked within a month" });
   }
 
   const appointments = await Appointment.find({ appointmentDate });
   const isMorningSlot = (slot) => timeSlots.indexOf(slot) < 4;
 
   if (isChronic) {
-    const chronicBookingInMorning = appointments.some(appt => appt.isChronic && isMorningSlot(appt.timeSlot));
-    const chronicBookingInAfternoon = appointments.some(appt => appt.isChronic && !isMorningSlot(appt.timeSlot));
+    const chronicBookingInMorning = appointments.some(
+      (appt) => appt.isChronic && isMorningSlot(appt.timeSlot)
+    );
+    const chronicBookingInAfternoon = appointments.some(
+      (appt) => appt.isChronic && !isMorningSlot(appt.timeSlot)
+    );
 
     // For chronic patients, block entire morning or afternoon session
-    if ((isMorningSlot(timeSlot) && chronicBookingInMorning) || 
-        (!isMorningSlot(timeSlot) && chronicBookingInAfternoon)) {
-      return res.status(400).json({ message: "The selected time slot is not available for chronic patients" });
+    if (
+      (isMorningSlot(timeSlot) && chronicBookingInMorning) ||
+      (!isMorningSlot(timeSlot) && chronicBookingInAfternoon)
+    ) {
+      return res.status(400).json({
+        message: "The selected time slot is not available for chronic patients",
+      });
     }
   } else {
-    const isSlotBooked = appointments.some((appt) => appt.timeSlot === timeSlot);
+    const isSlotBooked = appointments.some(
+      (appt) => appt.timeSlot === timeSlot
+    );
 
     // For acute patients, only check if the specific slot is booked
     if (isSlotBooked) {
@@ -237,6 +282,7 @@ exports.bookAppointment = asyncHandler(async (req, res) => {
 
   const newAppointment = new Appointment({
     patient: patient._id,
+    doctor: doctor._id,
     appointmentDate,
     timeSlot,
     isChronic,
@@ -250,6 +296,40 @@ exports.bookAppointment = asyncHandler(async (req, res) => {
   });
 });
 
+//Get appointments
+exports.getAppointments = async (req, res) => {
+  try {
+    const phone = req.user.phone;
+    const patient = await Patient.findOne({ phone });
+
+    if (!patient) {
+      return res.status(404).json({ message: "Patient not found" });
+    }
+
+    const patientId = patient._id;
+    const { status } = req.query;
+
+    // Building the query object
+    let query = { patient: patientId };
+
+    // Adding status filter if it's provided in the query parameters
+    if (status) {
+      query.status = status;
+    }
+
+    const appointments = await Appointment.find(query);
+
+    if (!appointments || appointments.length === 0) {
+      return res.status(404).json({ message: "No appointments found" });
+    }
+
+    return res.status(200).json({ appointments });
+  } catch (error) {
+    return res
+      .status(500)
+      .json({ message: "Server error", error: error.message });
+  }
+};
 
 // // Update Appointment
 // exports.updateAppointment = asyncHandler(async (req, res) => {

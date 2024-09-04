@@ -9,6 +9,7 @@ const {
   // getAppointmentById,
   // cancelAppointment,
   checkAvailableSlots,
+  getAppointments,
 } = require("../controllers/patientController");
 const validateToken = require("../middlewares/validateTokenHandler");
 
@@ -23,5 +24,6 @@ router.post("/bookAppointment", validateToken, bookAppointment);
 // router.get("/appointment/:id", validateToken, getAppointmentById);
 // router.delete("/appointment/:id", validateToken, cancelAppointment);
 router.post("/checkSlots", validateToken, checkAvailableSlots);
+router.get("/getAppointments", validateToken, getAppointments);
 
 module.exports = router;
