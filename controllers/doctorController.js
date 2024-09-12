@@ -1,6 +1,7 @@
 const mongoose = require("mongoose");
 const Doctor = require("../models/doctorModel");
 const Appointment = require("../models/appointmentModel.js");
+const moment = require('moment');
 
 exports.addDoctor = async (req, res) => {
   const { name, age, gender, photo, specialization, bio, phone, role } =
@@ -54,34 +55,70 @@ exports.getAppointments = async (req, res) => {
   try {
     const phone = req.user.phone;
     const doctor = await Doctor.findOne({ phone });
-
     if (!doctor) {
       return res.status(404).json({ message: "Doctor not found" });
     }
 
-    // Check if the query parameter 'type' is set to 'all'
-    const { type } = req.query;
+    const { dateFilter, typeFilter } = req.query;
+    const doctorRole = doctor.role;
 
-    let appointments;
+    let query = {};
+    let startDate, endDate;
+    const now = new Date();
 
-    if (type === 'all') {
-      // Fetch all appointments
-      appointments = await Appointment.find();
-      
-      if (appointments.length === 0) {
-        return res.status(200).json({ message: "No appointments found", appointments: [] });
-      }
-    } else {
-      // Fetch appointments for the current doctor
-      appointments = await Appointment.find({ doctor: doctor._id });
-      
-      if (appointments.length === 0) {
-        return res.status(200).json({ message: "No appointments found", appointments: [] });
-      }
+    switch (dateFilter) {
+      case 'today':
+        startDate = new Date(now.setHours(0, 0, 0, 0));
+        endDate = new Date(now.setHours(23, 59, 59, 999));
+        query.appointmentDate = { $gte: startDate, $lte: endDate };
+        break;
+      case 'this week':
+        startDate = new Date(now.setDate(now.getDate() - now.getDay()));
+        startDate.setHours(0, 0, 0, 0);
+        endDate = new Date(now.setDate(now.getDate() - now.getDay() + 6));
+        endDate.setHours(23, 59, 59, 999);
+        query.appointmentDate = { $gte: startDate, $lte: endDate };
+        break;
+      case 'this month':
+        startDate = new Date(now.getFullYear(), now.getMonth(), 1);
+        endDate = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
+        query.appointmentDate = { $gte: startDate, $lte: endDate };
+        break;
+      case 'past':
+        endDate = new Date(now.setHours(0, 0, 0, 0));
+        query.appointmentDate = { $lt: endDate };
+        break;
+      default:
+        startDate = new Date(now.setHours(0, 0, 0, 0));
+        endDate = new Date(now.setHours(23, 59, 59, 999));
+        query.appointmentDate = { $gte: startDate, $lte: endDate };
     }
 
-    res.status(200).json({ appointments });
+    if (typeFilter === 'mine' || (doctorRole !== 'admin-doctor' && typeFilter !== 'all')) {
+      query.doctor = doctor._id;
+    }
 
+    const appointments = await Appointment.find(query)
+      .populate({
+        path: 'patient',
+        select: 'name',
+      })
+      .populate({
+        path: 'doctor',
+        select: 'name',
+      });
+
+    if (appointments.length === 0) {
+      return res.status(200).json({ message: "No appointments found", appointments: [] });
+    }
+
+    const modifiedAppointments = appointments.map((appointment) => ({
+      ...appointment._doc,
+      canRedirect: doctorRole === 'admin-doctor',
+      doctorName: appointment.doctor.name,
+    }));
+
+    res.status(200).json({ appointments: modifiedAppointments });
   } catch (error) {
     res.status(500).json({
       message: "Failed to retrieve appointments",
@@ -92,31 +129,93 @@ exports.getAppointments = async (req, res) => {
 
 exports.redirectAppointment = async (req, res) => {
   const { assistantDoctorId, appointmentId } = req.body;
+  console.log("Assistant Doctor ID:", assistantDoctorId);
+  console.log("Appointment ID:", appointmentId);
 
   try {
-    const checkDoctor = await Doctor.findOne({ _id: assistantDoctorId });
-    // Find the appointment by ID
+    const assistantDoctor = await Doctor.findOne({ _id: assistantDoctorId });
     const appointment = await Appointment.findById(appointmentId);
+
+    console.log("Assistant Doctor found:", assistantDoctor);
+    console.log("Appointment found:", appointment);
 
     if (!appointment) {
       return res.status(404).json({ message: "Appointment not found" });
     }
-    if (!checkDoctor) {
-      return res.status(404).json({ message: "No such doctor found" });
+    if (!assistantDoctor) {
+      return res.status(404).json({ message: "No such doctor found or doctor is not allowed to redirect" });
     }
-    // Update the appointment with the assistant doctor and set status to "redirected"
+    
     appointment.doctor = assistantDoctorId;
-    appointment.status = "redirected";
-
+    appointment.status = `redirected`;
     await appointment.save();
 
-    res
-      .status(200)
-      .json({ message: "Appointment redirected successfully", appointment });
+    res.status(200).json({ message: "Appointment redirected successfully", appointment });
   } catch (e) {
+    console.error("Error redirecting appointment:", e.message);
     res.status(500).json({
       message: "Failed to redirect appointment",
       error: e.message,
     });
+  }
+};
+
+
+exports.getUserRole = async (req, res) => {
+  const token = req.headers.authorization.split(' ')[1];
+  try {
+    const decodedToken = jwt.verify(token, process.env.JWT_SECRET);
+    const doctor = await Doctor.findById(decodedToken.id);
+    if (!doctor) {
+      return res.status(404).json({ message: 'Doctor not found' });
+    }
+    res.status(200).json({ role: doctor.role });
+  } catch (e) {
+    res.status(500).json({ message: 'Failed to get user role', error: e.message });
+  }
+};
+
+// Function to get assistant doctors
+exports.getAssistantDoctors = async (req, res) => {
+  try {
+    const doctors = await Doctor.find({ role: 'assistant-doctor' });
+    res.status(200).json({ doctors });
+  } catch (e) {
+    res.status(500).json({ message: 'Failed to fetch assistant doctors', error: e.message });
+  }
+};
+
+
+exports.doctorDetails = async (req, res) => {
+  try {
+    const doctorPhone = req.user.phone;
+    console.log('Searching for doctor with phone:', doctorPhone);
+
+    // Find the doctor by phone number
+    const doctor = await Doctor.findOne({ phone: doctorPhone });
+
+    if (!doctor) {
+      console.log('Doctor not found for phone:', doctorPhone);
+      return res.status(404).json({ success: false, message: 'Doctor not found' });
+    }
+
+    // console.log('Doctor found:', doctor.name);
+
+    // Return the doctor's details
+    res.json({
+      success: true,
+      doctor: {
+        id: doctor._id,
+        name: doctor.name,
+        email: doctor.email,
+        phone: doctor.phone,
+        specialization: doctor.specialization,
+        experience: doctor.experience,
+        // Add any other relevant fields
+      }
+    });
+  } catch (error) {
+    console.error('Error in doctor/details:', error);
+    res.status(500).json({ success: false, message: 'Server error' });
   }
 };

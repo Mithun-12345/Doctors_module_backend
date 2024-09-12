@@ -2,7 +2,7 @@ const express = require('express');
 const mongoose = require('mongoose');
 const cors = require('cors');
 require('dotenv').config();
-
+const patientModel = require('./models/patientModel');
 const dbConnection = require('./config/dbConnection');
 const otpRoute = require('./routes/otpRoutes');
 const patientRoute = require('./routes/patientRoutes');
@@ -26,4 +26,13 @@ const PORT = process.env.PORT || 8000;
 
 app.listen(PORT, () => {
   console.log(`Server listening on port ${PORT}`);
+});
+
+app.get('/test', async (req, res) => {
+  try {
+    const patients = await patientModel.find();  // Fetch all documents
+    res.json(patients);  // Send all documents as a JSON response
+  } catch (error) {
+    res.status(500).json({ message: 'Server error', error });
+  }
 });

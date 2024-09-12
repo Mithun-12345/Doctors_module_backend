@@ -27,69 +27,46 @@ const checkPatient = async (phone) => {
 };
 
 exports.sendOTP = asyncHandler(async (req, res) => {
-  const { phone } = req.body;
+  const { phone, role } = req.body;
+  console.log(req.body);
 
   try {
-    const findDoctor = await Doctor.findOne({ phone });
+    let user;
+    if (role === 'Doctor') {
+      user = await Doctor.findOne({ phone });
+    } else if (role === 'Patient') {
+      user = await regForm.findOne({ phone });
+    } else {
+      return res.status(400).json({ success: false, message: "Invalid role specified" });
+    }
 
-    if (findDoctor) {
-      // Doctor exists, proceed with sending OTP
+    if (user) {
+      // User exists, proceed with sending OTP
       const otp = generateOTP();
 
       await OTP.findOneAndUpdate(
         { phone },
-        { otp, expiresAt: Date.now() + 30 * 1000 }, // 30 seconds
+        { otp, expiresAt: Date.now() + 2 * 60 * 1000 }, // 2 minutes
         { upsert: true } // Create a new document if one doesn't exist
       );
 
+      console.log(`Sending OTP to ${role} with phone:`, phone);
+      console.log("Generated OTP:", otp);
+
       // Uncomment to use Twilio for sending OTP
-      // client.messages.create({
+      // await client.messages.create({
       //   body: `Your OTP is ${otp}`,
-      //   from: "+14159692428", // Replace with your Twilio phone number
+      //   from: "+17472332995", // Replace with your Twilio phone number
       //   to: phone,
-      // }).then(() => {
-      //   res.status(200).json({ success: true, message: "OTP sent successfully" });
-      // }).catch((err) => {
-      //   console.error("Twilio error:", err);
-      //   res.status(500).json({ success: false, error: "Failed to send OTP" });
       // });
 
       return res
         .status(200)
         .json({ success: true, message: "OTP sent successfully", otp });
     } else {
-      // Check if the phone number is in the patients collection
-      const isPatient = await checkPatient(phone);
-
-      if (isPatient) {
-        const otp = generateOTP();
-
-        console.log("Sending OTP to phone:", phone);
-        console.log("Generated OTP:", otp);
-
-        await OTP.findOneAndUpdate(
-          { phone },
-          { otp, expiresAt: Date.now() + 2 * 60 * 1000 },
-          { upsert: true }
-        );
-
-        console.log("OTP sent and saved in the database");
-
-        // Uncomment to use Twilio for sending OTP
-        // await client.messages.create({
-        //   body: `Your OTP is ${otp}`,
-        //   from: "+17472332995", // Replace with your Twilio phone number
-        //   to: phone,
-        // });
-
-        return res
-          .status(200)
-          .json({ success: true, message: "OTP sent successfully", otp });
-      } else {
-        return res
-          .status(400)
-          .json({ success: false, message: "Phone number not registered" });
-      }
+      return res
+        .status(400)
+        .json({ success: false, message: `Phone number not registered as ${role}` });
     }
   } catch (err) {
     console.error("Server error:", err);
