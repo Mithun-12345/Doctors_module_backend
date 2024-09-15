@@ -9,6 +9,6 @@ const router = express.Router();
 router.post("/verifyOTP", otpController.verifyOTP);
 router.post("/refreshToken", validateRefreshToken, otpController.refreshToken);
 router.post("/logout", validateRefreshToken, otpController.logout);
-router.post('/sendOTP', apiLimiter, otpController.sendOTP);
+router.post('/send-otp', apiLimiter, otpController.sendOTP);
 
 module.exports = router;

@@ -5,6 +5,9 @@ const {
   getAvailableSlots,
   getAppointments,
   redirectAppointment,
+  doctorDetails,
+  getAssistantDoctors,
+  getUserRole
 } = require("../controllers/doctorController");
 
 const router = express.Router();
@@ -25,5 +28,8 @@ router.get("/getAppointments", validateToken, getAppointments);
 // router.get('/availableSlots', getAvailableSlots);
 
 router.post("/redirectAppointment", validateToken, redirectAppointment);
+router.get('/getAssistantDoctors', validateToken, getAssistantDoctors);
+router.get('/getUserRole', validateToken, getUserRole);
+router.get('/details', validateToken, doctorDetails);
 
 module.exports = router;
