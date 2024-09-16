@@ -5,6 +5,13 @@ const { createServer } = require("http");
 const { Server } = require("socket.io");
 require("dotenv").config();
 const Message = require("./models/messageModel");
+const patientModel = require("./models/patientModel");
+const dbConnection = require("./config/dbConnection");
+const otpRoute = require("./routes/otpRoutes");
+const patientRoute = require("./routes/patientRoutes");
+const doctorRoute = require("./routes/doctorRoutes");
+
+dbConnection();
 
 const app = express();
 const server = createServer(app);
@@ -18,6 +25,9 @@ const io = new Server(server, {
 
 app.use(express.json());
 app.use(cors());
+app.use("/api/otp", otpRoute);
+app.use("/api/patient", patientRoute);
+app.use("/api/doctor", doctorRoute);
 
 mongoose
   .connect(process.env.MONGODB_LOCAL_URI)
@@ -81,4 +91,13 @@ const PORT = process.env.PORT || 8000;
 
 server.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
+});
+
+app.get("/test", async (req, res) => {
+  try {
+    const patients = await patientModel.find(); // Fetch all documents
+    res.json(patients); // Send all documents as a JSON response
+  } catch (error) {
+    res.status(500).json({ message: "Server error", error });
+  }
 });
