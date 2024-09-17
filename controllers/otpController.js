@@ -75,46 +75,65 @@ exports.sendOTP = asyncHandler(async (req, res) => {
 });
 
 exports.verifyOTP = asyncHandler(async (req, res) => {
-  const { phone, userOTP } = req.body;
+  const { phone, userOTP, userType } = req.body;
+  console.log("Received request body:", req.body);
 
   try {
     const otpDocument = await OTP.findOne({
       phone,
       otp: userOTP,
-      expiresAt: { $gt: Date.now() }, // Check if OTP is not expired
+      expiresAt: { $gt: Date.now() },
     });
 
+    console.log("OTP Document found:", otpDocument);
+
     if (otpDocument) {
-      // Clear the OTP after successful verification
       await OTP.updateOne(
         { phone, otp: userOTP },
         { $set: { otp: "", expiresAt: Date.now() } }
       );
-      // const patient = await Chronic.findOne({ phone });
-      // if(patient){
-      //   res.status(200).json({ success: true, message: "chronicExists" });
-      // }else{
-      //   res.status(200).json({ success: false, message: "chronic does not Exists" });
-      // }
-      // Generate access token
+
       const accessToken = jwt.sign(
-        { user: { phone: otpDocument.phone } },
+        { user: { phone: otpDocument.phone, userType } },
         process.env.ACCESS_TOKEN_SECRET,
         { expiresIn: "25m" }
       );
 
-      // Generate refresh token
       const refreshToken = jwt.sign(
-        { user: { phone: otpDocument.phone } },
+        { user: { phone: otpDocument.phone, userType } },
         process.env.REFRESH_TOKEN_SECRET,
-        { expiresIn: "7d" } // Refresh token expires in 7 days
+        { expiresIn: "7d" }
       );
 
-      // Save refresh token in the database
+      let user;
+      console.log("Searching for user with userType:", userType);
+
+      if (userType === 'Doctor') {
+        user = await Doctor.findOne({ phone });
+      } else if (userType === 'Patient') {
+        user = await regForm.findOne({ phone });
+      } else {
+        console.log("Invalid userType specified:", userType);
+        return res.status(400).json({ success: false, message: "Invalid userType specified" });
+      }
+
+      if (!user) {
+        console.log("User not found for phone:", phone);
+        return res.status(404).json({ success: false, message: "User not found" });
+      }
+
       await OTP.updateOne({ phone }, { $set: { refreshToken } });
 
-      res.status(200).json({ success: true, accessToken, refreshToken });
+      console.log("Sending successful response");
+      res.status(200).json({ 
+        success: true, 
+        accessToken, 
+        refreshToken, 
+        userId: user._id,
+        userType: userType
+      });
     } else {
+      console.log("Invalid or expired OTP for phone:", phone);
       res.status(401).json({ success: false, error: "Invalid or expired OTP" });
     }
   } catch (err) {

@@ -10,6 +10,7 @@ const dbConnection = require("./config/dbConnection");
 const otpRoute = require("./routes/otpRoutes");
 const patientRoute = require("./routes/patientRoutes");
 const doctorRoute = require("./routes/doctorRoutes");
+const validateToken = require("./middlewares/validateTokenHandler");
 
 dbConnection();
 
@@ -29,63 +30,77 @@ app.use("/api/otp", otpRoute);
 app.use("/api/patient", patientRoute);
 app.use("/api/doctor", doctorRoute);
 
+const chatRoutes = require('./routes/chatRoutes');
+app.use('/api',chatRoutes);
+
 mongoose
   .connect(process.env.MONGODB_LOCAL_URI)
   .then(() => console.log("MongoDB connected"))
   .catch((err) => console.log(err));
 
-io.on("connection", (socket) => {
-  console.log("A user connected", socket.id);
-
-  socket.on("join", ({ userId }) => {
-    socket.join(userId);
-    console.log(`User ${userId} joined their room`);
+  io.on("connection", (socket) => {
+    console.log("A user connected", socket.id);
+  
+    socket.on("join", ({ userId }) => {
+      socket.join(userId);
+      console.log(`User ${userId} joined their room`);
+    });
+  
+    socket.on("chat message", async (msg) => {
+      try {
+        const message = new Message({
+          sender: msg.senderId,
+          receiver: msg.receiverId,
+          content: msg.content,
+          timestamp: new Date(),
+        });
+  
+        await message.save();
+  
+        // Emit message to both sender and receiver
+        io.to(msg.senderId).to(msg.receiverId).emit("chat message", message);
+  
+        // Acknowledge successful save
+        socket.emit("message saved", { success: true, messageId: message._id });
+  
+        // Immediately retrieve and emit all messages between sender and receiver
+        const messages = await Message.find({
+          $or: [
+            { sender: msg.senderId, receiver: msg.receiverId },
+            { sender: msg.receiverId, receiver: msg.senderId },
+          ],
+        }).sort("timestamp");
+  
+        io.to(msg.senderId).to(msg.receiverId).emit("chat history", messages);
+      } catch (err) {
+        console.log("Error saving message:", err);
+        // Notify client of error
+        socket.emit("message saved", { success: false, error: err.message });
+      }
+    });
+  
+    socket.on("disconnect", () => {
+      console.log("User disconnected", socket.id);
+    });
   });
-
-  socket.on("chat message", async (msg) => {
+  
+  app.get("/api/chat/:senderId/:receiverId", async (req, res) => {
     try {
-      const message = new Message({
-        sender: msg.senderId,
-        receiver: msg.receiverId,
-        content: msg.content,
-        timestamp: new Date(),
-      });
-
-      await message.save();
-
-      // Emit message to both sender and receiver
-      io.to(msg.senderId).to(msg.receiverId).emit("chat message", message);
-
-      // Acknowledge successful save
-      socket.emit("message saved", { success: true, messageId: message._id });
+      const { senderId, receiverId } = req.params;
+  
+      const messages = await Message.find({
+        $or: [
+          { sender: senderId, receiver: receiverId },
+          { sender: receiverId, receiver: senderId },
+        ],
+      }).sort("timestamp");
+  
+      res.json(messages);
     } catch (err) {
-      console.log("Error saving message:", err);
-      // Notify client of error
-      socket.emit("message saved", { success: false, error: err.message });
+      res.status(500).json({ message: "Server error", err });
     }
   });
-
-  socket.on("disconnect", () => {
-    console.log("User disconnected", socket.id);
-  });
-});
-
-app.get("/api/chat/:senderId/:receiverId", async (req, res) => {
-  try {
-    const { senderId, receiverId } = req.params;
-
-    const messages = await Message.find({
-      $or: [
-        { sender: senderId, receiver: receiverId },
-        { sender: receiverId, receiver: senderId },
-      ],
-    }).sort("timestamp");
-
-    res.json(messages);
-  } catch (err) {
-    res.status(500).json({ message: "Server error", err });
-  }
-});
+  
 
 const PORT = process.env.PORT || 8000;
 

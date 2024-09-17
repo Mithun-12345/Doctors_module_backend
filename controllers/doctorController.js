@@ -1,7 +1,7 @@
 const mongoose = require("mongoose");
 const Doctor = require("../models/doctorModel");
 const Appointment = require("../models/appointmentModel.js");
-//const moment = require('moment');
+const moment = require('moment');
 
 exports.addDoctor = async (req, res) => {
   const { name, age, gender, photo, specialization, bio, phone, role } =
@@ -55,6 +55,7 @@ exports.getAppointments = async (req, res) => {
   try {
     const phone = req.user.phone;
     const doctor = await Doctor.findOne({ phone });
+    // console.log(doctor);
     if (!doctor) {
       return res.status(404).json({ message: "Doctor not found" });
     }
@@ -115,7 +116,8 @@ exports.getAppointments = async (req, res) => {
     const modifiedAppointments = appointments.map((appointment) => ({
       ...appointment._doc,
       canRedirect: doctorRole === 'admin-doctor',
-      doctorName: appointment.doctor.name,
+      doctorName: appointment.doctor ? appointment.doctor.name : 'Unknown',
+      patientName: appointment.patient ? appointment.patient.name : 'Unknown'
     }));
 
     res.status(200).json({ appointments: modifiedAppointments });
@@ -136,8 +138,8 @@ exports.redirectAppointment = async (req, res) => {
     const assistantDoctor = await Doctor.findOne({ _id: assistantDoctorId });
     const appointment = await Appointment.findById(appointmentId);
 
-    console.log("Assistant Doctor found:", assistantDoctor);
-    console.log("Appointment found:", appointment);
+    // console.log("Assistant Doctor found:", assistantDoctor);
+    // console.log("Appointment found:", appointment);
 
     if (!appointment) {
       return res.status(404).json({ message: "Appointment not found" });
@@ -160,6 +162,14 @@ exports.redirectAppointment = async (req, res) => {
   }
 };
 
+exports.getAssistantDoctors = async (req, res) => {
+  try {
+    const doctors = await Doctor.find({ role: 'assistant-doctor' });
+    res.status(200).json({ doctors });
+  } catch (e) {
+    res.status(500).json({ message: 'Failed to fetch assistant doctors', error: e.message });
+  }
+};
 
 exports.getUserRole = async (req, res) => {
   const token = req.headers.authorization.split(' ')[1];
@@ -175,19 +185,9 @@ exports.getUserRole = async (req, res) => {
   }
 };
 
-// Function to get assistant doctors
-exports.getAssistantDoctors = async (req, res) => {
-  try {
-    const doctors = await Doctor.find({ role: 'assistant-doctor' });
-    res.status(200).json({ doctors });
-  } catch (e) {
-    res.status(500).json({ message: 'Failed to fetch assistant doctors', error: e.message });
-  }
-};
-
-
 exports.doctorDetails = async (req, res) => {
   try {
+    console.log("Doctor details Endpoint reached");
     const doctorPhone = req.user.phone;
     console.log('Searching for doctor with phone:', doctorPhone);
 
@@ -199,7 +199,7 @@ exports.doctorDetails = async (req, res) => {
       return res.status(404).json({ success: false, message: 'Doctor not found' });
     }
 
-    // console.log('Doctor found:', doctor.name);
+    console.log('Doctor found:', doctor.name);
 
     // Return the doctor's details
     res.json({

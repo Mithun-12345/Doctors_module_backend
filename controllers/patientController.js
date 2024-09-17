@@ -55,6 +55,7 @@ exports.sendForm = asyncHandler(async (req, res) => {
 
 //Patient Profile
 exports.patientDetails = asyncHandler(async (req, res) => {
+  console.log("Patient Details endpoint reached");
   const phone = req.user.phone;
 
   if (!phone) {
