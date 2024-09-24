@@ -7,6 +7,11 @@ const otpSchema = new mongoose.Schema({
     required: true,
     unique: true, // Ensure phone numbers are unique
   },
+  // role: {
+  //   type: String,
+  //   enum: ["Doctor", "Patient"],
+  //   default: "Patient",
+  // },
   otp: {
     type: String,
     required: true,
@@ -19,12 +24,6 @@ const otpSchema = new mongoose.Schema({
     type: String,
     required: false, // Refresh token is optional
   },
-  // role: {
-  //   type: String,
-  //   required: false,
-  //   enum: ["patient", "doctor"],
-  //   default: "patient",
-  // },
 });
 
 // Create the OTP model

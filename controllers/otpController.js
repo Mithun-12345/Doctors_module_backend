@@ -2,7 +2,7 @@ const asyncHandler = require("express-async-handler");
 const twilio = require("twilio");
 const jwt = require("jsonwebtoken");
 const Chronic = require("../models/chronicModel");
-require("dotenv").config();
+require("dotenv").config({ path: "./config/.env" });
 
 const OTP = require("../models/otpModel");
 const regForm = require("../models/patientModel");
@@ -32,12 +32,14 @@ exports.sendOTP = asyncHandler(async (req, res) => {
 
   try {
     let user;
-    if (role === 'Doctor') {
+    if (role === "Doctor") {
       user = await Doctor.findOne({ phone });
-    } else if (role === 'Patient') {
+    } else if (role === "Patient") {
       user = await regForm.findOne({ phone });
     } else {
-      return res.status(400).json({ success: false, message: "Invalid role specified" });
+      return res
+        .status(400)
+        .json({ success: false, message: "Invalid role specified" });
     }
 
     if (user) {
@@ -66,7 +68,10 @@ exports.sendOTP = asyncHandler(async (req, res) => {
     } else {
       return res
         .status(400)
-        .json({ success: false, message: `Phone number not registered as ${role}` });
+        .json({
+          success: false,
+          message: `Phone number not registered as ${role}`,
+        });
     }
   } catch (err) {
     console.error("Server error:", err);
