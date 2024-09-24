@@ -3,6 +3,7 @@ const Patient = require("../models/patientModel");
 const ChronicPatient = require("../models/chronicModel");
 const Appointment = require("../models/appointmentModel");
 const Doctor = require("../models/doctorModel");
+const moment = require('moment');
 
 //Initial Form
 exports.sendForm = asyncHandler(async (req, res) => {
@@ -300,9 +301,10 @@ exports.bookAppointment = asyncHandler(async (req, res) => {
 //Get appointments
 exports.getAppointments = async (req, res) => {
   try {
+    console.log("Appointments endpoint reached");
     const phone = req.user.phone;
     const patient = await Patient.findOne({ phone });
-
+    console.log(patient);
     if (!patient) {
       return res.status(404).json({ message: "Patient not found" });
     }
@@ -319,6 +321,7 @@ exports.getAppointments = async (req, res) => {
     }
 
     const appointments = await Appointment.find(query);
+    console.log("Appointment reched..",appointments);
 
     if (!appointments || appointments.length === 0) {
       return res.status(404).json({ message: "No appointments found" });
@@ -331,6 +334,53 @@ exports.getAppointments = async (req, res) => {
       .json({ message: "Server error", error: error.message });
   }
 };
+
+exports.getUserAppointments = async (req, res) => {
+  console.log("User Appointments endpoint reached");
+  try {
+    const userId = req.user.id; // Assuming you have user authentication middleware
+    const { filter } = req.query;
+    
+    let query = { patient: userId };
+    const currentDate = moment().startOf('day');
+
+    switch (filter) {
+      case 'past':
+        query.appointmentDate = { $lt: currentDate.toDate() };
+        break;
+      case 'today':
+        query.appointmentDate = {
+          $gte: currentDate.toDate(),
+          $lt: moment(currentDate).endOf('day').toDate()
+        };
+        break;
+      case 'thisWeek':
+        query.appointmentDate = {
+          $gte: currentDate.toDate(),
+          $lt: moment(currentDate).endOf('week').toDate()
+        };
+        break;
+      case 'thisMonth':
+        query.appointmentDate = {
+          $gte: currentDate.toDate(),
+          $lt: moment(currentDate).endOf('month').toDate()
+        };
+        break;
+      default:
+        // If no filter or 'all', fetch all appointments
+        break;
+    }
+
+    const appointments = await Appointment.find(query)
+      .populate('doctor', 'name specialty') // Assuming doctor has name and specialty fields
+      .sort({ appointmentDate: 1, timeSlot: 1 });
+    
+    res.json(appointments);
+  } catch (error) {
+    res.status(500).json({ message: 'Error fetching appointments', error: error.message });
+  }
+};
+
 
 // // Update Appointment
 // exports.updateAppointment = asyncHandler(async (req, res) => {

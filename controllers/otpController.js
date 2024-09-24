@@ -56,7 +56,7 @@ exports.sendOTP = asyncHandler(async (req, res) => {
       // Uncomment to use Twilio for sending OTP
       // await client.messages.create({
       //   body: `Your OTP is ${otp}`,
-      //   from: "+17472332995", // Replace with your Twilio phone number
+      //   from: "+12512728851", // Replace with your Twilio phone number
       //   to: phone,
       // });
 

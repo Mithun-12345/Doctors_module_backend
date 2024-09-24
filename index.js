@@ -32,7 +32,8 @@ app.use("/api/doctor", doctorRoute);
 
 const chatRoutes = require('./routes/chatRoutes');
 app.use('/api',chatRoutes);
-
+const zoomRoutes = require('./routes/zoomRoutes');
+app.use('/api/zoom', zoomRoutes);
 mongoose
   .connect(process.env.MONGODB_LOCAL_URI)
   .then(() => console.log("MongoDB connected"))
