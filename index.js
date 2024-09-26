@@ -2,7 +2,7 @@ const express = require("express");
 const mongoose = require("mongoose");
 const cors = require("cors");
 const { createServer } = require("http");
-//const { Server } = require("socket.io");
+const { Server } = require("socket.io");
 require("dotenv").config();
 const Message = require("./models/messageModel");
 const patientModel = require("./models/patientModel");
@@ -20,14 +20,6 @@ const server = createServer(app);
 
 initSocket(server);
 
-// const io = new Server(server, {
-//   cors: {
-//     origin: "http://localhost:8081", // Update with your frontend origin
-//     methods: ["GET", "POST"],
-//     credentials: true,
-//   },
-// });
-
 app.use(express.json());
 app.use(cors());
 
@@ -37,21 +29,25 @@ app.use("/api/patient", patientRoute);
 app.use("/api/doctor", doctorRoute);
 app.use("/api/post", postRoute);
 
+const chatRoutes = require("./routes/chatRoutes");
+app.use("/api", chatRoutes);
+
 mongoose
   .connect(process.env.MONGODB_LOCAL_URI)
   .then(() => console.log("MongoDB connected"))
   .catch((err) => console.log(err));
 
-// Existing routes
 app.get("/api/chat/:senderId/:receiverId", async (req, res) => {
   try {
     const { senderId, receiverId } = req.params;
+
     const messages = await Message.find({
       $or: [
         { sender: senderId, receiver: receiverId },
         { sender: receiverId, receiver: senderId },
       ],
     }).sort("timestamp");
+
     res.json(messages);
   } catch (err) {
     res.status(500).json({ message: "Server error", err });

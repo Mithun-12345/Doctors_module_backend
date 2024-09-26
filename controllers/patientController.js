@@ -3,6 +3,7 @@ const Patient = require("../models/patientModel");
 const ChronicPatient = require("../models/chronicModel");
 const Appointment = require("../models/appointmentModel");
 const Doctor = require("../models/doctorModel");
+const moment = require('moment');
 
 //Initial Form
 exports.sendForm = asyncHandler(async (req, res) => {
@@ -55,6 +56,7 @@ exports.sendForm = asyncHandler(async (req, res) => {
 
 //Patient Profile
 exports.patientDetails = asyncHandler(async (req, res) => {
+  console.log("Patient Details endpoint reached");
   const phone = req.user.phone;
 
   if (!phone) {
@@ -296,40 +298,52 @@ exports.bookAppointment = asyncHandler(async (req, res) => {
   });
 });
 
-//Get appointments
-exports.getAppointments = async (req, res) => {
+exports.getUserAppointments = async (req, res) => {
+  console.log("User Appointments endpoint reached");
   try {
-    const phone = req.user.phone;
-    const patient = await Patient.findOne({ phone });
+    const userId = req.user.id; // Assuming you have user authentication middleware
+    const { filter } = req.query;
+    
+    let query = { patient: userId };
+    const currentDate = moment().startOf('day');
 
-    if (!patient) {
-      return res.status(404).json({ message: "Patient not found" });
+    switch (filter) {
+      case 'past':
+        query.appointmentDate = { $lt: currentDate.toDate() };
+        break;
+      case 'today':
+        query.appointmentDate = {
+          $gte: currentDate.toDate(),
+          $lt: moment(currentDate).endOf('day').toDate()
+        };
+        break;
+      case 'thisWeek':
+        query.appointmentDate = {
+          $gte: currentDate.toDate(),
+          $lt: moment(currentDate).endOf('week').toDate()
+        };
+        break;
+      case 'thisMonth':
+        query.appointmentDate = {
+          $gte: currentDate.toDate(),
+          $lt: moment(currentDate).endOf('month').toDate()
+        };
+        break;
+      default:
+        // If no filter or 'all', fetch all appointments
+        break;
     }
 
-    const patientId = patient._id;
-    const { status } = req.query;
-
-    // Building the query object
-    let query = { patient: patientId };
-
-    // Adding status filter if it's provided in the query parameters
-    if (status) {
-      query.status = status;
-    }
-
-    const appointments = await Appointment.find(query);
-
-    if (!appointments || appointments.length === 0) {
-      return res.status(404).json({ message: "No appointments found" });
-    }
-
-    return res.status(200).json({ appointments });
+    const appointments = await Appointment.find(query)
+      .populate('doctor', 'name specialty') // Assuming doctor has name and specialty fields
+      .sort({ appointmentDate: 1, timeSlot: 1 });
+    
+    res.json(appointments);
   } catch (error) {
-    return res
-      .status(500)
-      .json({ message: "Server error", error: error.message });
+    res.status(500).json({ message: 'Error fetching appointments', error: error.message });
   }
 };
+
 
 // // Update Appointment
 // exports.updateAppointment = asyncHandler(async (req, res) => {
