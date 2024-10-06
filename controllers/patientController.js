@@ -298,43 +298,6 @@ exports.bookAppointment = asyncHandler(async (req, res) => {
   });
 });
 
-//Get appointments
-exports.getAppointments = async (req, res) => {
-  try {
-    console.log("Appointments endpoint reached");
-    const phone = req.user.phone;
-    const patient = await Patient.findOne({ phone });
-    console.log(patient);
-    if (!patient) {
-      return res.status(404).json({ message: "Patient not found" });
-    }
-
-    const patientId = patient._id;
-    const { status } = req.query;
-
-    // Building the query object
-    let query = { patient: patientId };
-
-    // Adding status filter if it's provided in the query parameters
-    if (status) {
-      query.status = status;
-    }
-
-    const appointments = await Appointment.find(query);
-    console.log("Appointment reched..",appointments);
-
-    if (!appointments || appointments.length === 0) {
-      return res.status(404).json({ message: "No appointments found" });
-    }
-
-    return res.status(200).json({ appointments });
-  } catch (error) {
-    return res
-      .status(500)
-      .json({ message: "Server error", error: error.message });
-  }
-};
-
 exports.getUserAppointments = async (req, res) => {
   console.log("User Appointments endpoint reached");
   try {
@@ -381,6 +344,75 @@ exports.getUserAppointments = async (req, res) => {
   }
 };
 
+exports.updateFollowUpStatus = async (req, res) => {
+  try {
+    const { patientId } = req.params;
+    console.log("Patient id: ", patientId);
+    const patient = await Patient.findById(patientId);
+    console.log("Patient Follow up status: ", patient.follow);
+    if (!patient) {
+      return res.status(404).json({ message: 'Patient not found' });
+    }
+
+    // Update follow-up status
+    switch (patient.follow) {
+      case 'Follow up-C':
+        patient.follow = 'Follow up-P';
+        break;
+      case 'Follow up-P':
+        patient.follow = 'Follow up-MP';
+        break;
+      case 'Follow up-MP':
+        patient.follow = 'Follow up-MShip';
+        break;
+      default:
+        return res.status(400).json({ message: 'Invalid follow-up status' });
+    }
+
+    await patient.save();
+
+    res.status(200).json({ message: 'Follow-up status updated successfully', patient });
+  } catch (error) {
+    console.error('Error updating follow-up status:', error);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+};
+
+
+exports.updateFollowUpPatientCall = async (req, res) => {
+  try {
+    const patientId = req.params.patientId;
+    
+    const patient = await Patient.findById(patientId);
+    
+    if (!patient) {
+      return res.status(404).json({ message: 'Patient not found' });
+    }
+    
+    // Check if the current follow status is 'Follow up-PCall'
+    if (patient.follow === 'Follow up-PCall') {
+      // Update the follow status to 'Follow up-C'
+      patient.follow = 'Follow up-C';
+      await patient.save();
+      
+      return res.status(200).json({
+        message: 'Follow-up status updated successfully',
+        follow: patient.follow
+      });
+    } else {
+      return res.status(400).json({
+        message: 'Patient is not in Follow up-PCall status',
+        currentFollow: patient.follow
+      });
+    }
+  } catch (error) {
+    console.error('Error updating follow-up status:', error);
+    return res.status(500).json({
+      message: 'Internal server error',
+      error: error.message
+    });
+  }
+};
 
 // // Update Appointment
 // exports.updateAppointment = asyncHandler(async (req, res) => {

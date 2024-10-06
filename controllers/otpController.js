@@ -124,6 +124,7 @@ exports.verifyOTP = asyncHandler(async (req, res) => {
 
       await OTP.updateOne({ phone }, { $set: { refreshToken } });
 
+      console.log("accessToken:", accessToken);
       console.log("Sending successful response");
       res.status(200).json({ 
         success: true, 
@@ -145,7 +146,6 @@ exports.verifyOTP = asyncHandler(async (req, res) => {
 exports.refreshToken = asyncHandler(async (req, res) => {
   const phone = req.user.phone;
 
-  // Generate a new access token
   const accessToken = jwt.sign(
     { user: { phone } },
     process.env.ACCESS_TOKEN_SECRET,

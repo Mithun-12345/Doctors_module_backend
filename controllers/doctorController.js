@@ -219,3 +219,17 @@ exports.doctorDetails = async (req, res) => {
     res.status(500).json({ success: false, message: 'Server error' });
   }
 };
+
+exports.getDoctorFollow = async (req, res) => {
+  const phone = req.user.phone; // Use the phone from the token
+  console.log('Phone:', phone);
+  try {
+    const doctor = await Doctor.findOne({ phone }); // Find by phone instead of ID
+    if (!doctor) {
+      return res.status(404).json({ message: 'Doctor not found' });
+    }
+    res.json({ follow: doctor.follow });
+  } catch (error) {
+    res.status(500).json({ message: 'Server error' });
+  }
+};

@@ -9,14 +9,16 @@ const {
   // getAppointmentById,
   // cancelAppointment,
   checkAvailableSlots,
-  getUserAppointments
+  getUserAppointments,
+  updateFollowUpStatus,
+  updateFollowUpPatientCall
 } = require("../controllers/patientController");
 const validateToken = require("../middlewares/validateTokenHandler");
 
 const router = express.Router();
 
 router.post("/sendRegForm", sendForm);
-router.post("/sendChronicForm", validateToken, sendChronicForm);
+router.post("/sendChronicForm", sendChronicForm);
 router.get("/details", validateToken, patientDetails);
 router.post("/bookAppointment", validateToken, bookAppointment);
 // router.patch("/updateAppointment/:id", validateToken, updateAppointment);
@@ -25,5 +27,7 @@ router.post("/bookAppointment", validateToken, bookAppointment);
 // router.delete("/appointment/:id", validateToken, cancelAppointment);
 router.post("/checkSlots", validateToken, checkAvailableSlots);
 router.get("/getUserAppointments", validateToken, getUserAppointments);
+router.put('/updateFollowUp/:patientId',updateFollowUpStatus);
+router.put('/updateFollowPatientCall/:patientId',updateFollowUpPatientCall);
 
 module.exports = router;
