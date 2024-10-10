@@ -85,9 +85,7 @@ exports.patientDetails = asyncHandler(async (req, res) => {
 //Chronic Form
 exports.sendChronicForm = asyncHandler(async (req, res) => {
   const {
-    name,
     dob,
-    age,
     weight,
     height,
     occupation,
@@ -102,52 +100,52 @@ exports.sendChronicForm = asyncHandler(async (req, res) => {
     surgeryHistory,
     allergies,
     bodyType,
-    clinicReferral,
   } = req.body;
-  const phone = req.user.phone;
+
+  console.log("Endpoint reached");
+
+  const phone = "+916382786758";
 
   // Check if the patient with the provided phone number exists
   const existingPatient = await Patient.findOne({ phone });
-  console.log(phone);
-  console.log(existingPatient);
-  if (existingPatient.diseaseType.toLowerCase() != "chronic") {
+  if (!existingPatient) {
+    return res.status(404).json({ message: "Patient not found" });
+  }
+
+  // Ensure the patient is classified as chronic
+  if (existingPatient.diseaseType.name.toLowerCase() !== "chronic") {
     return res.json({ message: "Patient isn't chronic!" });
   }
 
-  if (existingPatient) {
-    // Create a new chronic patient document
-    const chronicPatientDocument = new ChronicPatient({
-      phone,
-      name,
-      dob,
-      age,
-      weight,
-      height,
-      occupation,
-      country,
-      state,
-      city,
-      complaint,
-      symptoms,
-      associatedDisease,
-      allopathy,
-      diseaseHistory,
-      surgeryHistory,
-      allergies,
-      bodyType,
-      clinicReferral,
-    });
+  // Create a new chronic patient document
+  const chronicPatientDocument = new ChronicPatient({
+    phone,
+    dob,
+    weight,
+    height,
+    occupation,
+    country,
+    state,
+    city,
+    complaint,
+    symptoms,
+    associatedDisease,
+    allopathy,
+    diseaseHistory,
+    surgeryHistory,
+    allergies,
+    bodyType,
+  });
 
-    // Save the chronic patient document to the "chronics" collection in the database
-    await chronicPatientDocument.save();
+  // Save the chronic patient document to the "chronics" collection in the database
+  await chronicPatientDocument.save();
 
-    // Send a success response
-    res.status(201).json({
-      success: true,
-      message: "Chronic patient data saved successfully",
-      patient: chronicPatientDocument,
-    });
-  }
+  // Send a success response
+  res.status(201).json({
+    success: true,
+    message: "Data saved successfully",
+    patient: chronicPatientDocument,
+  });
 });
 
 // Check Available Slots
@@ -292,6 +290,10 @@ exports.bookAppointment = asyncHandler(async (req, res) => {
 
   await newAppointment.save();
 
+  // Update the patient's follow status to "Follow up-C"
+  patient.follow = "Follow up-C"; // Update follow status
+  await patient.save(); // Save the updated patient
+
   res.status(201).json({
     message: "Appointment booked successfully",
     appointment: newAppointment,
@@ -344,15 +346,24 @@ exports.getUserAppointments = async (req, res) => {
   }
 };
 
+
+const momentIST = require('moment-timezone'); // Make sure to install moment-timezone
+
 exports.updateFollowUpStatus = async (req, res) => {
   try {
     const { patientId } = req.params;
     console.log("Patient id: ", patientId);
+    
     const patient = await Patient.findById(patientId);
     console.log("Patient Follow up status: ", patient.follow);
+
     if (!patient) {
       return res.status(404).json({ message: 'Patient not found' });
     }
+
+    // Get current time in IST and add 1 hour
+    const oneHourLater = momentIST.tz(Date.now() + 3600000, 'Asia/Kolkata').toDate(); // Add 1 hour in IST
+    console.log("Next follow-up time: ", oneHourLater);
 
     // Update follow-up status
     switch (patient.follow) {
@@ -360,10 +371,15 @@ exports.updateFollowUpStatus = async (req, res) => {
         patient.follow = 'Follow up-P';
         break;
       case 'Follow up-P':
+        patient.follow = 'Follow up-Mship';
+        patient.followUpTimestamp = oneHourLater; // Store timestamp when status changes to Mship
+        console.log("Follow up timestamp: ", patient.followUpTimestamp);
+        break;
+      case 'Follow up-Mship':
         patient.follow = 'Follow up-MP';
         break;
       case 'Follow up-MP':
-        patient.follow = 'Follow up-MShip';
+        patient.follow = 'Follow up-ship';
         break;
       default:
         return res.status(400).json({ message: 'Invalid follow-up status' });
@@ -371,7 +387,14 @@ exports.updateFollowUpStatus = async (req, res) => {
 
     await patient.save();
 
-    res.status(200).json({ message: 'Follow-up status updated successfully', patient });
+    res.status(200).json({
+      message: 'Follow-up status updated successfully',
+      patient: {
+        id: patient._id,
+        follow: patient.follow,
+        followUpTimestamp: patient.followUpTimestamp
+      }
+    });
   } catch (error) {
     console.error('Error updating follow-up status:', error);
     res.status(500).json({ message: 'Internal server error' });
@@ -379,38 +402,34 @@ exports.updateFollowUpStatus = async (req, res) => {
 };
 
 
-exports.updateFollowUpPatientCall = async (req, res) => {
+// Update Call Status
+exports.updateFollowPatientCall = async (req, res) => {
+  const { patientId } = req.params;
+  const { newCallStatus } = req.body;
+
   try {
-    const patientId = req.params.patientId;
-    
+    // Find the patient by ID
     const patient = await Patient.findById(patientId);
-    
+
     if (!patient) {
       return res.status(404).json({ message: 'Patient not found' });
     }
-    
-    // Check if the current follow status is 'Follow up-PCall'
-    if (patient.follow === 'Follow up-PCall') {
-      // Update the follow status to 'Follow up-C'
-      patient.follow = 'Follow up-C';
-      await patient.save();
-      
-      return res.status(200).json({
-        message: 'Follow-up status updated successfully',
-        follow: patient.follow
-      });
-    } else {
-      return res.status(400).json({
-        message: 'Patient is not in Follow up-PCall status',
-        currentFollow: patient.follow
-      });
+
+    // Update the call status
+    patient.enquiryStatus = newCallStatus;
+
+    // If the new call status is 'Completed', update the follow-up status
+    if (newCallStatus === 'Completed') {
+      patient.follow = 'Follow up-C'; // Change this to the desired follow-up status
     }
+
+    // Save the updated patient record
+    await patient.save();
+
+    res.status(200).json({ message: 'Call status updated successfully', patient });
   } catch (error) {
-    console.error('Error updating follow-up status:', error);
-    return res.status(500).json({
-      message: 'Internal server error',
-      error: error.message
-    });
+    console.error('Error updating call status:', error);
+    res.status(500).json({ message: 'Server error', error });
   }
 };
 

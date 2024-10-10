@@ -1,6 +1,6 @@
 // socket.js
 const { Server } = require("socket.io");
-
+const Message = require("../models/messageModel");
 let io;
 
 function initSocket(server) {

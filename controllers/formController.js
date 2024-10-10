@@ -11,10 +11,25 @@ exports.createPatient = async (req, res) => {
       email,
       gender,
       diseaseName,
+      diseaseType, // This will now be an object from the frontend
       currentLocation,
       patientEntry,
-      symptomNotKnown
+      symptomNotKnown,
     } = req.body;
+
+    // Validate diseaseType
+    let processedDiseaseType = {
+      name: '',
+      edit: false
+    };
+
+    // If diseaseType is provided and is an object
+    if (diseaseType && typeof diseaseType === 'object') {
+      processedDiseaseType = {
+        name: diseaseType.name || '',
+        edit: diseaseType.edit || false
+      };
+    }
 
     const newPatient = new Patient({
       consultingFor,
@@ -25,17 +40,34 @@ exports.createPatient = async (req, res) => {
       email,
       gender,
       diseaseName,
-      diseaseType: 'Acute', // default value
+      diseaseType: processedDiseaseType, // Use the processed disease type
       currentLocation,
       patientEntry,
       symptomNotKnown
     });
 
+    // Find if the phone number is already registered
+    const existingPatient = await Patient.findOne({ phone });
+    if (existingPatient) {
+      return res.status(400).json({ 
+        success: false,
+        message: 'Phone number already registered' 
+      });
+    }
+
     const savedPatient = await newPatient.save();
-    res.status(201).json(savedPatient);
+    res.json({
+      success: true,
+      patientId: savedPatient._id,
+      message: 'Patient created successfully'
+    });
   } catch (error) {
     console.error('Error creating patient:', error);
-    res.status(500).json({ error: 'Failed to create patient' });
+    res.status(500).json({ 
+      success: false,
+      error: 'Failed to create patient',
+      message: error.message 
+    });
   }
 };
 

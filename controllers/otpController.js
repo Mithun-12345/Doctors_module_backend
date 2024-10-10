@@ -126,6 +126,7 @@ exports.verifyOTP = asyncHandler(async (req, res) => {
 
       console.log("accessToken:", accessToken);
       console.log("Sending successful response");
+      console.log("refreshToken:", refreshToken);
       res.status(200).json({ 
         success: true, 
         accessToken, 
