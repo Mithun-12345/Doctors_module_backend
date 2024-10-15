@@ -66,12 +66,10 @@ exports.sendOTP = asyncHandler(async (req, res) => {
         .status(200)
         .json({ success: true, message: "OTP sent successfully", otp });
     } else {
-      return res
-        .status(400)
-        .json({
-          success: false,
-          message: `Phone number not registered as ${role}`,
-        });
+      return res.status(400).json({
+        success: false,
+        message: `Phone number not registered as ${role}`,
+      });
     }
   } catch (err) {
     console.error("Server error:", err);
@@ -113,29 +111,34 @@ exports.verifyOTP = asyncHandler(async (req, res) => {
       let user;
       console.log("Searching for user with userType:", userType);
 
-      if (userType === 'Doctor') {
+      if (userType === "Doctor") {
         user = await Doctor.findOne({ phone });
-      } else if (userType === 'Patient') {
+      } else if (userType === "Patient") {
         user = await regForm.findOne({ phone });
       } else {
         console.log("Invalid userType specified:", userType);
-        return res.status(400).json({ success: false, message: "Invalid userType specified" });
+        return res
+          .status(400)
+          .json({ success: false, message: "Invalid userType specified" });
       }
 
       if (!user) {
         console.log("User not found for phone:", phone);
-        return res.status(404).json({ success: false, message: "User not found" });
+        return res
+          .status(404)
+          .json({ success: false, message: "User not found" });
       }
 
       await OTP.updateOne({ phone }, { $set: { refreshToken } });
 
+      console.log("accessToken:", accessToken);
       console.log("Sending successful response");
-      res.status(200).json({ 
-        success: true, 
-        accessToken, 
-        refreshToken, 
+      res.status(200).json({
+        success: true,
+        accessToken,
+        refreshToken,
         userId: user._id,
-        userType: userType
+        userType: userType,
       });
     } else {
       console.log("Invalid or expired OTP for phone:", phone);
@@ -150,7 +153,6 @@ exports.verifyOTP = asyncHandler(async (req, res) => {
 exports.refreshToken = asyncHandler(async (req, res) => {
   const phone = req.user.phone;
 
-  // Generate a new access token
   const accessToken = jwt.sign(
     { user: { phone } },
     process.env.ACCESS_TOKEN_SECRET,

@@ -10,6 +10,10 @@ const dbConnection = require("./config/dbConnection");
 const otpRoute = require("./routes/otpRoutes");
 const patientRoute = require("./routes/patientRoutes");
 const doctorRoute = require("./routes/doctorRoutes");
+const validateToken = require("./middlewares/validateTokenHandler");
+const assignTasks = require("./routes/AssignTasksRoute");
+const callLog = require("./routes/CallLogRoutes");
+const formRoutes = require("./routes/formRoute");
 const postRoute = require("./routes/postRoutes");
 const { initSocket } = require("./controllers/socketController");
 
@@ -28,7 +32,9 @@ app.use("/api/otp", otpRoute);
 app.use("/api/patient", patientRoute);
 app.use("/api/doctor", doctorRoute);
 app.use("/api/post", postRoute);
-
+app.use("/api/log", callLog);
+app.use("/api/forms", formRoutes);
+app.use("/api/assign", assignTasks);
 const chatRoutes = require("./routes/chatRoutes");
 app.use("/api", chatRoutes);
 
@@ -61,6 +67,38 @@ app.get("/test", async (req, res) => {
   } catch (error) {
     res.status(500).json({ message: "Server error", error });
   }
+});
+
+const twilio = require("twilio");
+const accountSid = process.env.TWILIO_ACCOUNT_SID; // Your Twilio Account SID
+const authToken = process.env.TWILIO_AUTH_TOKEN; // Your Twilio Auth Token
+const client = twilio(accountSid, authToken);
+
+// Endpoint to handle the TwiML response
+app.post("/twiml", (req, res) => {
+  const twiml = new twilio.twiml.VoiceResponse();
+  twiml.dial().number(req.query.to); // Connects the call to the 'to' number
+  res.type("text/xml");
+  res.send(twiml.toString());
+});
+
+// Endpoint to make the call
+app.post("/make-call", (req, res) => {
+  const { to } = req.body; // The number to call from the request body
+  const formattedPhone = `+91${to}`;
+  console.log(formattedPhone);
+  const twimlUrl = `https://5eaa-122-15-77-226.ngrok-free.app/twiml?to=${encodeURIComponent(
+    formattedPhone
+  )}`;
+
+  client.calls
+    .create({
+      url: twimlUrl, // Point to the TwiML endpoint
+      to: "+916382786758", // current assistant doc number
+      from: process.env.TWILIO_PHONE_NUMBER, // Your Twilio number
+    })
+    .then((call) => res.status(200).send(call.sid))
+    .catch((error) => res.status(500).send(error));
 });
 
 const PORT = process.env.PORT || 8000;

@@ -14,6 +14,10 @@ const doctorSchema = new mongoose.Schema({
     default: "assistant-doctor", // Default value if no role is provided
     required: true,
   },
+  follow: {
+    type: String,
+    default: "No follows",
+  }
 });
 
 module.exports = mongoose.model("Doctor", doctorSchema);
