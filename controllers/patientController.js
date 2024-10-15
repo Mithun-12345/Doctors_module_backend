@@ -58,7 +58,6 @@ exports.sendForm = asyncHandler(async (req, res) => {
 exports.patientDetails = asyncHandler(async (req, res) => {
   console.log("Patient Details endpoint reached");
   const phone = req.user.phone;
-
   if (!phone) {
     return res.status(400).json({ message: "Phone number not available" });
   }
@@ -72,7 +71,7 @@ exports.patientDetails = asyncHandler(async (req, res) => {
 
   let chronicPatient = false;
 
-  if (patient.diseaseType.toLowerCase() === "chronic") {
+  if (patient.diseaseType.name.toLowerCase() === "chronic") {
     const chronicPatientRecord = await ChronicPatient.findOne({ phone });
     if (chronicPatientRecord) {
       chronicPatient = true;
@@ -104,7 +103,7 @@ exports.sendChronicForm = asyncHandler(async (req, res) => {
 
   console.log("Endpoint reached");
 
-  const phone = "+916382786758";
+  const phone = req.user.phone;
 
   // Check if the patient with the provided phone number exists
   const existingPatient = await Patient.findOne({ phone });
@@ -154,7 +153,7 @@ exports.checkAvailableSlots = asyncHandler(async (req, res) => {
   const phone = req.user.phone;
 
   const patient = await Patient.findOne({ phone });
-  const diseaseType = patient.diseaseType.toLowerCase();
+  const diseaseType = patient.diseaseType.name.toLowerCase();
 
   const timeSlots = [
     "10:00",
@@ -214,7 +213,7 @@ exports.bookAppointment = asyncHandler(async (req, res) => {
     return res.status(404).json({ message: "Doctor not found" });
   }
 
-  const isChronic = patient.diseaseType.toLowerCase() === "chronic";
+  const isChronic = patient.diseaseType.name.toLowerCase() === "chronic";
 
   const timeSlots = [
     "10:00",
@@ -351,20 +350,13 @@ const momentIST = require('moment-timezone'); // Make sure to install moment-tim
 
 exports.updateFollowUpStatus = async (req, res) => {
   try {
-    const { patientId } = req.params;
-    console.log("Patient id: ", patientId);
-    
+    const { patientId } = req.params;    
     const patient = await Patient.findById(patientId);
-    console.log("Patient Follow up status: ", patient.follow);
-
     if (!patient) {
       return res.status(404).json({ message: 'Patient not found' });
     }
-
-    // Get current time in IST and add 1 hour
-    const oneHourLater = momentIST.tz(Date.now() + 3600000, 'Asia/Kolkata').toDate(); // Add 1 hour in IST
-    console.log("Next follow-up time: ", oneHourLater);
-
+    const exDtTm = new Date();
+    
     // Update follow-up status
     switch (patient.follow) {
       case 'Follow up-C':
@@ -372,8 +364,7 @@ exports.updateFollowUpStatus = async (req, res) => {
         break;
       case 'Follow up-P':
         patient.follow = 'Follow up-Mship';
-        patient.followUpTimestamp = oneHourLater; // Store timestamp when status changes to Mship
-        console.log("Follow up timestamp: ", patient.followUpTimestamp);
+        patient.followUpTimestamp = exDtTm; // Store timestamp when status changes to Mship
         break;
       case 'Follow up-Mship':
         patient.follow = 'Follow up-MP';

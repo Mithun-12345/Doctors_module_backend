@@ -25,6 +25,12 @@ const patientSchema = new mongoose.Schema(
       type: Number,
       required: false,
     },
+    newExisting: {
+      type: String,
+      enum: ["New", "Existing"],
+      default: "New",
+      required: false
+    },
     phone: {
       type: String,
       required: false,
