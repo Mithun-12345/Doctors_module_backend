@@ -11,7 +11,7 @@ const {
   checkAvailableSlots,
   getUserAppointments,
   updateFollowUpStatus,
-  updateFollowUpPatientCall
+  updateFollowPatientCall
 } = require("../controllers/patientController");
 const validateToken = require("../middlewares/validateTokenHandler");
 
@@ -28,6 +28,6 @@ router.post("/bookAppointment", validateToken, bookAppointment);
 router.post("/checkSlots", validateToken, checkAvailableSlots);
 router.get("/getUserAppointments", validateToken, getUserAppointments);
 router.put('/updateFollowUp/:patientId',updateFollowUpStatus);
-router.put('/updateFollowPatientCall/:patientId',updateFollowUpPatientCall);
+router.put('/updateFollowPatientCall/:patientId',updateFollowPatientCall);
 
 module.exports = router;

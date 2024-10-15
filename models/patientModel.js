@@ -1,5 +1,16 @@
 const mongoose = require("mongoose");
 
+const commentSchema = new mongoose.Schema({
+  text: {
+    type: String,
+    required: true
+  },
+  createdAt: {
+    type: Date,
+    default: Date.now
+  }
+});
+
 const patientSchema = new mongoose.Schema(
   {
     consultingFor: {
@@ -13,6 +24,12 @@ const patientSchema = new mongoose.Schema(
     age: {
       type: Number,
       required: false,
+    },
+    newExisting: {
+      type: String,
+      enum: ["New", "Existing"],
+      default: "New",
+      required: false
     },
     phone: {
       type: String,
@@ -34,9 +51,20 @@ const patientSchema = new mongoose.Schema(
       type: String,
       required: false,
     },
-    diseaseType: {//no need in frontend set default as Acute
-      type: String,
-      required: false,
+    diseaseType: {
+      name: {
+        type: String,
+        required: false, // Allows this field to be optional
+      },
+      edit: {
+        type: Boolean,  // Indicates if the field has been edited
+        default: false  // Set to false by default
+      },
+      editedby: {
+        type: String,
+        default: null,
+        required: false
+      }
     },
     medicalRecords: {// no need in frontend set default as No
       type: String,
@@ -70,6 +98,10 @@ const patientSchema = new mongoose.Schema(
         type: String,
         default: "No comments"
     },
+    followUpTimestamp: {
+      type: Date,
+      default: null,  // Set this when the follow-up status transitions to 'Follow up-Mship'
+    },
     enquiryStatus: {//no need in frontend
         type: String,
         enum: ["Interested", "Not Interested", "Not Enquired"],
@@ -93,10 +125,7 @@ const patientSchema = new mongoose.Schema(
         type: Number,
         default: 0
     },
-    comments: {//no need in frontend
-        type: String,
-        default: "No comments"
-    },
+    comments: [commentSchema],
     symptomNotKnown: {//no need in frontend
         type: String,
     }

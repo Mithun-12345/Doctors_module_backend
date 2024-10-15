@@ -1,7 +1,6 @@
-const Doctor = require('../models/doctorModel');
 const Allocation = require('../models/AllocationModel');
+const Doctor = require('../models/doctorModel');
 
-// Get all doctors
 exports.getDoctors = async (req, res) => {
   try {
     const doctors = await Doctor.find().select('name _id follow');
@@ -11,25 +10,15 @@ exports.getDoctors = async (req, res) => {
   }
 };
 
-// Get current allocations
 exports.getAllocations = async (req, res) => {
-  console.log("Endpoint reached: getAllocations");
   try {
     const allocations = await Allocation.find().populate('doctorId', 'name follow');
-    
-    // Convert to object with role as key and doctorId as value
-    const allocationObject = allocations.reduce((acc, curr) => {
-      acc[curr.role] = curr.doctorId._id;
-      return acc;
-    }, {});
-    
-    res.status(200).json(allocationObject);
+    res.status(200).json(allocations);
   } catch (error) {
     res.status(500).json({ message: 'Error fetching allocations', error: error.message });
   }
 };
 
-// Save allocations
 exports.saveAllocations = async (req, res) => {
   console.log("Endpoint reached: Save Allocations");
   try {

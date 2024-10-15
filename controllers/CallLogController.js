@@ -22,11 +22,10 @@ exports.sendMessage = async (req, res) => {
         if (!patient) {
             return res.status(404).json({ message: 'Patient not found' });
         }
-        const formattedNumber = `+91${patient.phone}`;
 
         await client.messages.create({
             body: messageText,
-            to: formattedNumber,
+            to: patient.phone,
             from: process.env.TWILIO_PHONE_NUMBER // Use the Twilio phone number from environment variables
         });
 
@@ -50,6 +49,51 @@ exports.sendMessage = async (req, res) => {
     }
 };
 
+exports.sendFirstFormMessage = async (req, res) => {
+  try {
+    const { to, message, patientId } = req.body;
+
+    // Send SMS using Twilio
+    const twilioResponse = await client.messages.create({
+      body: message,
+      from: process.env.TWILIO_PHONE_NUMBER,
+      to: to
+    });
+
+    // Update patient's messageSent status and timestamp
+    const updatedPatient = await Patient.findByIdAndUpdate(
+      patientId,
+      {
+        $set: {
+          'messageSent.status': true,
+          'messageSent.timeStamp': new Date()
+        }
+      },
+      { new: true }
+    );
+
+    if (!updatedPatient) {
+      return res.status(404).json({
+        success: false,
+        error: 'Patient not found'
+      });
+    }
+
+    res.json({
+      success: true,
+      messageId: twilioResponse.sid,
+      messageSent: updatedPatient.messageSent
+    });
+
+  } catch (error) {
+    console.error('Error sending message or updating patient:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to send message or update patient'
+    });
+  }
+};
+
 exports.verifyAppointmentbooking = async (req, res) => {
     try {
         const { userId } = req.params;
@@ -67,7 +111,6 @@ exports.verifyAppointmentbooking = async (req, res) => {
         return res.status(500).json({ message: 'Server error' });
     }
 };
-
 // Bug here
 exports.getFollowUpStatus = async (req, res) => {
     const patientId = req.params.patientId;
@@ -153,42 +196,42 @@ exports.updateEnquiryStatus = async (req, res) => {
 const Admin = require('../models/Admin');
 const jwt = require('jsonwebtoken');
 exports.login = async (req, res) => {
-    const { phoneNumber, password, role } = req.body;
-    let user;
+  const { phoneNumber, password, role } = req.body;
+  let user;
 
-    try {
-        console.log(`Role: ${role}`); // Debugging
-        console.log(`Phone Number: ${phoneNumber}`); // Debugging
+  try {
+    console.log(`Role: ${role}`);
+    console.log(`Phone Number: ${phoneNumber}`);
 
-        // Find user based on role
-        if (role === 'admin') {
-            user = await Admin.findOne({ phone: phoneNumber });
-        } else if (role === 'doctor') {
-            user = await Doctor.findOne({ phone: phoneNumber });
-        }
-
-        console.log(`User Found: ${user}`); // Debugging
-
-        if (!user) {
-            return res.status(400).json({ message: 'User not found' });
-        }
-
-        // Validate password (you might want to hash and compare using bcrypt or another library)
-        // Assuming you have a valid user, generate a JWT token
-        const payload = { userId: user._id, phone: user.phone, role: user.role };
-        console.log('JWT Payload:', payload); // Log the payload before signing the token
-
-        const accessToken = jwt.sign(
-            payload,
-            process.env.ACCESS_TOKEN_SECRET,
-            { expiresIn: '1h' }
-        );
-
-        res.json({ accessToken });
-    } catch (err) {
-        console.error(err); // Debugging
-        res.status(500).json({ message: 'Server error' });
+    // Find user based on role
+    if (role === 'admin') {
+      user = await Admin.findOne({ phone: phoneNumber });
+    } else if (role === 'doctor') {
+      user = await Doctor.findOne({ phone: phoneNumber });
     }
+
+    console.log(`User Found: ${user}`);
+
+    if (!user) {
+      return res.status(400).json({ message: 'User not found' });
+    }
+
+    // Validate password (you might want to hash and compare using bcrypt or another library)
+    // Assuming you have a valid user, generate a JWT token
+    const payload = { userId: user._id, phone: user.phone, role: user.role };
+    console.log('JWT Payload:', payload);
+
+    const accessToken = jwt.sign(
+      payload,
+      process.env.ACCESS_TOKEN_SECRET,
+      { expiresIn: '24h' }
+    );
+
+    res.json({ accessToken });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Server error' });
+  }
 };
 
 //Top table of 5
@@ -251,40 +294,40 @@ exports.listPatients = async (req, res) => {
     }
   };
 
-
-  exports.updateDiseaseType = async (req, res) => {
-    const { id } = req.params;  // Patient ID from the URL
-    const { diseaseType } = req.body;  // New diseaseType from the request body
-  
-    try {
-      // Find the patient by ID and update the diseaseType
-      const updatedPatient = await Patient.findByIdAndUpdate(
-        id, 
-        { diseaseType }, 
-        { new: true, runValidators: true }
-      );
-  
-      if (!updatedPatient) {
-        return res.status(404).json({ message: 'Patient not found' });
+const asyncHandler = require("express-async-handler");
+exports.updateDiseaseType = asyncHandler(async (req, res) => {
+  const { patientId } = req.params; // Extract patient ID from request parameters
+  const { diseaseType } = req.body; // Get the disease type from request body
+  const user = req.user;
+  console.log("Received request body:", patientId, diseaseType, user);
+  try {
+      // Find the patient by ID
+      const patient = await Patient.findById(patientId);
+      if (!patient) {
+          return res.status(404).json({ success: false, error: "Patient not found" });
       }
-  
-      res.status(200).json({
-        success: true,
-        message: 'Disease type updated successfully',
-        patient: updatedPatient,
-      });
-    } catch (error) {
-      console.error('Error updating disease type:', error.message);
-      res.status(500).json({ message: 'Server error' });
-    }
-  };
 
+      // Update the disease type and editedBy fields
+      patient.diseaseType = diseaseType; // Update diseaseType
+      patient.diseaseType.editedby = user.phone; // Set the editor as the current user
+
+      // Save the updated patient
+      const updatedPatient = await patient.save();
+
+      res.status(200).json({
+          success: true,
+          patient: updatedPatient,
+      });
+  } catch (error) {
+      console.error("Error updating disease type:", error);
+      res.status(500).json({ success: false, error: "Server error" });
+  }
+});
   
+
   exports.patientProfile = async (req, res) => {
     try {
-      console.log("Endpoint reached for patient profile check");
       const patientId = req.params.id;
-      console.log(patientId);
       // Check if the patientId exists in the ChronicForm model
       const chronicForm = await ChronicForm.findOne({ phone: patientId });
       
@@ -306,7 +349,71 @@ exports.listPatients = async (req, res) => {
       });
     }
   };
+
+
+  exports.updateComment = async (req, res) => {
+    try {
+      const { comment } = req.body;
+      const patientId = req.params.patientId;
   
+      const updatedPatient = await Patient.findByIdAndUpdate(
+        patientId,
+        { $set: { comments: comment } },
+        { new: true }
+      );
+  
+      if (!updatedPatient) {
+        return res.status(404).json({ message: 'Patient not found' });
+      }
+  
+      res.status(200).json({
+        message: 'Comment updated successfully',
+        patient: updatedPatient
+      });
+    } catch (error) {
+      console.error('Error updating comment:', error);
+      res.status(500).json({ message: 'Error updating comment', error: error.message });
+    }
+  };
+
+
+  exports.commentController = async (req, res) => {
+    try {
+      const { patientId } = req.params;
+      const { text } = req.body;  // Changed from textMessage to text
+      
+      console.log(patientId, text);
+      
+      if (!text) {
+        return res.status(400).json({ message: 'Comment text is required' });
+      }
+      
+      const patient = await Patient.findById(patientId);
+      if (!patient) {
+        return res.status(404).json({ message: 'Patient not found' });
+      }
+      
+      // Ensure patient.comments is initialized as an array
+      if (!Array.isArray(patient.comments)) {
+        patient.comments = [];
+      }
+      
+      // Add the comment
+      patient.comments.push({
+        text,  // Using text directly
+        createdAt: new Date()
+      });
+      
+      await patient.save();
+      
+      res.status(200).json({ success: true, patient });
+    } catch (error) {
+      console.error('Error adding comment:', error);
+      res.status(500).json({ message: 'Internal server error' });
+    }
+  };
+  
+
 
 // // Generate TwiML Response
 // exports.getTwimlResponse = (req, res) => {

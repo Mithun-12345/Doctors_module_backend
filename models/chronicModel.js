@@ -1,13 +1,14 @@
 const mongoose = require("mongoose");
-
 const chronicSchema = new mongoose.Schema(
   {
-    phone: { type: Number, required: false },
-    name: { type: String, required: false },
-    dob: { type: String, required: false },
-    age: { type: Number, required: false },
+    // name: { type: String, required: false },
+    // dob: { type: String, required: false },
+    // age: { type: Number, required: false },
     weight: { type: Number, required: false },
-    height: { type: Number, required: false },
+    height: {
+      feet: Number,
+      inches: Number,
+    },
     occupation: { type: String, required: false },
     country: { type: String, required: false },
     state: { type: String, required: false },
@@ -20,7 +21,7 @@ const chronicSchema = new mongoose.Schema(
     surgeryHistory: { type: String, required: false },
     allergies: { type: String, required: false },
     bodyType: { type: String, required: false },
-    clinicReferral: { type: String, required: false },
+    clinicReferral: [String],
   },
   { timestamps: true }
 );
