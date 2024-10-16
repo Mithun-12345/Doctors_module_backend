@@ -3,6 +3,7 @@ const mongoose = require("mongoose");
 const doctorSchema = new mongoose.Schema({
   phone: { type: String, required: true, unique: true },
   name: { type: String, required: false },
+  password: { type: String, required: true },
   age: { type: Number, required: false },
   gender: { type: String, required: false },
   photo: { type: String },
@@ -17,7 +18,7 @@ const doctorSchema = new mongoose.Schema({
   follow: {
     type: String,
     default: "No follows",
-  }
+  },
 });
 
 module.exports = mongoose.model("Doctor", doctorSchema);
