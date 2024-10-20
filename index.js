@@ -77,45 +77,45 @@ const client = twilio(accountSid, authToken);
 // Endpoint to handle the TwiML response
 app.post("/twiml", (req, res) => {
   const twiml = new twilio.twiml.VoiceResponse();
-  // twiml.record({ action: '/recording-status', recordingStatusCallback: '/recording-status' });
+  twiml.record({ action: '/recording-status', recordingStatusCallback: '/recording-status' });
   twiml.dial().number(req.query.to);
   res.type("text/xml");
   res.send(twiml.toString());
 });
 
-// app.post("/recording-status", (req, res) => {
-  // const recordingUrl = req.body.RecordingUrl;
-  // const recordingSid = req.body.RecordingSid;
+app.post("/recording-status", (req, res) => {
+  const recordingUrl = req.body.RecordingUrl;
+  const recordingSid = req.body.RecordingSid;
   
-//   // Here you would typically save the recordingUrl and recordingSid to your database
-//   console.log(`New recording available: ${recordingUrl}`);
+  // Here you would typically save the recordingUrl and recordingSid to your database
+  console.log(`New recording available: ${recordingUrl}`);
   
-//   res.sendStatus(200);
-// });
+  res.sendStatus(200);
+});
 
-// app.get("/recordings", (req, res) => {
-//   client.recordings.list({ limit: 20 })
-//     .then(recordings => {
-//       const formattedRecordings = recordings.map(recording => ({
-//         sid: recording.sid,
-//         duration: recording.duration,
-//         dateCreated: recording.dateCreated,
-//         url: recording.mediaUrl
-//       }));
-//       res.json(formattedRecordings);
-//     })
-//     .catch(error => {
-//       console.error('Error fetching recordings:', error);
-//       res.status(500).json({ error: 'Failed to fetch recordings' });
-//     });
-// });
+app.get("/recordings", (req, res) => {
+  client.recordings.list({ limit: 20 })
+    .then(recordings => {
+      const formattedRecordings = recordings.map(recording => ({
+        sid: recording.sid,
+        duration: recording.duration,
+        dateCreated: recording.dateCreated,
+        url: recording.mediaUrl
+      }));
+      res.json(formattedRecordings);
+    })
+    .catch(error => {
+      console.error('Error fetching recordings:', error);
+      res.status(500).json({ error: 'Failed to fetch recordings' });
+    });
+});
 
 // Endpoint to make the call
 app.post("/make-call", (req, res) => {
   const { to } = req.body; // The number to call from the request body
   // const formattedPhone = `+91${to}`;
   console.log(to);
-  const twimlUrl = `https://901c-122-15-77-226.ngrok-free.app/twiml?to=${encodeURIComponent(
+  const twimlUrl = `https://f9ea-122-15-77-226.ngrok-free.app/twiml?to=${encodeURIComponent(
     to
   )}`;
 
@@ -124,6 +124,7 @@ app.post("/make-call", (req, res) => {
       url: twimlUrl, // Point to the TwiML endpoint
       to: "+916382786758", // current assistant doc number
       from: process.env.TWILIO_PHONE_NUMBER, // Your Twilio number
+      // record: true
     })
     .then((call) => res.status(200).send(call.sid))
     .catch((error) => res.status(500).send(error));

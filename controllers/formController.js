@@ -1,6 +1,8 @@
 const Patient = require('../models/patientModel');
 
 exports.createPatient = async (req, res) => {
+  console.log("Endpoint reached");
+  console.log(req.body);
   try {
     const {
       consultingFor,
@@ -40,7 +42,7 @@ exports.createPatient = async (req, res) => {
       email,
       gender,
       diseaseName,
-      diseaseType: processedDiseaseType, // Use the processed disease type
+      diseaseType: processedDiseaseType,
       currentLocation,
       patientEntry,
       symptomNotKnown
