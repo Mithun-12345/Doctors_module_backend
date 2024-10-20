@@ -144,6 +144,10 @@ const patientSchema = new mongoose.Schema(
       //no need in frontend
       type: String,
     },
+    coupon: {
+      type: String,
+      required: false,
+    },
   },
   { timestamps: true }
 );
