@@ -1,7 +1,7 @@
 const mongoose = require("mongoose");
 const Doctor = require("../models/doctorModel");
 const Appointment = require("../models/appointmentModel.js");
-const moment = require('moment');
+const moment = require("moment");
 
 exports.addDoctor = async (req, res) => {
   const { name, age, gender, photo, specialization, bio, phone, role } =
@@ -68,24 +68,32 @@ exports.getAppointments = async (req, res) => {
     const now = new Date();
 
     switch (dateFilter) {
-      case 'today':
+      case "today":
         startDate = new Date(now.setHours(0, 0, 0, 0));
         endDate = new Date(now.setHours(23, 59, 59, 999));
         query.appointmentDate = { $gte: startDate, $lte: endDate };
         break;
-      case 'this week':
+      case "this week":
         startDate = new Date(now.setDate(now.getDate() - now.getDay()));
         startDate.setHours(0, 0, 0, 0);
         endDate = new Date(now.setDate(now.getDate() - now.getDay() + 6));
         endDate.setHours(23, 59, 59, 999);
         query.appointmentDate = { $gte: startDate, $lte: endDate };
         break;
-      case 'this month':
+      case "this month":
         startDate = new Date(now.getFullYear(), now.getMonth(), 1);
-        endDate = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
+        endDate = new Date(
+          now.getFullYear(),
+          now.getMonth() + 1,
+          0,
+          23,
+          59,
+          59,
+          999
+        );
         query.appointmentDate = { $gte: startDate, $lte: endDate };
         break;
-      case 'past':
+      case "past":
         endDate = new Date(now.setHours(0, 0, 0, 0));
         query.appointmentDate = { $lt: endDate };
         break;
@@ -95,29 +103,34 @@ exports.getAppointments = async (req, res) => {
         query.appointmentDate = { $gte: startDate, $lte: endDate };
     }
 
-    if (typeFilter === 'mine' || (doctorRole !== 'admin-doctor' && typeFilter !== 'all')) {
+    if (
+      typeFilter === "mine" ||
+      (doctorRole !== "admin-doctor" && typeFilter !== "all")
+    ) {
       query.doctor = doctor._id;
     }
 
     const appointments = await Appointment.find(query)
       .populate({
-        path: 'patient',
-        select: 'name',
+        path: "patient",
+        select: "name",
       })
       .populate({
-        path: 'doctor',
-        select: 'name',
+        path: "doctor",
+        select: "name",
       });
 
     if (appointments.length === 0) {
-      return res.status(200).json({ message: "No appointments found", appointments: [] });
+      return res
+        .status(200)
+        .json({ message: "No appointments found", appointments: [] });
     }
 
     const modifiedAppointments = appointments.map((appointment) => ({
       ...appointment._doc,
-      canRedirect: doctorRole === 'admin-doctor',
-      doctorName: appointment.doctor ? appointment.doctor.name : 'Unknown',
-      patientName: appointment.patient ? appointment.patient.name : 'Unknown'
+      canRedirect: doctorRole === "admin-doctor",
+      doctorName: appointment.doctor ? appointment.doctor.name : "Unknown",
+      patientName: appointment.patient ? appointment.patient.name : "Unknown",
     }));
 
     res.status(200).json({ appointments: modifiedAppointments });
@@ -145,14 +158,18 @@ exports.redirectAppointment = async (req, res) => {
       return res.status(404).json({ message: "Appointment not found" });
     }
     if (!assistantDoctor) {
-      return res.status(404).json({ message: "No such doctor found or doctor is not allowed to redirect" });
+      return res.status(404).json({
+        message: "No such doctor found or doctor is not allowed to redirect",
+      });
     }
-    
+
     appointment.doctor = assistantDoctorId;
     appointment.status = `redirected`;
     await appointment.save();
 
-    res.status(200).json({ message: "Appointment redirected successfully", appointment });
+    res
+      .status(200)
+      .json({ message: "Appointment redirected successfully", appointment });
   } catch (e) {
     console.error("Error redirecting appointment:", e.message);
     res.status(500).json({
@@ -164,24 +181,28 @@ exports.redirectAppointment = async (req, res) => {
 
 exports.getAssistantDoctors = async (req, res) => {
   try {
-    const doctors = await Doctor.find({ role: 'assistant-doctor' });
+    const doctors = await Doctor.find({ role: "assistant-doctor" });
     res.status(200).json({ doctors });
   } catch (e) {
-    res.status(500).json({ message: 'Failed to fetch assistant doctors', error: e.message });
+    res
+      .status(500)
+      .json({ message: "Failed to fetch assistant doctors", error: e.message });
   }
 };
 
 exports.getUserRole = async (req, res) => {
-  const token = req.headers.authorization.split(' ')[1];
+  const token = req.headers.authorization.split(" ")[1];
   try {
     const decodedToken = jwt.verify(token, process.env.JWT_SECRET);
     const doctor = await Doctor.findById(decodedToken.id);
     if (!doctor) {
-      return res.status(404).json({ message: 'Doctor not found' });
+      return res.status(404).json({ message: "Doctor not found" });
     }
     res.status(200).json({ role: doctor.role });
   } catch (e) {
-    res.status(500).json({ message: 'Failed to get user role', error: e.message });
+    res
+      .status(500)
+      .json({ message: "Failed to get user role", error: e.message });
   }
 };
 
@@ -189,17 +210,19 @@ exports.doctorDetails = async (req, res) => {
   try {
     console.log("Doctor details Endpoint reached");
     const doctorPhone = req.user.phone;
-    console.log('Searching for doctor with phone:', doctorPhone);
+    console.log("Searching for doctor with phone:", doctorPhone);
 
     // Find the doctor by phone number
     const doctor = await Doctor.findOne({ phone: doctorPhone });
 
     if (!doctor) {
-      console.log('Doctor not found for phone:', doctorPhone);
-      return res.status(404).json({ success: false, message: 'Doctor not found' });
+      console.log("Doctor not found for phone:", doctorPhone);
+      return res
+        .status(404)
+        .json({ success: false, message: "Doctor not found" });
     }
 
-    console.log('Doctor found:', doctor.name);
+    console.log("Doctor found:", doctor.name);
 
     // Return the doctor's details
     res.json({
@@ -212,24 +235,53 @@ exports.doctorDetails = async (req, res) => {
         specialization: doctor.specialization,
         experience: doctor.experience,
         // Add any other relevant fields
-      }
+      },
     });
   } catch (error) {
-    console.error('Error in doctor/details:', error);
-    res.status(500).json({ success: false, message: 'Server error' });
+    console.error("Error in doctor/details:", error);
+    res.status(500).json({ success: false, message: "Server error" });
   }
 };
 
 exports.getDoctorFollow = async (req, res) => {
   const phone = req.user.phone; // Use the phone from the token
-  console.log('Phone:', phone);
+  console.log("Phone:", phone);
   try {
     const doctor = await Doctor.findOne({ phone }); // Find by phone instead of ID
     if (!doctor) {
-      return res.status(404).json({ message: 'Doctor not found' });
+      return res.status(404).json({ message: "Doctor not found" });
     }
     res.json({ follow: doctor.follow });
   } catch (error) {
-    res.status(500).json({ message: 'Server error' });
+    res.status(500).json({ message: "Server error" });
+  }
+};
+
+//add/modify amount for the appointment
+exports.addAmount = async (req, res) => {
+  const { amount } = req.body;
+
+  try {
+    // Check if the requesting doctor is an admin
+    const requestingDoctor = await Doctor.findOne({ phone: req.user.phone });
+    if (!requestingDoctor || requestingDoctor.role !== "admin-doctor") {
+      return res
+        .status(403)
+        .json({ message: "Only admin doctors can add new doctors" });
+    }
+  } catch (e) {
+    console.log(e);
+  }
+};
+
+exports.getDoctorById = async (req, res) => {
+  try {
+    const doctor = await Doctor.findById(req.params.id);
+    if (!doctor) {
+      return res.status(404).json({ message: 'Doctor not found' });
+    }
+    res.json(doctor);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
   }
 };

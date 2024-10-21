@@ -144,8 +144,14 @@ const patientSchema = new mongoose.Schema(
       //no need in frontend
       type: String,
     },
-    referrals: [{ type: mongoose.Schema.Types.ObjectId, ref: "Patient" }], // Store referrals
-    referrer: { type: mongoose.Schema.Types.ObjectId, ref: "Patient" },
+    coupon: {
+      type: String,
+      required: false,
+    },
+    currentAllocDoc:{
+      type: String,
+      required: false
+    }
   },
   { timestamps: true }
 );

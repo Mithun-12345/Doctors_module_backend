@@ -13,7 +13,6 @@ const {
   updateFollowUpStatus,
   updateFollowPatientCall,
   referFriend,
-  // getPatientDetails,
 } = require("../controllers/patientController");
 const validateToken = require("../middlewares/validateTokenHandler");
 

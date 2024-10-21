@@ -8,7 +8,8 @@ const {
   doctorDetails,
   getAssistantDoctors,
   getUserRole,
-  getDoctorFollow
+  getDoctorFollow,
+  getDoctorById
 } = require("../controllers/doctorController");
 
 const router = express.Router();
@@ -33,4 +34,6 @@ router.get('/getAssistantDoctors', validateToken, getAssistantDoctors);
 router.get('/getUserRole', validateToken, getUserRole);
 router.get('/details', validateToken, doctorDetails);
 router.get('/getDoctorFollow', validateToken, getDoctorFollow);
+router.get('/byId/:id', getDoctorById);
+
 module.exports = router;

@@ -1,3 +1,0 @@
-const razorpay=new razorpay({
-    
-})
