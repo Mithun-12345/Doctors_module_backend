@@ -208,6 +208,8 @@ exports.bookAppointment = asyncHandler(async (req, res) => {
   const phone = req.user.phone;
   const { appointmentDate, timeSlot } = req.body;
   const doctorId = "66c8312667b91b0b7730e725";
+
+  // Find the patient by phone number
   const patient = await Patient.findOne({ phone });
   if (!patient) {
     return res.status(404).json({ message: "Patient not found" });
@@ -215,13 +217,15 @@ exports.bookAppointment = asyncHandler(async (req, res) => {
 
   // Find the doctor by ID
   const doctor = await Doctor.findById(doctorId);
-  if (!doctor || doctor.role != "admin-doctor") {
+  if (!doctor || doctor.role !== "admin-doctor") {
     return res.status(404).json({ message: "Doctor not found" });
   }
 
-  patient.diseaseType.name = "chronic"; //comment it later
+  // Check if the patient has a chronic condition
+  patient.diseaseType.name = "acute"; //comment it later
   const isChronic = patient.diseaseType.name.toLowerCase() === "chronic";
 
+  // Validate the requested time slot
   const timeSlots = [
     "10:00",
     "11:00",
@@ -255,6 +259,7 @@ exports.bookAppointment = asyncHandler(async (req, res) => {
       .json({ message: "Appointments can only be booked within a month" });
   }
 
+  // Fetch existing appointments for that date
   const appointments = await Appointment.find({ appointmentDate });
   const isMorningSlot = (slot) => timeSlots.indexOf(slot) < 4;
 
@@ -286,16 +291,37 @@ exports.bookAppointment = asyncHandler(async (req, res) => {
     }
   }
 
-  //booking appointment
-  const newAppointment = new Appointment({
-    patient: patient._id,
-    doctor: doctor._id,
-    appointmentDate,
-    timeSlot,
-    isChronic,
+  // ------------------------------
+  // Auto-apply coupon logic starts here
+  // ------------------------------
+
+  // Find available coupons for the referrer
+  const referrerCoupons = await Referral.find({
+    referrerId: patient._id,
+    isUsed: false,
+    firstAppointmentDone: true,
   });
 
-  //referral concept for referee
+  let appliedCoupon = null;
+
+  // Check if there are any available coupons
+  if (referrerCoupons.length > 0) {
+    // Automatically apply the first available coupon
+    appliedCoupon = referrerCoupons[0];
+    appliedCoupon.isUsed = true; // Mark the coupon as used
+    await appliedCoupon.save();
+
+    // Notify user that the coupon has been applied
+    console.log(
+      `Coupon ${appliedCoupon.code} automatically applied for referrer ${patient.name}.`
+    );
+  }
+
+  // ------------------------------
+  // Appointment booking logic
+  // ------------------------------
+
+  //referee
   const previousAppointments = await Appointment.findOne({
     patient: patient._id,
   });
@@ -305,37 +331,65 @@ exports.bookAppointment = asyncHandler(async (req, res) => {
   const couponCode = patient.coupon;
 
   if (!previousAppointments && couponCode) {
-    const referral = await Referral.findOne({ code: couponCode });
-    const senderId = referral.referrerId;
-    console.log("Sender ID", senderId);
-    const sender = await Patient.findById({ _id: senderId });
-    sender.coupon = couponCode;
-    await sender.save();
-    console.log("Coupon:", sender.coupon);
-    patient.coupon = ""; //check
+    const referral = await Referral.findOne({
+      code: couponCode,
+      isUsed: false,
+    });
+    // const senderId = referral.referrerId;
+    // console.log("Sender ID", senderId);
+    // const sender = await Patient.findById({ _id: senderId });
+    // sender.coupon = couponCode;
+    // await sender.save();
+    // console.log("Coupon:", sender.coupon);
+    referral.firstAppointmentDone = true;
+    referral.save();
+    //patient.coupon = "";
   }
 
-  //referral concept for referrer
-  if (couponCode && previousAppointments) {
-    const referral = await Referral.findOne({ code: couponCode });
-    if (referral && !referral.isUsed) {
-      //reduce the price
-      console.log("Yooo! It's a discount!");
-      referral.isUsed = true;
-      await referral.save();
-    }
-  }
-
-  await newAppointment.save();
-
-  // Update the patient's follow status to "Follow up-C"
-  patient.follow = "Follow up-C"; // Update follow status
-  await patient.save(); // Save the updated patient
-
-  res.status(201).json({
-    message: "Appointment booked successfully",
-    appointment: newAppointment,
+  //book appointment
+  const newAppointment = new Appointment({
+    patient: patient._id,
+    doctor: doctor._id,
+    appointmentDate,
+    timeSlot,
+    isChronic,
   });
+
+  try {
+    // Save the appointment
+    await newAppointment.save();
+
+    // If everything goes well, update the patient's follow-up status
+    patient.follow = "Follow up-C"; // Update follow status
+    await patient.save(); // Save the updated patient
+
+    // Return success response with applied coupon info
+    res.status(201).json({
+      message: "Appointment booked successfully",
+      appointment: newAppointment,
+      appliedCoupon: appliedCoupon ? appliedCoupon.code : null,
+    });
+  } catch (error) {
+    // If an error occurs, revert coupon status
+    if (appliedCoupon) {
+      appliedCoupon.isUsed = false; // Revert coupon usage
+      await appliedCoupon.save();
+      return res.status(500).json({
+        message: "Failed to book appointment, coupon reverted.",
+        error: error.message,
+      });
+    }
+    if (!previousAppointments && couponCode) {
+      const referral = await Referral.findOne({
+        code: couponCode,
+        isUsed: false,
+      });
+      referral.firstAppointmentDone = false;
+      referral.save();
+    }
+
+    console.error("Failed to book appointment:", error);
+  }
 });
 
 exports.getUserAppointments = async (req, res) => {

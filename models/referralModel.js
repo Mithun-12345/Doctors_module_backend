@@ -9,6 +9,8 @@ const referralSchema = new mongoose.Schema({
   }, // ID of the referrer
   referredFriendPhone: { type: String, required: true }, // Phone number of the friend (receiver)
   isUsed: { type: Boolean, default: false }, // If the code has been used for a benefit
+  // New field to track coupon association with a first appointment
+  firstAppointmentDone: { type: Boolean, default: false }, // If referred friend has completed first appointment
 });
 
 const Referral = mongoose.model("Referral", referralSchema);
