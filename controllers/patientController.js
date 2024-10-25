@@ -19,12 +19,20 @@ exports.sendForm = asyncHandler(async (req, res) => {
     req.body;
   const { referralCode } = req.query; // Get the referral code from query params
 
-  // Basic validation for required fields
-  // if (!name || !age || !phone || !email || !gender || !diseaseName || !diseaseType) {
-  //   return res.status(400).json({
-  //     message: "All fields are required",
-  //   });
-  // }
+  // Check if referral code is provided
+  let friendDetails = null;
+  if (referralCode) {
+    // Find the referral record by the referral code
+    const referral = await Referral.findOne({ code: referralCode });
+
+    if (referral) {
+      // Fetch the referred friend's phone number from the referral document
+      friendDetails = {
+        name: referral.referredFriendName,
+        phone: referral.referredFriendPhone,
+      };
+    }
+  }
 
   // Check if the patient with the given phone already exists
   const existingPatient = await Patient.findOne({ phone });
@@ -572,6 +580,7 @@ exports.referFriend = asyncHandler(async (req, res) => {
         code: coupon,
         referrerId: referrer._id, // The referrer's ID
         referredFriendPhone: friendPhone, // The phone of the friend being referred
+        referredFriendName: friendName,
       });
     }
 
