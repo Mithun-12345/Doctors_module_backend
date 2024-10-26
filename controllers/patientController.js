@@ -1,6 +1,7 @@
 const asyncHandler = require("express-async-handler");
 const Patient = require("../models/patientModel");
 const ChronicPatient = require("../models/chronicModel");
+const FamilyLink = require("../models/FamilyLink");
 const Appointment = require("../models/appointmentModel");
 const Referral = require("../models/referralModel");
 require("dotenv").config({ path: "./config/.env" });
@@ -8,6 +9,7 @@ const Doctor = require("../models/doctorModel");
 const moment = require("moment");
 const momentIST = require("moment-timezone"); // Make sure to install moment-timezone
 const twilio = require("twilio");
+const crypto = require("crypto");
 
 const accountSid = process.env.TWILIO_ACCOUNT_SID;
 const authToken = process.env.TWILIO_AUTH_TOKEN;
@@ -17,7 +19,7 @@ const client = new twilio(accountSid, authToken);
 exports.sendForm = asyncHandler(async (req, res) => {
   const { name, age, phone, email, gender, diseaseName, diseaseType } =
     req.body;
-  const { referralCode } = req.query; // Get the referral code from query params
+  const { referralCode, familyToken } = req.query; // Get the referral code from query params
 
   // Check if referral code is provided
   let friendDetails = null;
@@ -32,6 +34,16 @@ exports.sendForm = asyncHandler(async (req, res) => {
         phone: referral.referredFriendPhone,
       };
     }
+  }
+
+  const familyLink = await FamilyLink.findOne({ token: familyToken });
+
+  let familyDetails = null;
+  if (familyToken && familyLink) {
+    const familyDetails = {
+      name: familyLink.name,
+      phone: familyLink.phone,
+    };
   }
 
   // Check if the patient with the given phone already exists
@@ -61,6 +73,18 @@ exports.sendForm = asyncHandler(async (req, res) => {
   }
 
   await patientDocument.save();
+
+  if (familyToken && familyLink) {
+    const senderId = familyLink.userId;
+    await Patient.findByIdAndUpdate(senderId, {
+      $push: {
+        familyMembers: {
+          memberId: patientDocument._id, // Add patient ID as memberId
+          IndividulAccess: true, // Set IndividulAccess to true
+        },
+      },
+    });
+  }
 
   res.status(201).json({
     message: "Patient data saved successfully",
@@ -603,6 +627,73 @@ exports.referFriend = asyncHandler(async (req, res) => {
     res.status(500).json({ success: false, error: "Server error" });
   }
 });
+
+exports.addFamily = async (req, res) => {
+  try {
+    const { IndividulAccess, familyMemberPhone, familyMemberName } = req.body;
+    const myPhone = req.user.phone;
+    const User = await Patient.findOne({ phone: myPhone });
+    if (!User) {
+      return res
+        .status(404)
+        .json({ success: false, message: "User not found" });
+    }
+
+    // Check if User has made at least one appointment
+    const appointmentBooked = await Appointment.findOne({
+      patient: User._id,
+    });
+    if (!appointmentBooked) {
+      return res.status(400).json({
+        success: false,
+        message: "First make an appointment to add a family member",
+      });
+    }
+    if (IndividulAccess) {
+      const check = await Patient.findOne({ phone: familyMemberPhone });
+      if (check) {
+        return res.json({
+          message: "Patient with this mobile number already exists!",
+        });
+      }
+
+      const token = crypto.randomBytes(16).toString("hex");
+      let family = await FamilyLink.findOne({
+        phone: familyMemberPhone,
+      });
+
+      if (family) {
+        // Update existing referral with a new coupon code
+        family.token = token;
+        //family.referrerId = referrer._id; // Update the referrer if needed
+        await family.save();
+      } else {
+        await FamilyLink.create({
+          token,
+          userId: User._id,
+          name: familyMemberName,
+          phone: familyMemberPhone,
+        });
+      }
+
+      const link = `http://localhost:8000/api/patient/sendRegForm?familyToken=${token}`;
+
+      // await client.messages.create({
+      //   body: `Hi ${familyMemberName}, you've been referred by ${User.phone}. Click here to register: ${link}`,
+      //   from: "+12512728851", // Replace with your Twilio phone number
+      //   to: friendPhone,
+      // });
+
+      res.status(200).json({
+        success: true,
+        message: "Link sent successfully",
+        link: link,
+      });
+    }
+  } catch (e) {
+    console.log(e);
+  }
+};
 
 // // Update Appointment
 // exports.updateAppointment = asyncHandler(async (req, res) => {

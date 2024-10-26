@@ -148,6 +148,20 @@ const patientSchema = new mongoose.Schema(
       type: String,
       required: false,
     },
+    familyMembers: [
+      {
+        memberId: {
+          type: mongoose.Schema.Types.ObjectId,
+          ref: "Patient",
+          required: true,
+        },
+        IndividulAccess: {
+          type: Boolean,
+          default: false,
+        },
+        _id: false, // Prevents Mongoose from auto-generating an _id for subdocuments
+      },
+    ],
   },
   { timestamps: true }
 );
