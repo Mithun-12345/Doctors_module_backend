@@ -159,7 +159,19 @@ const patientSchema = new mongoose.Schema(
           type: Boolean,
           default: false,
         },
-        _id: false, // Prevents Mongoose from auto-generating an _id for subdocuments
+        relationship: {
+          type: String,
+          enum: [
+            "Father",
+            "Mother",
+            "Son",
+            "Daughter",
+            "Father in law",
+            "Mother in law",
+          ],
+          required: true,
+        },
+        _id: false,
       },
     ],
   },

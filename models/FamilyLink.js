@@ -9,6 +9,18 @@ const familyLinkSchema = new mongoose.Schema({
     ref: "Patient",
     required: true,
   },
+  relationship: {
+    type: String,
+    enum: [
+      "Father",
+      "Mother",
+      "Son",
+      "Daughter",
+      "Father in law",
+      "Mother in law",
+    ],
+    required: true,
+  },
 });
 
 module.exports = mongoose.model("FamilyLink", familyLinkSchema);

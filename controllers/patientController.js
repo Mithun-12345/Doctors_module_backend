@@ -7,7 +7,7 @@ const Referral = require("../models/referralModel");
 require("dotenv").config({ path: "./config/.env" });
 const Doctor = require("../models/doctorModel");
 const moment = require("moment");
-const momentIST = require("moment-timezone"); // Make sure to install moment-timezone
+const momentIST = require("moment-timezone");
 const twilio = require("twilio");
 const crypto = require("crypto");
 
@@ -81,6 +81,7 @@ exports.sendForm = asyncHandler(async (req, res) => {
         familyMembers: {
           memberId: patientDocument._id, // Add patient ID as memberId
           IndividulAccess: true, // Set IndividulAccess to true
+          relationship: familyLink.relationship, // Include relationship role
         },
       },
     });
@@ -238,34 +239,26 @@ exports.checkAvailableSlots = asyncHandler(async (req, res) => {
 // Book appointment
 exports.bookAppointment = asyncHandler(async (req, res) => {
   const phone = req.user.phone;
-  const { appointmentDate, timeSlot, familyMemberId } = req.body;
+  const { appointmentDate, timeSlot, relationship } = req.body;
   const doctorId = "66c8312667b91b0b7730e725";
   let patient;
 
-  if (familyMemberId) {
-    // Fetch user and ensure they have a family member with the given ID
-    const user = await Patient.findOne({ phone });
-    if (!user) return res.status(404).json({ message: "User not found" });
-
+  const user = await Patient.findOne({ phone });
+  if (!user) return res.status(404).json({ message: "Patient not found" });
+  patient = user;
+  if (relationship) {
     const familyMember = user.familyMembers.find(
-      (member) => member.memberId.toString() === familyMemberId
+      (member) => member.relationship === relationship
     );
-
-    // Check if family member exists and has IndividualAccess set to false
     if (!familyMember || familyMember.IndividulAccess) {
       return res.status(400).json({
         message: "Cannot book appointment for this family member.",
       });
     }
-
-    // Fetch the family member's Patient record for booking
-    patient = await Patient.findById(familyMemberId);
-    if (!patient)
-      return res.status(404).json({ message: "Family member not found" });
+    patient = await Patient.findOne({ _id: familyMember.memberId });
+    console.log(patient);
   } else {
-    // If no familyMemberId, assume appointment is for the user
-    patient = await Patient.findOne({ phone });
-    if (!patient) return res.status(404).json({ message: "Patient not found" });
+    patient = user;
   }
 
   // Find the doctor by ID
@@ -652,6 +645,7 @@ exports.referFriend = asyncHandler(async (req, res) => {
 exports.addFamily = async (req, res) => {
   try {
     const { IndividulAccess, familyMemberPhone, familyMemberName } = req.body;
+    const { relationship } = req.body;
     const myPhone = req.user.phone;
     const User = await Patient.findOne({ phone: myPhone });
     if (!User) {
@@ -669,6 +663,21 @@ exports.addFamily = async (req, res) => {
         success: false,
         message: "First make an appointment to add a family member",
       });
+    }
+    if (
+      !relationship ||
+      ![
+        "Father",
+        "Mother",
+        "Son",
+        "Daughter",
+        "Father in law",
+        "Mother in law",
+      ].includes(relationship)
+    ) {
+      return res
+        .status(400)
+        .json({ message: "Invalid or missing relationship" });
     }
     if (IndividulAccess) {
       const check = await Patient.findOne({ phone: familyMemberPhone });
@@ -694,6 +703,7 @@ exports.addFamily = async (req, res) => {
           userId: User._id,
           name: familyMemberName,
           phone: familyMemberPhone,
+          relationship,
         });
       }
 
@@ -780,8 +790,9 @@ exports.addFamily = async (req, res) => {
       await Patient.findByIdAndUpdate(senderId, {
         $push: {
           familyMembers: {
-            memberId: patientDocument._id,
             IndividulAccess: false,
+            memberId: patientDocument._id, // Add patient ID as memberId
+            relationship, // Include relationship role
           },
         },
       });
@@ -791,15 +802,11 @@ exports.addFamily = async (req, res) => {
   }
 };
 
+//getting family members details while making appointments
 exports.getFamilyMembers = async (req, res) => {
   try {
     const myPhone = req.user.phone;
-
-    // Find the user by phone number
-    const user = await Patient.findOne({ phone: myPhone }).populate(
-      "familyMembers.memberId",
-      "name phone"
-    );
+    const user = await Patient.findOne({ phone: myPhone });
 
     if (!user) {
       return res
@@ -807,14 +814,10 @@ exports.getFamilyMembers = async (req, res) => {
         .json({ success: false, message: "User not found" });
     }
 
-    // Filter and prepare family members data for dropdown
-    const familyMembers = user.familyMembers
-      .filter((member) => !member.IndividulAccess) // Include only members with IndividulAccess set to false
-      .map((member) => ({
-        id: member.memberId._id, // Family member ID
-        name: member.memberId.name, // Family member name
-        phone: member.memberId.phone, // Family member phone (optional, if needed)
-      }));
+    const familyMembers = user.familyMembers.map((member) => ({
+      relationship: member.relationship,
+      IndividulAccess: member.IndividulAccess,
+    }));
 
     res.status(200).json({
       success: true,
