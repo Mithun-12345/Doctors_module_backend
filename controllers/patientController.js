@@ -689,6 +689,81 @@ exports.addFamily = async (req, res) => {
         message: "Link sent successfully",
         link: link,
       });
+    } else {
+      const { name, age, phone, email, gender, diseaseName, diseaseType } =
+        req.body;
+      const {
+        dob,
+        weight,
+        height,
+        occupation,
+        country,
+        state,
+        city,
+        complaint,
+        symptoms,
+        associatedDisease,
+        allopathy,
+        diseaseHistory,
+        surgeryHistory,
+        allergies,
+        bodyType,
+      } = req.body;
+      const existingPatient = await Patient.findOne({ phone });
+
+      if (existingPatient) {
+        // If patient already exists, return an error response
+        return res.status(400).json({
+          message: "Patient with this mobile number already exists",
+        });
+      }
+
+      // Create a new patient document
+      const patientDocument = new Patient({
+        name,
+        age,
+        phone,
+        email,
+        gender,
+        diseaseName,
+        diseaseType,
+      });
+      await patientDocument.save();
+      const chronicPatientDocument = new ChronicPatient({
+        phone,
+        dob,
+        weight,
+        height,
+        occupation,
+        country,
+        state,
+        city,
+        complaint,
+        symptoms,
+        associatedDisease,
+        allopathy,
+        diseaseHistory,
+        surgeryHistory,
+        allergies,
+        bodyType,
+      });
+
+      // Save the chronic patient document to the "chronics" collection in the database
+      await chronicPatientDocument.save();
+      res.status(201).json({
+        message: "Patient data saved successfully",
+        AcuteDetails: patientDocument,
+        ChronicDetails: chronicPatientDocument,
+      });
+      const senderId = User._id;
+      await Patient.findByIdAndUpdate(senderId, {
+        $push: {
+          familyMembers: {
+            memberId: patientDocument._id,
+            IndividulAccess: false,
+          },
+        },
+      });
     }
   } catch (e) {
     console.log(e);
