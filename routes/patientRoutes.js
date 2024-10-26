@@ -14,6 +14,7 @@ const {
   updateFollowPatientCall,
   referFriend,
   addFamily,
+  getFamilyMembers,
 } = require("../controllers/patientController");
 const validateToken = require("../middlewares/validateTokenHandler");
 
@@ -33,5 +34,6 @@ router.put("/updateFollowUp/:patientId", updateFollowUpStatus);
 router.put("/updateFollowPatientCall/:patientId", updateFollowPatientCall);
 router.post("/referFriend", validateToken, referFriend);
 router.post("/addFamily", validateToken, addFamily);
+router.get("/getFamilyMembers", validateToken, getFamilyMembers);
 
 module.exports = router;

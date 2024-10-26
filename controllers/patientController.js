@@ -238,13 +238,34 @@ exports.checkAvailableSlots = asyncHandler(async (req, res) => {
 // Book appointment
 exports.bookAppointment = asyncHandler(async (req, res) => {
   const phone = req.user.phone;
-  const { appointmentDate, timeSlot } = req.body;
+  const { appointmentDate, timeSlot, familyMemberId } = req.body;
   const doctorId = "66c8312667b91b0b7730e725";
+  let patient;
 
-  // Find the patient by phone number
-  const patient = await Patient.findOne({ phone });
-  if (!patient) {
-    return res.status(404).json({ message: "Patient not found" });
+  if (familyMemberId) {
+    // Fetch user and ensure they have a family member with the given ID
+    const user = await Patient.findOne({ phone });
+    if (!user) return res.status(404).json({ message: "User not found" });
+
+    const familyMember = user.familyMembers.find(
+      (member) => member.memberId.toString() === familyMemberId
+    );
+
+    // Check if family member exists and has IndividualAccess set to false
+    if (!familyMember || familyMember.IndividulAccess) {
+      return res.status(400).json({
+        message: "Cannot book appointment for this family member.",
+      });
+    }
+
+    // Fetch the family member's Patient record for booking
+    patient = await Patient.findById(familyMemberId);
+    if (!patient)
+      return res.status(404).json({ message: "Family member not found" });
+  } else {
+    // If no familyMemberId, assume appointment is for the user
+    patient = await Patient.findOne({ phone });
+    if (!patient) return res.status(404).json({ message: "Patient not found" });
   }
 
   // Find the doctor by ID
@@ -596,7 +617,7 @@ exports.referFriend = asyncHandler(async (req, res) => {
     if (referral) {
       // Update existing referral with a new coupon code
       referral.code = coupon;
-      referral.referrerId = referrer._id; // Update the referrer if needed
+      //referral.referrerId = referrer._id; // Update the referrer if needed
       await referral.save();
     } else {
       // Create a new referral document if it doesn't exist
@@ -767,6 +788,43 @@ exports.addFamily = async (req, res) => {
     }
   } catch (e) {
     console.log(e);
+  }
+};
+
+exports.getFamilyMembers = async (req, res) => {
+  try {
+    const myPhone = req.user.phone;
+
+    // Find the user by phone number
+    const user = await Patient.findOne({ phone: myPhone }).populate(
+      "familyMembers.memberId",
+      "name phone"
+    );
+
+    if (!user) {
+      return res
+        .status(404)
+        .json({ success: false, message: "User not found" });
+    }
+
+    // Filter and prepare family members data for dropdown
+    const familyMembers = user.familyMembers
+      .filter((member) => !member.IndividulAccess) // Include only members with IndividulAccess set to false
+      .map((member) => ({
+        id: member.memberId._id, // Family member ID
+        name: member.memberId.name, // Family member name
+        phone: member.memberId.phone, // Family member phone (optional, if needed)
+      }));
+
+    res.status(200).json({
+      success: true,
+      familyMembers,
+    });
+  } catch (error) {
+    console.error("Error fetching family members:", error);
+    res
+      .status(500)
+      .json({ success: false, message: "Failed to retrieve family members" });
   }
 };
 
