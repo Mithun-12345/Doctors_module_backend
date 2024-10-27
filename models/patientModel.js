@@ -171,6 +171,10 @@ const patientSchema = new mongoose.Schema(
           ],
           required: true,
         },
+        name: {
+          type: String,
+          required: true, // Add name field to identify the family member
+        },
         _id: false,
       },
     ],

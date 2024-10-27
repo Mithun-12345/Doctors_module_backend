@@ -82,6 +82,7 @@ exports.sendForm = asyncHandler(async (req, res) => {
           memberId: patientDocument._id, // Add patient ID as memberId
           IndividulAccess: true, // Set IndividulAccess to true
           relationship: familyLink.relationship, // Include relationship role
+          name: name, // Store the family member's name here
         },
       },
     });
@@ -239,16 +240,17 @@ exports.checkAvailableSlots = asyncHandler(async (req, res) => {
 // Book appointment
 exports.bookAppointment = asyncHandler(async (req, res) => {
   const phone = req.user.phone;
-  const { appointmentDate, timeSlot, relationship } = req.body;
+  const { appointmentDate, timeSlot, familyMemberId } = req.body; // Use familyMemberId
   const doctorId = "66c8312667b91b0b7730e725";
   let patient;
 
   const user = await Patient.findOne({ phone });
   if (!user) return res.status(404).json({ message: "Patient not found" });
   patient = user;
-  if (relationship) {
+
+  if (familyMemberId) {
     const familyMember = user.familyMembers.find(
-      (member) => member.relationship === relationship
+      (member) => member.memberId.toString() === familyMemberId
     );
     if (!familyMember || familyMember.IndividulAccess) {
       return res.status(400).json({
@@ -644,8 +646,7 @@ exports.referFriend = asyncHandler(async (req, res) => {
 
 exports.addFamily = async (req, res) => {
   try {
-    const { IndividulAccess, familyMemberPhone, familyMemberName } = req.body;
-    const { relationship } = req.body;
+    const { IndividulAccess, relationship } = req.body;
     const myPhone = req.user.phone;
     const User = await Patient.findOne({ phone: myPhone });
     if (!User) {
@@ -680,6 +681,7 @@ exports.addFamily = async (req, res) => {
         .json({ message: "Invalid or missing relationship" });
     }
     if (IndividulAccess) {
+      const { familyMemberPhone, familyMemberName } = req.body;
       const check = await Patient.findOne({ phone: familyMemberPhone });
       if (check) {
         return res.json({
@@ -793,6 +795,7 @@ exports.addFamily = async (req, res) => {
             IndividulAccess: false,
             memberId: patientDocument._id, // Add patient ID as memberId
             relationship, // Include relationship role
+            name: name, // Store the family member's name here
           },
         },
       });
@@ -815,7 +818,8 @@ exports.getFamilyMembers = async (req, res) => {
     }
 
     const familyMembers = user.familyMembers.map((member) => ({
-      relationship: member.relationship,
+      id: member.memberId, // Unique identifier
+      relationship: `${member.relationship} - ${member.name}`, // Display format
       IndividulAccess: member.IndividulAccess,
     }));
 
