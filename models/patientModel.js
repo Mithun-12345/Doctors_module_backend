@@ -148,10 +148,6 @@ const patientSchema = new mongoose.Schema(
       type: String,
       required: false,
     },
-    currentAllocDoc:{
-      type: String,
-      required: false
-    }
   },
   { timestamps: true }
 );

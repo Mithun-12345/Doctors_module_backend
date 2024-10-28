@@ -13,13 +13,15 @@ const {
   updateFollowUpStatus,
   updateFollowPatientCall,
   referFriend,
+  addFamily,
+  getFamilyMembers,
 } = require("../controllers/patientController");
 const validateToken = require("../middlewares/validateTokenHandler");
 
 const router = express.Router();
 
 router.post("/sendRegForm", sendForm);
-router.post("/sendChronicForm", sendChronicForm);
+router.post("/sendChronicForm", validateToken, sendChronicForm);
 router.get("/details", validateToken, patientDetails);
 router.post("/bookAppointment", validateToken, bookAppointment);
 // router.patch("/updateAppointment/:id", validateToken, updateAppointment);
@@ -31,6 +33,5 @@ router.get("/getUserAppointments", validateToken, getUserAppointments);
 router.put("/updateFollowUp/:patientId", updateFollowUpStatus);
 router.put("/updateFollowPatientCall/:patientId", updateFollowPatientCall);
 router.post("/referFriend", validateToken, referFriend);
-// router.get("/fullDetails", validateToken, getPatientDetails);
 
 module.exports = router;
