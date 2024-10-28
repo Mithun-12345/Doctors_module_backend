@@ -47,17 +47,21 @@ exports.saveAllocations = async (req, res) => {
           const doctor = await Doctor.findOne({ _id: allocation.doctorId });
           console.log("Found doctor:", doctor);
           if (doctor) {
-            // Update patients' currentAllocDoc
-            const updateResult = await Patient.updateMany(
-              { follow: allocation.followUpType },
-              { $set: { currentAllocDoc: doctor._id } }
-            );
-            console.log("Updated patients:", updateResult);
+            // Check if follow contains "No follows" and reset it
+            let followList = doctor.follow === "No follows" ? [] : doctor.follow.split(", ");
+            
+            // Add followUpType to list only if it's not already present
+            if (!followList.includes(allocation.followUpType)) {
+              followList.push(allocation.followUpType);
+            }
 
-            // Update doctor's follow field with the followUpType
+            // Join the followList array back into a comma-separated string
+            const updatedFollow = followList.join(", "); // Ensure space after the comma
+
+            // Update doctor's follow
             const doctorUpdateResult = await Doctor.updateOne(
               { _id: doctor._id },
-              { $set: { follow: allocation.followUpType } }
+              { $set: { follow: updatedFollow } }
             );
             console.log("Updated doctor's follow:", doctorUpdateResult);
           }
@@ -94,35 +98,5 @@ exports.resetAllocations = async (req, res) => {
   } catch (error) {
     console.error("Error in resetAllocations:", error);
     res.status(500).json({ message: 'Error resetting allocations', error: error.message });
-  }
-};
-
-exports.getAllocationsWithDoctors = async (req, res) => {
-  try {
-    const allocations = await Allocation.aggregate([
-      {
-        $lookup: {
-          from: 'doctors',
-          localField: 'doctorId',
-          foreignField: '_id',
-          as: 'doctor'
-        }
-      },
-      {
-        $unwind: '$doctor'
-      },
-      {
-        $project: {
-          followUpType: 1,
-          role: 1,
-          'doctor.name': 1,
-          'doctor._id': 1
-        }
-      }
-    ]);
-    res.status(200).json(allocations);
-  } catch (error) {
-    console.error('Error fetching allocations:', error);
-    res.status(500).json({ message: 'Error fetching allocations', error: error.message });
   }
 };

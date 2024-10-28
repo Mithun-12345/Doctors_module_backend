@@ -16,9 +16,9 @@ const doctorSchema = new mongoose.Schema({
     required: true,
   },
   follow: {
-    type: String,
-    default: "No follows",
-  },
+    type: String,  // String to store follow-up types as a comma-separated list
+    default: ""    // Default to an empty string
+  }
 });
 
 module.exports = mongoose.model("Doctor", doctorSchema);
