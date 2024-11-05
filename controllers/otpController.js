@@ -1,8 +1,9 @@
 const asyncHandler = require("express-async-handler");
 const twilio = require("twilio");
 const jwt = require("jsonwebtoken");
-const Chronic = require("../models/chronicModel");
-require("dotenv").config();
+const bcrypt = require("bcryptjs");
+//const Chronic = require("../models/chronicModel");
+require("dotenv").config({ path: "./config/.env" });
 
 const OTP = require("../models/otpModel");
 const regForm = require("../models/patientModel");
@@ -32,12 +33,14 @@ exports.sendOTP = asyncHandler(async (req, res) => {
 
   try {
     let user;
-    if (role === 'Doctor') {
+    if (role === "Doctor") {
       user = await Doctor.findOne({ phone });
-    } else if (role === 'Patient') {
+    } else if (role === "Patient") {
       user = await regForm.findOne({ phone });
     } else {
-      return res.status(400).json({ success: false, message: "Invalid role specified" });
+      return res
+        .status(400)
+        .json({ success: false, message: "Invalid role specified" });
     }
 
     if (user) {
@@ -64,9 +67,10 @@ exports.sendOTP = asyncHandler(async (req, res) => {
         .status(200)
         .json({ success: true, message: "OTP sent successfully", otp });
     } else {
-      return res
-        .status(400)
-        .json({ success: false, message: `Phone number not registered as ${role}` });
+      return res.status(400).json({
+        success: false,
+        message: `Phone number not registered as ${role}`,
+      });
     }
   } catch (err) {
     console.error("Server error:", err);
@@ -108,18 +112,22 @@ exports.verifyOTP = asyncHandler(async (req, res) => {
       let user;
       console.log("Searching for user with userType:", userType);
 
-      if (userType === 'Doctor') {
+      if (userType === "Doctor") {
         user = await Doctor.findOne({ phone });
-      } else if (userType === 'Patient') {
+      } else if (userType === "Patient") {
         user = await regForm.findOne({ phone });
       } else {
         console.log("Invalid userType specified:", userType);
-        return res.status(400).json({ success: false, message: "Invalid userType specified" });
+        return res
+          .status(400)
+          .json({ success: false, message: "Invalid userType specified" });
       }
 
       if (!user) {
         console.log("User not found for phone:", phone);
-        return res.status(404).json({ success: false, message: "User not found" });
+        return res
+          .status(404)
+          .json({ success: false, message: "User not found" });
       }
 
       await OTP.updateOne({ phone }, { $set: { refreshToken } });
@@ -127,12 +135,12 @@ exports.verifyOTP = asyncHandler(async (req, res) => {
       console.log("accessToken:", accessToken);
       console.log("Sending successful response");
       console.log("refreshToken:", refreshToken);
-      res.status(200).json({ 
-        success: true, 
-        accessToken, 
-        refreshToken, 
+      res.status(200).json({
+        success: true,
+        accessToken,
+        refreshToken,
         userId: user._id,
-        userType: userType
+        userType: userType,
       });
     } else {
       console.log("Invalid or expired OTP for phone:", phone);
@@ -169,5 +177,167 @@ exports.logout = asyncHandler(async (req, res) => {
   } catch (err) {
     console.error("Server error:", err);
     res.status(500).json({ success: false, error: "Server error" });
+  }
+});
+
+//for the first time when the patient saves his password
+exports.updatePassword = asyncHandler(async (req, res) => {
+  const { phone, password, role } = req.body;
+  const hashedPassword = await bcrypt.hash(password, 10); // Hash the new password
+
+  let user;
+  if (role === "Doctor") {
+    user = await Doctor.findOneAndUpdate(
+      { phone },
+      { password: hashedPassword },
+      { new: true }
+    );
+  } else if (role === "Patient") {
+    user = await regForm.findOneAndUpdate(
+      { phone },
+      { password: hashedPassword },
+      { new: true }
+    );
+  } else {
+    return res
+      .status(400)
+      .json({ success: false, message: "Invalid role specified" });
+  }
+
+  if (!user) {
+    return res.status(404).json({ success: false, message: "User not found" });
+  }
+
+  res.status(200).json({
+    success: true,
+    message: "Password updated successfully",
+    user,
+  });
+});
+
+exports.loginWithPassword = asyncHandler(async (req, res) => {
+  const { phone, password, role } = req.body;
+
+  let user;
+  if (role === "Doctor") {
+    user = await Doctor.findOne({ phone });
+  } else if (role === "Patient") {
+    user = await regForm.findOne({ phone });
+  } else {
+    return res
+      .status(400)
+      .json({ success: false, message: "Invalid role specified" });
+  }
+
+  if (!user || !user.password) {
+    return res
+      .status(404)
+      .json({ success: false, message: "User not found or password not set" });
+  }
+
+  const isMatch = await bcrypt.compare(password, user.password);
+  if (!isMatch) {
+    return res
+      .status(401)
+      .json({ success: false, message: "Invalid password" });
+  }
+
+  const accessToken = jwt.sign(
+    { user: { phone: user.phone, role } },
+    process.env.ACCESS_TOKEN_SECRET,
+    { expiresIn: "25m" }
+  );
+  const refreshToken = jwt.sign(
+    { user: { phone: user.phone, role } },
+    process.env.REFRESH_TOKEN_SECRET,
+    { expiresIn: "7d" }
+  );
+
+  res.status(200).json({
+    success: true,
+    accessToken,
+    refreshToken,
+    userId: user._id,
+    userType: role,
+  });
+});
+
+//works along with resetPassword
+exports.forgotPassword = asyncHandler(async (req, res) => {
+  const { phone, role } = req.body;
+
+  let user;
+  if (role === "Doctor") {
+    user = await Doctor.findOne({ phone });
+  } else if (role === "Patient") {
+    user = await regForm.findOne({ phone });
+  } else {
+    return res
+      .status(400)
+      .json({ success: false, message: "Invalid role specified" });
+  }
+
+  if (!user) {
+    return res.status(404).json({ success: false, message: "User not found" });
+  }
+
+  const otp = generateOTP();
+  await OTP.findOneAndUpdate(
+    { phone },
+    { otp, expiresAt: Date.now() + 2 * 60 * 1000 }, // 2 minutes
+    { upsert: true }
+  );
+
+  // Send OTP via Twilio (Uncomment in production)
+  // await client.messages.create({
+  //   body: `Your OTP for password reset is ${otp}`,
+  //   from: "+12512728851",
+  //   to: phone,
+  // });
+
+  res
+    .status(200)
+    .json({ success: true, message: "OTP sent for password reset", otp });
+});
+
+//works along with forgotPassword
+exports.resetPassword = asyncHandler(async (req, res) => {
+  const { phone, userOTP, newPassword, role } = req.body;
+
+  const otpDocument = await OTP.findOne({
+    phone,
+    otp: userOTP,
+    expiresAt: { $gt: Date.now() },
+  });
+
+  if (!otpDocument) {
+    return res
+      .status(401)
+      .json({ success: false, message: "Invalid or expired OTP" });
+  }
+
+  const hashedPassword = await bcrypt.hash(newPassword, 10); // Hash the new password
+
+  if (role === "Doctor") {
+    await Doctor.updateOne({ phone }, { $set: { password: hashedPassword } });
+  } else if (role === "Patient") {
+    await regForm.updateOne({ phone }, { $set: { password: hashedPassword } });
+  }
+
+  // Invalidate OTP
+  await OTP.updateOne({ phone }, { $set: { otp: "", expiresAt: Date.now() } });
+
+  res.status(200).json({ success: true, message: "Password reset successful" });
+});
+
+exports.login = asyncHandler(async (req, res) => {
+  const { phone, password, role, loginMethod } = req.body;
+
+  if (loginMethod === "password") {
+    return this.loginWithPassword(req, res);
+  } else if (loginMethod === "otp") {
+    return this.sendOTP(req, res);
+  } else {
+    res.status(400).json({ success: false, message: "Invalid login method" });
   }
 });

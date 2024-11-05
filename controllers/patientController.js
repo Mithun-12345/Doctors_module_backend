@@ -2,24 +2,25 @@ const asyncHandler = require("express-async-handler");
 const Patient = require("../models/patientModel");
 const ChronicPatient = require("../models/chronicModel");
 const Appointment = require("../models/appointmentModel");
+const Referral = require("../models/referralModel");
+require("dotenv").config({ path: "./config/.env" });
 const Doctor = require("../models/doctorModel");
-const moment = require('moment');
+const moment = require("moment");
+const momentIST = require("moment-timezone"); // Make sure to install moment-timezone
+const twilio = require("twilio");
+
+const accountSid = process.env.TWILIO_ACCOUNT_SID;
+const authToken = process.env.TWILIO_AUTH_TOKEN;
+const client = new twilio(accountSid, authToken);
 
 //Initial Form
 exports.sendForm = asyncHandler(async (req, res) => {
   const { name, age, phone, email, gender, diseaseName, diseaseType } =
     req.body;
+  const { referralCode } = req.query; // Get the referral code from query params
 
-  // Basic validation
-  // if (
-  //   !name ||
-  //   !age ||
-  //   !phone ||
-  //   !email ||
-  //   !gender ||
-  //   !diseaseName ||
-  //   !diseaseType
-  // ) {
+  // Basic validation for required fields
+  // if (!name || !age || !phone || !email || !gender || !diseaseName || !diseaseType) {
   //   return res.status(400).json({
   //     message: "All fields are required",
   //   });
@@ -35,7 +36,7 @@ exports.sendForm = asyncHandler(async (req, res) => {
     });
   }
 
-  // If patient does not exist, create a new patient document
+  // Create a new patient document
   const patientDocument = new Patient({
     name,
     age,
@@ -45,6 +46,11 @@ exports.sendForm = asyncHandler(async (req, res) => {
     diseaseName,
     diseaseType,
   });
+
+  if (referralCode) {
+    //await Patient.save({ coupon: referralCode });
+    patientDocument.coupon = referralCode;
+  }
 
   await patientDocument.save();
 
@@ -213,6 +219,7 @@ exports.bookAppointment = asyncHandler(async (req, res) => {
     return res.status(404).json({ message: "Doctor not found" });
   }
 
+  patient.diseaseType.name = "chronic"; //comment it later
   const isChronic = patient.diseaseType.name.toLowerCase() === "chronic";
 
   const timeSlots = [
@@ -279,6 +286,7 @@ exports.bookAppointment = asyncHandler(async (req, res) => {
     }
   }
 
+  //booking appointment
   const newAppointment = new Appointment({
     patient: patient._id,
     doctor: doctor._id,
@@ -286,6 +294,37 @@ exports.bookAppointment = asyncHandler(async (req, res) => {
     timeSlot,
     isChronic,
   });
+
+  //referral concept for referee
+  const previousAppointments = await Appointment.findOne({
+    patient: patient._id,
+  });
+
+  console.log("Previous Appointments:", previousAppointments);
+
+  const couponCode = patient.coupon;
+
+  if (!previousAppointments && couponCode) {
+    const referral = await Referral.findOne({ code: couponCode });
+    const senderId = referral.referrerId;
+    console.log("Sender ID", senderId);
+    const sender = await Patient.findById({ _id: senderId });
+    sender.coupon = couponCode;
+    await sender.save();
+    console.log("Coupon:", sender.coupon);
+    patient.coupon = ""; //check
+  }
+
+  //referral concept for referrer
+  if (couponCode && previousAppointments) {
+    const referral = await Referral.findOne({ code: couponCode });
+    if (referral && !referral.isUsed) {
+      //reduce the price
+      console.log("Yooo! It's a discount!");
+      referral.isUsed = true;
+      await referral.save();
+    }
+  }
 
   await newAppointment.save();
 
@@ -304,30 +343,30 @@ exports.getUserAppointments = async (req, res) => {
   try {
     const userId = req.user.id; // Assuming you have user authentication middleware
     const { filter } = req.query;
-    
+
     let query = { patient: userId };
-    const currentDate = moment().startOf('day');
+    const currentDate = moment().startOf("day");
 
     switch (filter) {
-      case 'past':
+      case "past":
         query.appointmentDate = { $lt: currentDate.toDate() };
         break;
-      case 'today':
+      case "today":
         query.appointmentDate = {
           $gte: currentDate.toDate(),
-          $lt: moment(currentDate).endOf('day').toDate()
+          $lt: moment(currentDate).endOf("day").toDate(),
         };
         break;
-      case 'thisWeek':
+      case "thisWeek":
         query.appointmentDate = {
           $gte: currentDate.toDate(),
-          $lt: moment(currentDate).endOf('week').toDate()
+          $lt: moment(currentDate).endOf("week").toDate(),
         };
         break;
-      case 'thisMonth':
+      case "thisMonth":
         query.appointmentDate = {
           $gte: currentDate.toDate(),
-          $lt: moment(currentDate).endOf('month').toDate()
+          $lt: moment(currentDate).endOf("month").toDate(),
         };
         break;
       default:
@@ -336,62 +375,60 @@ exports.getUserAppointments = async (req, res) => {
     }
 
     const appointments = await Appointment.find(query)
-      .populate('doctor', 'name specialty') // Assuming doctor has name and specialty fields
+      .populate("doctor", "name specialty") // Assuming doctor has name and specialty fields
       .sort({ appointmentDate: 1, timeSlot: 1 });
-    
+
     res.json(appointments);
   } catch (error) {
-    res.status(500).json({ message: 'Error fetching appointments', error: error.message });
+    res
+      .status(500)
+      .json({ message: "Error fetching appointments", error: error.message });
   }
 };
 
-
-const momentIST = require('moment-timezone'); // Make sure to install moment-timezone
-
 exports.updateFollowUpStatus = async (req, res) => {
   try {
-    const { patientId } = req.params;    
+    const { patientId } = req.params;
     const patient = await Patient.findById(patientId);
     if (!patient) {
-      return res.status(404).json({ message: 'Patient not found' });
+      return res.status(404).json({ message: "Patient not found" });
     }
     const exDtTm = new Date();
-    
+
     // Update follow-up status
     switch (patient.follow) {
-      case 'Follow up-C':
-        patient.follow = 'Follow up-P';
+      case "Follow up-C":
+        patient.follow = "Follow up-P";
         break;
-      case 'Follow up-P':
-        patient.follow = 'Follow up-Mship';
+      case "Follow up-P":
+        patient.follow = "Follow up-Mship";
         patient.followUpTimestamp = exDtTm; // Store timestamp when status changes to Mship
         break;
-      case 'Follow up-Mship':
-        patient.follow = 'Follow up-MP';
+      case "Follow up-Mship":
+        patient.follow = "Follow up-MP";
         break;
-      case 'Follow up-MP':
-        patient.follow = 'Follow up-ship';
+      case "Follow up-MP":
+        patient.follow = "Follow up-ship";
         break;
       default:
-        return res.status(400).json({ message: 'Invalid follow-up status' });
+        return res.status(400).json({ message: "Invalid follow-up status" });
     }
 
     await patient.save();
 
     res.status(200).json({
-      message: 'Follow-up status updated successfully',
+      message: "Follow-up status updated successfully",
       patient: {
         id: patient._id,
         follow: patient.follow,
-        followUpTimestamp: patient.followUpTimestamp
-      }
+        followUpTimestamp: patient.followUpTimestamp,
+      },
     });
   } catch (error) {
-    console.error('Error updating follow-up status:', error);
-    res.status(500).json({ message: 'Internal server error' });
+    console.error("Error updating follow-up status:", error);
+    res.status(500).json({ message: "Internal server error" });
   }
 };
-
 
 // Update Call Status
 exports.updateFollowPatientCall = async (req, res) => {
@@ -403,26 +440,106 @@ exports.updateFollowPatientCall = async (req, res) => {
     const patient = await Patient.findById(patientId);
 
     if (!patient) {
-      return res.status(404).json({ message: 'Patient not found' });
+      return res.status(404).json({ message: "Patient not found" });
     }
 
     // Update the call status
     patient.enquiryStatus = newCallStatus;
 
     // If the new call status is 'Completed', update the follow-up status
-    if (newCallStatus === 'Completed') {
-      patient.follow = 'Follow up-C'; // Change this to the desired follow-up status
+    if (newCallStatus === "Completed") {
+      patient.follow = "Follow up-C"; // Change this to the desired follow-up status
     }
 
     // Save the updated patient record
     await patient.save();
 
-    res.status(200).json({ message: 'Call status updated successfully', patient });
+    res
+      .status(200)
+      .json({ message: "Call status updated successfully", patient });
   } catch (error) {
-    console.error('Error updating call status:', error);
-    res.status(500).json({ message: 'Server error', error });
+    console.error("Error updating call status:", error);
+    res.status(500).json({ message: "Server error", error });
   }
 };
+
+exports.referFriend = asyncHandler(async (req, res) => {
+  const { friendName, friendPhone } = req.body;
+  const referrerPhone = req.user.phone;
+
+  const generateReferralCode = () => {
+    const chars =
+      "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"; // 62 characters
+    let referralCode = "";
+    for (let i = 0; i < 8; i++) {
+      referralCode += chars[Math.floor(Math.random() * chars.length)];
+    }
+    return referralCode;
+  };
+
+  try {
+    // Check if the referrer is a registered patient
+    const referrer = await Patient.findOne({ phone: referrerPhone });
+    if (!referrer) {
+      return res
+        .status(404)
+        .json({ success: false, message: "Referrer not found" });
+    }
+
+    // Check if referrer has made at least one appointment
+    const appointmentBooked = await Appointment.findOne({
+      patient: referrer._id,
+    });
+    if (!appointmentBooked) {
+      return res.status(400).json({
+        success: false,
+        message: "First make an appointment to refer a friend",
+      });
+    }
+
+    const coupon = generateReferralCode();
+
+    const check = await Patient.findOne({ phone: friendPhone });
+    if (check) {
+      res.json({ message: "Patient with this mobile number already exists!" });
+    }
+
+    // Check if a referral for this friend already exists
+    let referral = await Referral.findOne({ referredFriendPhone: friendPhone });
+
+    if (referral) {
+      // Update existing referral with a new coupon code
+      referral.code = coupon;
+      referral.referrerId = referrer._id; // Update the referrer if needed
+      await referral.save();
+    } else {
+      // Create a new referral document if it doesn't exist
+      referral = await Referral.create({
+        code: coupon,
+        referrerId: referrer._id, // The referrer's ID
+        referredFriendPhone: friendPhone, // The phone of the friend being referred
+      });
+    }
+
+    // Also pass the referee phone and name via query
+    // Send an SMS to the friend with the registration link
+    const referralLink = `http://localhost:8000/api/patient/sendRegForm?referralCode=${coupon}`;
+    // await client.messages.create({
+    //   body: `Hi ${friendName}, you've been referred by ${referrer.phone}. Click here to register: ${referralLink}`,
+    //   from: "+12512728851", // Replace with your Twilio phone number
+    //   to: friendPhone,
+    // });
+
+    res.status(200).json({
+      success: true,
+      message: "Referral sent successfully",
+      referralLink: referralLink,
+    });
+  } catch (err) {
+    console.error("Server error:", err);
+    res.status(500).json({ success: false, error: "Server error" });
+  }
+});
 
 // // Update Appointment
 // exports.updateAppointment = asyncHandler(async (req, res) => {

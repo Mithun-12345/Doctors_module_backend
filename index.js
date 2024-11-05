@@ -11,7 +11,7 @@ const otpRoute = require("./routes/otpRoutes");
 const patientRoute = require("./routes/patientRoutes");
 const doctorRoute = require("./routes/doctorRoutes");
 const validateToken = require("./middlewares/validateTokenHandler");
-const assignTasks = require('./routes/AssignTasksRoute');
+const assignTasks = require("./routes/AssignTasksRoute");
 const callLog = require("./routes/CallLogRoutes");
 const formRoutes = require("./routes/formRoute");
 const postRoute = require("./routes/postRoutes");
@@ -128,7 +128,6 @@ app.post("/make-call", (req, res) => {
     .then((call) => res.status(200).send(call.sid))
     .catch((error) => res.status(500).send(error));
 });
-
 
 const PORT = process.env.PORT || 8000;
 server.listen(PORT, () => {
