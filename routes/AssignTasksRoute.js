@@ -14,6 +14,7 @@ router.delete('/allocations', allocationController.resetAllocations);
 router.get('/allocations-with-doctors', allocationController.getAllocationsWithDoctors);
 
 const IndividualAllocation = require('../models/IndividualAllocation');
+const validateToken = require('../middlewares/validateTokenHandler');
 router.post('/individual-allocation', async (req, res) => {
     try {
       const { patientId, doctorId } = req.body;
@@ -30,4 +31,9 @@ router.post('/individual-allocation', async (req, res) => {
       res.status(500).json({ success: false, error: error.message });
     }
   });
+
+router.get('/special/:doctorId', 
+  // validateToken,
+  allocationController.getDoctorSpecialAllocations
+);
 module.exports = router;

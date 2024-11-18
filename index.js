@@ -93,38 +93,53 @@ app.post("/recording-status", (req, res) => {
   res.sendStatus(200);
 });
 
-app.get("/recordings", (req, res) => {
-  client.recordings.list({ limit: 20 })
-    .then(recordings => {
-      const formattedRecordings = recordings.map(recording => ({
+app.get("/api/recordings/:phone", async (req, res) => {
+  try {
+    const { phone } = req.params;
+    
+    // Get all calls made to this phone number
+    const calls = await client.calls.list({
+      to: phone,
+      limit: 20
+    });
+
+    // Get recordings for each call
+    const recordingsPromises = calls.map(call => 
+      client.recordings.list({ callSid: call.sid })
+    );
+    
+    const recordingsArrays = await Promise.all(recordingsPromises);
+    
+    // Flatten and format the recordings
+    const recordings = recordingsArrays
+      .flat()
+      .map(recording => ({
         sid: recording.sid,
         duration: recording.duration,
         dateCreated: recording.dateCreated,
-        url: recording.mediaUrl
+        url: `https://api.twilio.com/2010-04-01/Accounts/${process.env.TWILIO_ACCOUNT_SID}/Recordings/${recording.sid}`,
+        callSid: recording.callSid
       }));
-      res.json(formattedRecordings);
-    })
-    .catch(error => {
-      console.error('Error fetching recordings:', error);
-      res.status(500).json({ error: 'Failed to fetch recordings' });
-    });
+
+    res.json(recordings);
+  } catch (error) {
+    console.error('Error fetching recordings:', error);
+    res.status(500).json({ error: 'Failed to fetch recordings' });
+  }
 });
 
-// Endpoint to make the call
+// Update your existing make-call endpoint to include the patient's phone
 app.post("/make-call", (req, res) => {
-  const { to } = req.body; // The number to call from the request body
-  // const formattedPhone = `+91${to}`;
-  console.log(to);
-  const twimlUrl = `https://f9ea-122-15-77-226.ngrok-free.app/twiml?to=${encodeURIComponent(
-    to
-  )}`;
+  const { to } = req.body;
+  const twimlUrl = `${process.env.NGROK_URL}/twiml?to=${encodeURIComponent(to)}`;
 
   client.calls
     .create({
-      url: twimlUrl, // Point to the TwiML endpoint
+      url: twimlUrl,
       to: "+916382786758", // current assistant doc number
-      from: process.env.TWILIO_PHONE_NUMBER, // Your Twilio number
-      // record: true
+      from: process.env.TWILIO_PHONE_NUMBER,
+      record: true,
+      recordingStatusCallback: '/recording-status'
     })
     .then((call) => res.status(200).send(call.sid))
     .catch((error) => res.status(500).send(error));

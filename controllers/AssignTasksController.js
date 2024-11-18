@@ -1,7 +1,7 @@
 const Allocation = require('../models/AllocationModel');
 const Doctor = require('../models/doctorModel');
 const Patient = require('../models/patientModel');
-
+const SpecialAllocation = require('../models/IndividualAllocation');
 exports.getDoctors = async (req, res) => {
   try {
     const doctors = await Doctor.find().select('name _id follow role');
@@ -130,4 +130,39 @@ exports.getAllocationsWithDoctors = async (req, res) => {
     console.error('Error fetching allocations:', error);
     res.status(500).json({ message: 'Error fetching allocations', error: error.message });
   }
+};
+
+exports.getDoctorSpecialAllocations = async (req, res) => { 
+  console.log("Endpoint reached: getDoctorSpecialAllocations"); 
+  try { 
+      const { doctorId } = req.params; 
+ 
+      console.log("Received doctorId:", doctorId); 
+      // Validate doctorId 
+      if (!mongoose.Types.ObjectId.isValid(doctorId)) { 
+          return res.status(400).json({ message: 'Invalid doctor ID format' }); 
+      } 
+ 
+      // Find all special allocations for the doctor 
+      const allocations = await SpecialAllocation.find({ doctorId: new mongoose.Types.ObjectId(doctorId) })
+        .populate('patientId', 'name phone whatsappNumber email age gender currentLocation patientEntry newExisting consultingFor diseaseName diseaseTypeAvailable messageSent follow followComment patientProfile enquiryStatus appDownload appointmentFixed medicinePaymentConfirmation callCount comments')
+        .populate('patientId.diseaseType', 'name');
+ 
+      if (!allocations.length) { 
+          return res.status(200).json([]); 
+      } 
+ 
+      // Transform the data to match the expected format 
+      const formattedAllocations = allocations.map(allocation => ({ 
+          _id: allocation.patientId._id,
+          specialAllocationId: allocation._id, 
+          allocationCreatedAt: allocation.createdAt, 
+          ...allocation.patientId.toObject() 
+      })); 
+ 
+      res.status(200).json(formattedAllocations); 
+  } catch (error) { 
+      console.error('Error in getDoctorSpecialAllocations:', error); 
+      res.status(500).json({ message: 'Error fetching special allocations', error: error.message }); 
+  } 
 };
