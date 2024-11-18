@@ -39,11 +39,23 @@ exports.sendForm = asyncHandler(async (req, res) => {
   const familyLink = await FamilyLink.findOne({ token: familyToken });
 
   let familyDetails = null;
+  let familyGender;
   if (familyToken && familyLink) {
+    if (
+      familyLink.relationship == "Father" ||
+      familyLink.relationship == "Son" ||
+      familyLink.relationship == "Father-in-law"
+    ) {
+      familyGender = "Male";
+    } else {
+      familyGender = "Female";
+    }
     const familyDetails = {
       name: familyLink.name,
       phone: familyLink.phone,
+      gender: familyGender,
     };
+    console.log(familyDetails);
   }
 
   // Check if the patient with the given phone already exists
@@ -758,10 +770,19 @@ exports.addFamily = async (req, res) => {
         age,
         phone,
         email,
-        gender,
+        //gender,
         diseaseName,
         diseaseType,
       });
+      if (
+        relationship == "Father" ||
+        relationship == "Son" ||
+        relationship == "Father-in-law"
+      ) {
+        patientDocument.gender = "Male";
+      } else {
+        patientDocument.gender = "Female";
+      }
       await patientDocument.save();
       const chronicPatientDocument = new ChronicPatient({
         phone,
