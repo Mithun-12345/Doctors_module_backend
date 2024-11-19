@@ -659,6 +659,7 @@ exports.referFriend = asyncHandler(async (req, res) => {
 
 exports.addFamily = async (req, res) => {
   try {
+    console.log("Endpoint reached addFamily at patientController");
     const { IndividulAccess, relationship } = req.body;
     const myPhone = req.user.phone;
     const User = await Patient.findOne({ phone: myPhone });
@@ -695,6 +696,7 @@ exports.addFamily = async (req, res) => {
     }
     if (IndividulAccess) {
       const { familyMemberPhone, familyMemberName } = req.body;
+      console.log("Received request body:", familyMemberName, familyMemberPhone);
       const check = await Patient.findOne({ phone: familyMemberPhone });
       if (check) {
         return res.json({
@@ -854,6 +856,278 @@ exports.getFamilyMembers = async (req, res) => {
     res
       .status(500)
       .json({ success: false, message: "Failed to retrieve family members" });
+  }
+};
+
+exports.getFamily = async (req, res) => {
+    try {
+        // Find the patient document using the authenticated user's ID
+        const patient = await Patient.findOne({ _id: req.user.id });
+        
+        if (!patient) {
+            return res.status(404).json({
+                success: false,
+                message: 'Patient not found'
+            });
+        }
+
+        // Check if familyMembers array exists
+        if (!patient.familyMembers || !Array.isArray(patient.familyMembers)) {
+            return res.json({
+                success: true,
+                familyMembers: []
+            });
+        }
+
+        // Map through family members to structure the response
+        const enrichedFamilyMembers = patient.familyMembers.map(member => ({
+            _id: member.memberId,
+            name: member.name,
+            relationship: member.relationship,
+            IndividulAccess: member.IndividulAccess || false,
+            dob: member.dob,
+            weight: member.weight,
+            height: member.height,
+            occupation: member.occupation,
+            country: member.country,
+            state: member.state,
+            city: member.city,
+            complaint: member.complaint,
+            symptoms: member.symptoms,
+            associatedDisease: member.associatedDisease,
+            allopathy: member.allopathy,
+            diseaseHistory: member.diseaseHistory,
+            surgeryHistory: member.surgeryHistory,
+            allergies: member.allergies,
+            bodyType: member.bodyType
+        }));
+
+        return res.json({
+            success: true,
+            familyMembers: enrichedFamilyMembers
+        });
+
+    } catch (error) {
+        console.error('Error fetching family members:', error);
+        return res.status(500).json({
+            success: false,
+            message: 'Server error while fetching family members',
+            error: error.message
+        });
+    }
+};
+
+
+// Get specific family member details
+exports.getFamilyMemberDetails = async (req, res) => {
+  try {
+      const { memberId } = req.params;
+      const userId = req.user.id;
+
+      const familyMember = await FamilyLink.findOne({
+          memberId,
+          userId
+      });
+
+      if (!familyMember) {
+          return res.status(404).json({
+              success: false,
+              message: 'Family member not found'
+          });
+      }
+
+      res.status(200).json({
+          success: true,
+          familyMember
+      });
+  } catch (error) {
+      console.error('Error fetching family member details:', error);
+      res.status(500).json({
+          success: false,
+          message: 'Error fetching family member details',
+          error: error.message
+      });
+  }
+};
+
+// Update family member access
+exports.updateFamilyMemberAccess = async (req, res) => {
+  try {
+      const { memberId } = req.params;
+      const { IndividulAccess } = req.body;
+      const userId = req.user.id;
+
+      const familyMember = await FamilyLink.findOneAndUpdate(
+          { memberId, userId },
+          { IndividulAccess },
+          { new: true }
+      );
+
+      if (!familyMember) {
+          return res.status(404).json({
+              success: false,
+              message: 'Family member not found'
+          });
+      }
+
+      res.status(200).json({
+          success: true,
+          familyMember
+      });
+  } catch (error) {
+      console.error('Error updating family member access:', error);
+      res.status(500).json({
+          success: false,
+          message: 'Error updating family member access',
+          error: error.message
+      });
+  }
+};
+
+// Add new family member
+exports.addFamilyMember = async (req, res) => {
+  try {
+      const { name, relationship } = req.body;
+      const userId = req.user.id;
+
+      // Validate relationship
+      const validRelationships = ['Father', 'Mother', 'Son', 'Daughter', 'Father in law', 'Mother in law'];
+      if (!validRelationships.includes(relationship)) {
+          return res.status(400).json({
+              success: false,
+              message: 'Invalid relationship type'
+          });
+      }
+
+      const newFamilyMember = new FamilyLink({
+          name,
+          relationship,
+          memberId: new mongoose.Types.ObjectId(),
+          userId,
+          IndividulAccess: false
+      });
+
+      await newFamilyMember.save();
+
+      res.status(201).json({
+          success: true,
+          familyMember: newFamilyMember
+      });
+  } catch (error) {
+      console.error('Error adding family member:', error);
+      res.status(500).json({
+          success: false,
+          message: 'Error adding family member',
+          error: error.message
+      });
+  }
+};
+
+// Remove family member
+exports.removeFamilyMember = async (req, res) => {
+  try {
+      const { memberId } = req.params;
+      const userId = req.user.id;
+
+      const result = await FamilyLink.findOneAndDelete({
+          memberId,
+          userId
+      });
+
+      if (!result) {
+          return res.status(404).json({
+              success: false,
+              message: 'Family member not found'
+          });
+      }
+
+      res.status(200).json({
+          success: true,
+          message: 'Family member removed successfully'
+      });
+  } catch (error) {
+      console.error('Error removing family member:', error);
+      res.status(500).json({
+          success: false,
+          message: 'Error removing family member',
+          error: error.message
+      });
+  }
+};
+
+// Search family members
+exports.searchFamilyMembers = async (req, res) => {
+  try {
+      const { query } = req.query;
+      const userId = req.user.id;
+
+      const searchRegex = new RegExp(query, 'i');
+
+      const familyMembers = await FamilyLink.find({
+          userId,
+          $or: [
+              { name: searchRegex },
+              { relationship: searchRegex }
+          ]
+      }).select('name relationship memberId IndividulAccess');
+
+      res.status(200).json({
+          success: true,
+          familyMembers
+      });
+  } catch (error) {
+      console.error('Error searching family members:', error);
+      res.status(500).json({
+          success: false,
+          message: 'Error searching family members',
+          error: error.message
+      });
+  }
+};
+
+// Filter family members by relationship
+exports.filterFamilyMembers = async (req, res) => {
+  try {
+      const { relationship } = req.query;
+      const userId = req.user.id;
+
+      const query = { userId };
+      
+      if (relationship !== 'All') {
+          if (relationship === 'Parents') {
+              query.relationship = { 
+                  $in: ['Father', 'Mother', 'Father in law', 'Mother in law'] 
+              };
+          } else if (relationship === 'Children') {
+              query.relationship = { 
+                  $in: ['Son', 'Daughter'] 
+              };
+          } else if (relationship === 'In-Laws') {
+              query.relationship = { 
+                  $regex: /in law/i 
+              };
+          } else if (relationship === 'Individual Access') {
+              query.IndividulAccess = true;
+          } else if (relationship === 'No Access') {
+              query.IndividulAccess = false;
+          }
+      }
+
+      const familyMembers = await FamilyLink.find(query)
+          .select('name relationship memberId IndividulAccess')
+          .sort({ relationship: 1, name: 1 });
+
+      res.status(200).json({
+          success: true,
+          familyMembers
+      });
+  } catch (error) {
+      console.error('Error filtering family members:', error);
+      res.status(500).json({
+          success: false,
+          message: 'Error filtering family members',
+          error: error.message
+      });
   }
 };
 

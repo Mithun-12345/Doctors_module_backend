@@ -36,4 +36,13 @@ router.post("/referFriend", validateToken, referFriend);
 router.post("/addFamily", validateToken, addFamily);
 router.get("/getFamilyMembers", validateToken, getFamilyMembers);
 
+const familyMemberController = require('../controllers/patientController');
+router.get('/familyMembers', validateToken, familyMemberController.getFamily);
+router.get('/familyMembers/search', familyMemberController.searchFamilyMembers);
+router.get('/familyMembers/filter', familyMemberController.filterFamilyMembers);
+router.get('/familyMembers/:memberId', familyMemberController.getFamilyMemberDetails);
+router.put('/familyMembers/:memberId/access', familyMemberController.updateFamilyMemberAccess);
+router.post('/familyMembers', familyMemberController.addFamilyMember);
+router.delete('/familyMembers/:memberId', familyMemberController.removeFamilyMember);
+
 module.exports = router;
