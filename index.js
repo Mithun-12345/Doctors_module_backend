@@ -145,6 +145,16 @@ app.post("/make-call", (req, res) => {
     .catch((error) => res.status(500).send(error));
 });
 
+// For getting the user straight to Home page from the splash screen if the response is true else to the login page
+app.post("/api/validate-token", validateToken, (req, res) => {
+  console.log("Token is valid");
+  res.status(200).json({
+    success: true,
+    message: "Token is valid",
+    user: req.user, // The user information is attached by the middleware
+  });
+});
+
 const PORT = process.env.PORT || 8000;
 server.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
