@@ -206,7 +206,9 @@ exports.login = async (req, res) => {
     // Find user based on role
     if (role === 'admin') {
       user = await Admin.findOne({ phone: phoneNumber });
-    } else if (role === 'doctor') {
+    } else if (role === 'admin-doctor') {
+      user = await Doctor.findOne({ phone: phoneNumber });
+    } else if(role === 'assistant-doctor'){
       user = await Doctor.findOne({ phone: phoneNumber });
     }
 
