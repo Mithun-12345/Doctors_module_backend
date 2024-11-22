@@ -1,4 +1,5 @@
 const asyncHandler = require("express-async-handler");
+const axios = require('axios');
 const Patient = require("../models/patientModel");
 const ChronicPatient = require("../models/chronicModel");
 const FamilyLink = require("../models/FamilyLink");
@@ -10,10 +11,19 @@ const moment = require("moment");
 const momentIST = require("moment-timezone");
 const twilio = require("twilio");
 const crypto = require("crypto");
+const { google } = require("googleapis");
+
+
+// patientController.js
 
 const accountSid = process.env.TWILIO_ACCOUNT_SID;
 const authToken = process.env.TWILIO_AUTH_TOKEN;
 const client = new twilio(accountSid, authToken);
+const oauth2Client = new google.auth.OAuth2(
+  process.env.GOOGLE_CLIENT_ID,
+  process.env.GOOGLE_CLIENT_SECRET,
+  process.env.GOOGLE_REDIRECT_URL
+);
 
 //Initial Form
 exports.sendForm = asyncHandler(async (req, res) => {
@@ -237,10 +247,162 @@ exports.checkAvailableSlots = asyncHandler(async (req, res) => {
   res.status(200).json({ availableSlots });
 });
 
+
+// Function to add an event to Google Calendar
+const addEventToGoogleCalendar = async (doctorId, appointment) => {
+  try {
+    const doctor = await Doctor.findById(doctorId);
+    if (!doctor) {
+      throw new Error("Doctor not found");
+    }
+
+    // Check if the doctor has the necessary tokens
+    if (!doctor.googleAccessToken || !doctor.googleRefreshToken) {
+      throw new Error("Doctor does not have Google OAuth tokens");
+    }
+
+    // Use the tokens to set the credentials for googleClient
+    oauth2Client.setCredentials({
+      access_token: doctor.googleAccessToken,
+      refresh_token: doctor.googleRefreshToken,
+    });
+
+    // Set up Google Calendar API
+    const calendar = google.calendar({ version: "v3", auth: oauth2Client });
+
+    // Prepare event details
+    const event = {
+      summary: `Appointment with ${appointment.patientName}`,
+      description: `Consultation for ${appointment.reason}`,
+      start: {
+        dateTime: `${appointment.appointmentDate}T${appointment.timeSlot}:00`,
+        timeZone: "Asia/Kolkata", // Set to Indian Standard Time
+      },
+      end: {
+        dateTime: `${appointment.appointmentDate}T${
+          String(parseInt(appointment.timeSlot.split(":")[0]) + 1).padStart(2, "0")
+        }:00:00`,
+        timeZone: "Asia/Kolkata", // Set to Indian Standard Time
+      },
+      conferenceData: {
+        createRequest: {
+          requestId: `appointment-${appointment._id}`,
+          conferenceSolutionKey: { type: "hangoutsMeet" },
+        },
+      },
+      // extendedProperties: {
+      //   private: {
+      //     status: "inactive", // Custom field to track status (inactive initially)
+      //   },
+      // },
+      attendees: [{ email: appointment.patientEmail }],
+    };
+
+    // Insert the event into the doctor's Google Calendar
+    const calendarEvent = await calendar.events.insert({
+      calendarId: "primary",
+      resource: event,
+      conferenceDataVersion: 1, // Enable conference data
+    });
+
+    // Save the event ID in your database for later use
+    appointment.googleEventId = calendarEvent.data.id;
+    //await appointment.save();
+    console.log("Google Meet link created:", calendarEvent.data.hangoutLink); // This is the link to the Google Meet meeting
+
+    return calendarEvent.data;
+  } catch (error) {
+    console.error("Failed to add event to Google Calendar:", error);
+    throw new Error("Could not add event to Google Calendar.");
+  }
+};
+
+//zoom function
+const addAppointmentToCalendar = async (doctorId, appointment) => {
+  try {
+    // Step 1: Fetch doctor information and check for necessary tokens
+    const doctor = await Doctor.findById(doctorId);
+    if (!doctor) throw new Error("Doctor not found");
+    
+    if (!doctor.zoomAccessToken || !doctor.googleAccessToken || !doctor.googleRefreshToken) {
+      throw new Error("Doctor is missing required OAuth tokens for Zoom or Google");
+    }
+
+    // Step 2: Create a Zoom meeting
+    const meetingDetails = {
+      topic: `Appointment with ${appointment.patientName}`,
+      type: 2, // Scheduled meeting
+      start_time: `${appointment.appointmentDate}T${appointment.timeSlot}:00`,
+      duration: 60, // Set duration in minutes
+      timezone: "Asia/Kolkata",
+      settings: {
+        join_before_host: true,
+        waiting_room: false,
+      },
+    };
+
+    const zoomResponse = await axios.post("https://api.zoom.us/v2/users/me/meetings", meetingDetails, {
+      headers: {
+        Authorization: `Bearer ${doctor.zoomAccessToken}`,
+      },
+    });
+
+    const zoomLink = zoomResponse.data.join_url;
+
+    // Step 3: Set up Google Calendar API with doctor’s tokens
+    oauth2Client.setCredentials({
+      access_token: doctor.googleAccessToken,
+      refresh_token: doctor.googleRefreshToken,
+    });
+
+    const calendar = google.calendar({ version: "v3", auth: oauth2Client });
+
+    // Step 4: Prepare Google Calendar event with Zoom link in description
+    const event = {
+      summary: `Appointment with ${appointment.patientName}`,
+      description: `Consultation for ${appointment.reason}\nZoom Link: ${zoomLink}`, // Embed Zoom link
+      start: {
+        dateTime: `${appointment.appointmentDate}T${appointment.timeSlot}:00`,
+        timeZone: "Asia/Kolkata",
+      },
+      end: {
+        dateTime: `${appointment.appointmentDate}T${
+          String(parseInt(appointment.timeSlot.split(":")[0]) + 1).padStart(2, "0")
+        }:00:00`,
+        timeZone: "Asia/Kolkata",
+      },
+      attendees: [{ email: appointment.patientEmail }],
+      // conferenceData: {
+      //   createRequest: {
+      //     requestId: `appointment-${appointment._id}`,
+      //     conferenceSolutionKey: { type: "hangoutsMeet" },
+      //   },
+      // },
+    };
+
+    // Step 5: Insert event into Google Calendar
+    const calendarEvent = await calendar.events.insert({
+      calendarId: "primary",
+      resource: event,
+      conferenceDataVersion: 1, // Enable Meet link creation
+    });
+    console.log("Zoom link embedded in Google Calendar event description:", zoomLink);
+
+    return {
+      //googleMeetLink: calendarEvent.data.hangoutLink,
+      googleEventId: calendarEvent.data.id,
+      zoomLink,
+    };
+  } catch (error) {
+    console.error("Failed to add appointment to calendar:", error.message);
+    throw new Error("Could not add appointment to calendar.");
+  }
+};
+
 // Book appointment
 exports.bookAppointment = asyncHandler(async (req, res) => {
   const phone = req.user.phone;
-  const { appointmentDate, timeSlot, familyMemberId } = req.body; // Use familyMemberId
+  const { appointmentDate, timeSlot} = req.body; // Use familyMemberId
   const doctorId = "6702d510df4e82e6d85b1d48";
   let patient;
 
@@ -248,20 +410,20 @@ exports.bookAppointment = asyncHandler(async (req, res) => {
   if (!user) return res.status(404).json({ message: "Patient not found" });
   patient = user;
 
-  if (familyMemberId) {
-    const familyMember = user.familyMembers.find(
-      (member) => member.memberId.toString() === familyMemberId
-    );
-    if (!familyMember || familyMember.IndividulAccess) {
-      return res.status(400).json({
-        message: "Cannot book appointment for this family member.",
-      });
-    }
-    patient = await Patient.findOne({ _id: familyMember.memberId });
-    console.log(patient);
-  } else {
-    patient = user;
-  }
+  // if (familyMemberId) {
+  //   const familyMember = user.familyMembers.find(
+  //     (member) => member.memberId.toString() === familyMemberId
+  //   );
+  //   if (!familyMember || familyMember.IndividulAccess) {
+  //     return res.status(400).json({
+  //       message: "Cannot book appointment for this family member.",
+  //     });
+  //   }
+  //   patient = await Patient.findOne({ _id: familyMember.memberId });
+  //   console.log(patient);
+  // } else {
+  //   patient = user;
+  // }
 
   // Find the doctor by ID
   const doctor = await Doctor.findById(doctorId);
@@ -389,14 +551,21 @@ exports.bookAppointment = asyncHandler(async (req, res) => {
     // sender.coupon = couponCode;
     // await sender.save();
     // console.log("Coupon:", sender.coupon);
-    referral.firstAppointmentDone = true;
-    referral.save();
-    //patient.coupon = "";
+    if (referral) {
+      referral.firstAppointmentDone = true;
+      await referral.save();
+    } else {
+      console.log(`No referral found with code ${couponCode} that hasn't been used.`);
+    }
   }
+    //patient.coupon = "";
+  
 
   //book appointment
   const newAppointment = new Appointment({
     patient: patient._id,
+    patientEmail: patient.email,
+    patientName: patient.name,
     doctor: doctor._id,
     appointmentDate,
     timeSlot,
@@ -410,12 +579,40 @@ exports.bookAppointment = asyncHandler(async (req, res) => {
     // If everything goes well, update the patient's follow-up status
     patient.follow = "Follow up-C"; // Update follow status
     await patient.save(); // Save the updated patient
+    const calendarType = doctor.videoPlatform;  // Assuming this field exists in the doctor's schema
+  
+    let calendarEvent;
+    if (calendarType === 'googleMeet') {
+      // If Google Meet is selected
+      calendarEvent = await addEventToGoogleCalendar(doctor, {
+        patient: patient._id,
+        patientName: patient.name,
+        patientEmail: patient.email,
+        appointmentDate,
+        timeSlot,
+      });
+    } else if (calendarType === 'zoom') {
+      // If Zoom is selected
+      calendarEvent = await addAppointmentToCalendar(doctor, {
+        patient: patient._id,
+        patientName: patient.name,
+        patientEmail: patient.email,
+        appointmentDate,
+        timeSlot,
+      });
+    } else {
+      return res.status(400).json({ message: "Invalid calendar type in doctor's preferences." });
+    }
 
+    
+   //scheduleMeetingActivation(appointments);
     // Return success response with applied coupon info
     res.status(201).json({
       message: "Appointment booked successfully",
+      calendarEvent, 
       appointment: newAppointment,
-      appliedCoupon: appliedCoupon ? appliedCoupon.code : null,
+      // zoomMeetingLink: zoomCalendarEvent.zoomLink,
+      // appliedCoupon: appliedCoupon ? appliedCoupon.code : null,
     });
   } catch (error) {
     // If an error occurs, revert coupon status

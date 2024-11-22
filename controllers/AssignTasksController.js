@@ -100,3 +100,34 @@ exports.resetAllocations = async (req, res) => {
     res.status(500).json({ message: 'Error resetting allocations', error: error.message });
   }
 };
+
+exports.getAllocationsWithDoctors = async (req, res) => {
+  try {
+    const allocations = await Allocation.aggregate([
+      {
+        $lookup: {
+          from: 'doctors',
+          localField: 'doctorId',
+          foreignField: '_id',
+          as: 'doctor'
+        }
+      },
+      {
+        $unwind: '$doctor'
+      },
+      {
+        $project: {
+          followUpType: 1,
+          role: 1,
+          'doctor.name': 1,
+          'doctor._id': 1
+        }
+      }
+    ]);
+
+    res.status(200).json(allocations);
+  } catch (error) {
+    console.error('Error fetching allocations:', error);
+    res.status(500).json({ message: 'Error fetching allocations', error: error.message });
+  }
+};

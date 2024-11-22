@@ -11,14 +11,24 @@ const doctorSchema = new mongoose.Schema({
   bio: { type: String },
   role: {
     type: String,
-    enum: ["admin-doctor", "assistant-doctor", "Executive"], // Enum for the role field
-    default: "assistant-doctor", // Default value if no role is provided
+    enum: ["admin-doctor", "assistant-doctor", "Executive"],
+    default: "assistant-doctor",
     required: true,
   },
   follow: {
-    type: String,  // String to store follow-up types as a comma-separated list
-    default: ""    // Default to an empty string
-  }
+    type: String,
+    default: ""
+  },
+  videoPlatform: {
+    type: String, 
+    enum: ['googleMeet', 'zoom'],
+    default: 'googleMeet',
+  },
+  googleAccessToken: { type: String },  // Field for Google access token
+  googleRefreshToken: { type: String }, // Field for Google refresh token
+  zoomAccessToken: { type: String },    // Field for Zoom access token
+  zoomRefreshToken: { type: String },   // Field for Zoom refresh token
+  zoomTokenExpiration: { type: Date },
 });
 
 module.exports = mongoose.model("Doctor", doctorSchema);

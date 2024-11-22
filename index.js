@@ -1,4 +1,9 @@
 const express = require("express");
+const fs = require("fs");
+const https = require("https");
+const axios = require("axios");
+const jwt = require("jsonwebtoken");
+const dotenv = require("dotenv");
 const mongoose = require("mongoose");
 const cors = require("cors");
 const { createServer } = require("http");
@@ -15,9 +20,16 @@ const assignTasks = require("./routes/AssignTasksRoute");
 const callLog = require("./routes/CallLogRoutes");
 const formRoutes = require("./routes/formRoute");
 const postRoute = require("./routes/postRoutes");
+const leaveRoutes = require('./routes/leaveRoutes');
 const { initSocket } = require("./controllers/socketController");
+const employeeRoutes = require('./routes/employeeRoutes');
+const workHoursRoutes = require('./routes/workHoursRoute.js');
+const salaryRoutes = require("./routes/payrollRoutes.js");
+const salaryStructure = require("./routes/SalaryStructureRoutes.js")
 
 dbConnection();
+
+dotenv.config();
 
 const app = express();
 const server = createServer(app);
@@ -26,6 +38,14 @@ initSocket(server);
 
 app.use(express.json());
 app.use(cors());
+
+const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID;
+const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET;
+const GOOGLE_REDIRECT_URI = process.env.GOOGLE_REDIRECT_URI;
+
+const ZOOM_CLIENT_ID = process.env.ZOOM_CLIENT_ID;
+const ZOOM_CLIENT_SECRET = process.env.ZOOM_CLIENT_SECRET;
+const ZOOM_REDIRECT_URI = process.env.ZOOM_REDIRECT_URI;
 
 // Routes
 app.use("/api/otp", otpRoute);
@@ -37,6 +57,85 @@ app.use("/api/forms", formRoutes);
 app.use("/api/assign", assignTasks);
 const chatRoutes = require("./routes/chatRoutes");
 app.use("/api", chatRoutes);
+app.use("/api/leaves", leaveRoutes);
+app.use('/api/employees', employeeRoutes);
+app.use('/api/work-hours', workHoursRoutes);
+app.use("/api/payslip", salaryRoutes);
+app.use("/api", salaryStructure);
+
+
+const options = {
+  key: fs.readFileSync('server.key'),
+  cert: fs.readFileSync('server.crt')
+};
+
+app.get("/google/authorize", (req, res) => {
+  const url = `https://accounts.google.com/o/oauth2/v2/auth?scope=https://www.googleapis.com/auth/calendar&access_type=offline&response_type=code&redirect_uri=${GOOGLE_REDIRECT_URI}&client_id=${GOOGLE_CLIENT_ID}`;
+  res.redirect(url);
+});
+
+app.get("/google/callback", async (req, res) => {
+  const code = req.query.code;
+
+  try {
+    const response = await axios.post("https://oauth2.googleapis.com/token", {
+      code,
+      client_id: GOOGLE_CLIENT_ID,
+      client_secret: GOOGLE_CLIENT_SECRET,
+      redirect_uri: GOOGLE_REDIRECT_URI,
+      grant_type: "authorization_code",
+    });
+
+    const { access_token, refresh_token } = response.data;
+
+    // Save tokens securely in your DB (for simplicity, just logging here)
+    console.log("Google Access Token:", access_token);
+    console.log("Google Refresh Token:", refresh_token);
+
+    // Return success or continue with the flow
+    res.send("Google OAuth Flow Completed Successfully!");
+  } catch (error) {
+    console.error("Google OAuth Error:", error);
+    res.status(500).send("Error in Google OAuth flow");
+  }
+});
+
+app.get("/zoom/authorize", (req, res) => {
+  const url = `https://zoom.us/oauth/authorize?response_type=code&client_id=${ZOOM_CLIENT_ID}&redirect_uri=${ZOOM_REDIRECT_URI}`;
+  res.redirect(url);
+});
+
+// Step 2: Exchange Zoom Authorization Code for Tokens
+app.get("/zoom/callback", async (req, res) => {
+  const code = req.query.code;
+
+  try {
+    const response = await axios.post("https://zoom.us/oauth/token", null, {
+      params: {
+        code,
+        client_id: ZOOM_CLIENT_ID,
+        client_secret: ZOOM_CLIENT_SECRET,
+        redirect_uri: ZOOM_REDIRECT_URI,
+        grant_type: "authorization_code",
+      },
+      headers: {
+        Authorization: `Basic ${Buffer.from(`${ZOOM_CLIENT_ID}:${ZOOM_CLIENT_SECRET}`).toString("base64")}`,
+      },
+    });
+
+    const { access_token, refresh_token } = response.data;
+
+    // Save tokens securely in your DB (for simplicity, just logging here)
+    console.log("Zoom Access Token:", access_token);
+    console.log("Zoom Refresh Token:", refresh_token);
+
+    // Return success or continue with the flow
+    res.send("Zoom OAuth Flow Completed Successfully!");
+  } catch (error) {
+    console.error("Zoom OAuth Error:", error);
+    res.status(500).send("Error in Zoom OAuth flow");
+  }
+});
 
 mongoose
   .connect(process.env.MONGODB_LOCAL_URI)
@@ -129,8 +228,11 @@ app.post("/make-call", (req, res) => {
     .then((call) => res.status(200).send(call.sid))
     .catch((error) => res.status(500).send(error));
 });
+// https.createServer(options, app).listen(5000, () => {
+//   console.log('Server is running on https://localhost:5000');
+// });
 
 const PORT = process.env.PORT || 8000;
-server.listen(PORT, () => {
+app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
 });
