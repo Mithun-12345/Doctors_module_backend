@@ -285,3 +285,56 @@ exports.getDoctorById = async (req, res) => {
     res.status(500).json({ message: err.message });
   }
 };
+
+exports.getSettings = async (req, res) => {
+  try {
+    const doctor = await Doctor.findById(req.doctorId);
+    res.json({ videoPlatform: doctor.videoPlatform || "" });
+  } catch (error) {
+    console.error("Error fetching settings:", error);
+    res.status(500).json({ error: "Unable to fetch settings" });
+  }
+};
+
+// exports.updateSettings = async (req, res) => {
+//   try {
+//     const { videoPlatform } = req.body;
+//     const doctor = await Doctor.findByIdAndUpdate(
+//       req.doctorId,
+//       { videoPlatform },
+//       { new: true }
+//     );
+//     res.json({ message: "Settings updated successfully", videoPlatform: doctor.videoPlatform });
+//   } catch (error) {
+//     console.error("Error updating settings:", error);
+//     res.status(500).json({ error: "Failed to update settings" });
+//   }
+// };
+
+exports.updateSettings = async (req, res) => {
+  try {
+    const { videoPlatform } = req.body;
+    
+    if (!videoPlatform) {
+      return res.status(400).json({ error: "Video platform is required" });
+    }
+    
+    console.log("Doctor ID from request:", req.doctorId);
+
+    // Use req.doctorId, which was added by the middleware, to update the doctor’s settings
+    const doctor = await Doctor.findByIdAndUpdate(
+      req.doctorId,  // Use the doctorId from the request
+      { videoPlatform },
+      { new: true }
+    );
+
+    if (!doctor) {
+      return res.status(404).json({ error: "Doctor not found" });
+    }
+    console.log("Platform:",doctor.videoPlatform);
+    res.json({ message: "Settings updated successfully", videoPlatform: doctor.videoPlatform });
+  } catch (error) {
+    console.error("Error updating settings:", error);
+    res.status(500).json({ error: "Failed to update settings" });
+  }
+};

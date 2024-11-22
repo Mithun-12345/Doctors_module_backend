@@ -208,9 +208,9 @@ exports.login = async (req, res) => {
       user = await Admin.findOne({ phone: phoneNumber });
     } else if (role === 'admin-doctor') {
       user = await Doctor.findOne({ phone: phoneNumber });
-    } else if(role === 'assistant-doctor'){
+    } else {
       user = await Doctor.findOne({ phone: phoneNumber });
-    }
+    } 
 
     console.log(`User Found: ${user}`);
 
