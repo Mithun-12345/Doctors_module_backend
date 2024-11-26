@@ -1,52 +1,18 @@
 const mongoose = require("mongoose");
 
 const commentSchema = new mongoose.Schema({
-  text: {
-    type: String,
-    required: true,
-  },
-  createdAt: {
-    type: Date,
-    default: Date.now,
-  },
+    text: {
+        type: String,
+        required: true,
+    },
+    createdAt: {
+        type: Date,
+        default: Date.now,
+    },
 });
 
-const appointmentSchema = new mongoose.Schema(
-  {
-    doctor: {
-      type: mongoose.Types.ObjectId,
-      ref: "Doctor",
-      required: false,
-    },
-    patient: {
-      type: mongoose.Types.ObjectId,
-      ref: "Patient",
-      required: false,
-    },
-    price: { type: String, required: false },
-    appointmentDate: {
-      type: Date,
-      required: true,
-    },
-    timeSlot: {
-      type: String,
-      required: true,
-    },
-    status: {
-      type: String,
-      enum: ["pending", "finished", "cancelled", "redirected"],
-      default: "pending",
-    },
-    payment: {
-      required: false,
-      type: Number,
-    },
-    isChronic: {
-      type: Boolean,
-      default: false,
-    },
-
-    // including from patient model !!!!
+const patientDetailsSchema = new mongoose.Schema({
+    patientId: { type: mongoose.Schema.Types.ObjectId, ref: "Patient", required: true },
     consultingFor: {
       type: String,
       required: false,
@@ -70,6 +36,23 @@ const appointmentSchema = new mongoose.Schema(
         default: null,
         required: false,
       },
+    },
+    messageSent: {
+      // no need in frontend set default as No
+      status: {
+        type: Boolean,
+        default: false,
+      },
+      timeStamp: {
+        type: Date,
+        default: null,
+      },
+    },
+    enquiryStatus: {
+      //no need in frontend
+      type: String,
+      enum: ["Interested", "Not Interested", "Not Enquired"],
+      default: "Not Enquired",
     },
     follow: {
       // no need in frontend set default as PCall
@@ -100,9 +83,7 @@ const appointmentSchema = new mongoose.Schema(
     symptomNotKnown: {
       //no need in frontend
       type: String,
-    }
-  },
-  { timestamps: true }
-);
+    },
+});
 
-module.exports = mongoose.model("Appointment", appointmentSchema);
+module.exports = mongoose.model("PatientDetails", patientDetailsSchema);

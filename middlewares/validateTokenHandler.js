@@ -22,7 +22,7 @@ const validateToken = asyncHandler(async (req, res, next) => {
 
       // Check if decoded has a phone property directly
       let user;
-      console.log("Decoded phone:", decoded.user.phone);
+      // console.log("Decoded phone:", decoded.user.phone);
       if (decoded.phone) {
         user = await Patient.findOne({ phone: decoded.phone });
         console.log("Patient found");
@@ -64,4 +64,4 @@ const validateToken = asyncHandler(async (req, res, next) => {
   }
 });
 
-module.exports = validateToken;
+module.exports = validateToken;

@@ -1,5 +1,5 @@
 const Patient = require('../models/patientModel');
-
+const MedicalDetails = require('../models/patientDetails');
 exports.createPatient = async (req, res) => {
   console.log("Endpoint reached");
   console.log(req.body);
@@ -24,7 +24,7 @@ exports.createPatient = async (req, res) => {
       name: '',
       edit: false
     };
-
+    
     // If diseaseType is provided and is an object
     if (diseaseType && typeof diseaseType === 'object') {
       processedDiseaseType = {
@@ -32,23 +32,18 @@ exports.createPatient = async (req, res) => {
         edit: diseaseType.edit || false
       };
     }
-
-    const newPatient = new Patient({
-      consultingFor,
+    
+    const basicDetails = new Patient({
       name,
       age,
       phone,
       whatsappNumber,
       email,
       gender,
-      diseaseName,
-      diseaseType: processedDiseaseType,
-      currentLocation,
       patientEntry,
-      symptomNotKnown
-    });
-
-    // Find if the phone number is already registered
+      currentLocation
+    })
+        
     const existingPatient = await Patient.findOne({ phone });
     if (existingPatient) {
       return res.status(400).json({ 
@@ -57,10 +52,30 @@ exports.createPatient = async (req, res) => {
       });
     }
 
-    const savedPatient = await newPatient.save();
+    const saveBasic = await basicDetails.save();
+
+    const medicalDetails = new MedicalDetails({
+      patientId: saveBasic._id,
+      consultingFor,
+      // name,
+      // age,
+      // phone,
+      // whatsappNumber,
+      // email,
+      // gender,
+      diseaseName,
+      diseaseType: processedDiseaseType,
+      // currentLocation,
+      // patientEntry,
+      symptomNotKnown
+    });
+    
+    // Find if the phone number is already registered
+
+    const saveMedical = await medicalDetails.save();
     res.json({
       success: true,
-      patientId: savedPatient._id,
+      // patientId: saveBasic._id,
       message: 'Patient created successfully'
     });
   } catch (error) {
