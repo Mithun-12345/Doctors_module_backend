@@ -1,5 +1,7 @@
 const express = require("express");
+const helmet = require("helmet");
 const fs = require("fs");
+const path=require("path");
 const https = require("https");
 const axios = require("axios");
 const jwt = require("jsonwebtoken");
@@ -17,6 +19,7 @@ const patientRoute = require("./routes/patientRoutes");
 const doctorRoute = require("./routes/doctorRoutes");
 const validateToken = require("./middlewares/validateTokenHandler");
 const assignTasks = require("./routes/AssignTasksRoute");
+const chatRoutes = require("./routes/chatRoutes");
 const callLog = require("./routes/CallLogRoutes");
 const formRoutes = require("./routes/formRoute");
 const postRoute = require("./routes/postRoutes");
@@ -25,7 +28,9 @@ const { initSocket } = require("./controllers/socketController");
 const employeeRoutes = require('./routes/employeeRoutes');
 const workHoursRoutes = require('./routes/workHoursRoute.js');
 const salaryRoutes = require("./routes/payrollRoutes.js");
-const salaryStructure = require("./routes/SalaryStructureRoutes.js")
+const salaryStructure = require("./routes/SalaryStructureRoutes.js");
+const shiftRoutes = require("./routes/shiftRoutes.js");
+const attendance = require("./routes/attendanceRoute.js");
 
 dbConnection();
 
@@ -55,19 +60,62 @@ app.use("/api/post", postRoute);
 app.use("/api/log", callLog);
 app.use("/api/forms", formRoutes);
 app.use("/api/assign", assignTasks);
-const chatRoutes = require("./routes/chatRoutes");
 app.use("/api", chatRoutes);
 app.use("/api/leaves", leaveRoutes);
 app.use('/api/employees', employeeRoutes);
 app.use('/api/work-hours', workHoursRoutes);
 app.use("/api/payslip", salaryRoutes);
-app.use("/api", salaryStructure);
-
-
+app.use("/api/salary", salaryStructure);
+app.use("/api/shift", shiftRoutes);
+app.use("/api/attendance",attendance);
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 const options = {
   key: fs.readFileSync('server.key'),
   cert: fs.readFileSync('server.crt')
 };
+
+// Middleware: Set Content Security Policy for security
+app.use(
+  helmet.contentSecurityPolicy({
+    directives: {
+      defaultSrc: ["'self'"],
+      scriptSrc: ["'self'", "https://apis.google.com", "https://www.gstatic.com", "'unsafe-inline'",],
+      frameSrc: ["'self'", "https://accounts.google.com", "https://calendar.google.com"],
+      connectSrc: ["'self'", "https://www.googleapis.com"],
+    },
+  })
+);
+app.use((req, res, next) => {
+  res.setHeader("Cross-Origin-Embedder-Policy", "require-corp");
+  res.setHeader("Cross-Origin-Opener-Policy", "same-origin");
+  next();
+});
+app.use((req, res, next) => {
+  res.removeHeader("Cross-Origin-Embedder-Policy");
+  res.removeHeader("Cross-Origin-Opener-Policy");
+  next();
+});
+
+let currentId = 0; // To simulate incremental IDs
+// Generate a custom Employee ID
+app.get("http://localhost:5000/api/generate-employee-id", (req, res) => {
+  currentId += 1;
+  const customId = `EMP-${String(currentId).padStart(5, "0")}`;
+  res.json({ success: true, employeeID: customId });
+});
+
+// Example API route
+app.get("/api/example", (req, res) => {
+  res.json({ message: "Hello from the API!" });
+});
+
+// Serve static files from the React app
+app.use(express.static(path.join(__dirname, "client/build")));
+
+// Handle all other requests by serving React's index.html
+app.get("*", (req, res) => {
+  res.sendFile(path.join(__dirname, "client/build", "index.html"));
+});
 
 app.get("/google/authorize", (req, res) => {
   const url = `https://accounts.google.com/o/oauth2/v2/auth?scope=https://www.googleapis.com/auth/calendar&access_type=offline&response_type=code&redirect_uri=${GOOGLE_REDIRECT_URI}&client_id=${GOOGLE_CLIENT_ID}`;

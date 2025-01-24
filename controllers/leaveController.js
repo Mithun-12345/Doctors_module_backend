@@ -2,6 +2,7 @@
 const Leave = require('../models/Leave');
 const Doctor = require('../models/doctorModel');
 const LeaveSettings = require('../models/leaveSettingsModel.js');
+const Leaveset=require('../models/LeavesetModel.js');
 
 // Assistant doctor requests leave
 exports.requestLeave = async (req, res) => {
@@ -80,7 +81,7 @@ exports.rejectLeave = async (req, res) => {
 exports.setLeaveSettings = async (req, res) => {
   try {
     const { sickLeave, casualLeave, paidLeave, maternityLeave } = req.body;
-    const doctorId = req.user.id; // Assuming `req.user` contains the authenticated admin-doctor
+    const doctorId = req.user.id; // Assuming req.user contains the authenticated admin-doctor
 
     // Validate if the user is an admin-doctor
     const adminDoctor = await Doctor.findById(doctorId);
@@ -147,7 +148,7 @@ exports.getLeaveBalance = async (req, res) => {
     // Fetch leaves taken by the assistant doctor
     const leavesTaken = await Leave.find({ doctor: doctorId, status: 'approved' });
 
-    // Calculate total days taken for each leave type using the `totalDays` field
+    // Calculate total days taken for each leave type using the totalDays field
     const totalSickLeaveDays = leavesTaken
       .filter((leave) => leave.leaveType === 'Sick Leave')
       .reduce((total, leave) => total + leave.totalDays, 0);
@@ -176,10 +177,57 @@ exports.getLeaveBalance = async (req, res) => {
     res.status(200).json(balance);
   } catch (error) {
     console.error('Error fetching leave balance:', error);
-    res.status(500).json({ error: 'Failed to fetch leave balance' });
+    res.status(500).json({ error: 'Failed to fetch leave balance' });
+  }
+};
+
+exports.addLeave = async (req, res) => {
+  try {
+    // Destructure the request body to get leave details
+    const { name, fromDate, toDate, description } = req.body;
+
+    // Validate input fields to ensure no missing fields
+    if (!name || !fromDate || !toDate || !description) {
+      return res.status(400).json({ message: 'All fields are required.' });
+    }
+
+    // Create a new leave entry with the provided details
+    const leaveEntry = new Leaveset({
+      name,
+      fromDate,
+      toDate,
+      description,
+    });
+
+    // Save the leave entry to the database
+    await leaveEntry.save();
+
+    // Return a success response with the leave details
+    res.status(201).json({
+      message: 'Leave details saved successfully.',
+      leave: leaveEntry,
+    });
+  } catch (error) {
+    console.error('Error saving leave details:', error);
+    res.status(500).json({ message: 'An error occurred while saving leave details.' });
   }
 };
 
+exports.getLeaves = async (req, res) => {
+  try {
+    // Retrieve all leave details from the database
+    const leaves = await Leaveset.find();
+    
 
+    // If no leave data is found, send a 404 response
+    if (!leaves || leaves.length === 0) {
+      return res.status(404).json({ message: "No leave data found" });
+    }
 
-
+    // Send a response with the leave data
+    res.status(200).json(leaves);
+  } catch (error) {
+    console.error("Error fetching leaves:", error);
+    res.status(500).json({ message: "Server error. Could not fetch leaves." });
+  }
+};

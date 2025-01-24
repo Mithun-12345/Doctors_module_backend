@@ -10,7 +10,6 @@ const validateToken = asyncHandler(async (req, res, next) => {
   
   if (authHeader && authHeader.startsWith("Bearer")) {
     token = authHeader.split(" ")[1];
-    console.log("\n");
     console.log("Token:", token);
     if (!token) {
       return res.status(401).json({ success: false, error: "User is not authorized or token is missing" });
@@ -25,7 +24,7 @@ const validateToken = asyncHandler(async (req, res, next) => {
       // console.log("Decoded phone:", decoded.user.phone);
       if (decoded.phone) {
         user = await Patient.findOne({ phone: decoded.phone });
-        console.log("Patient found");
+        console.log("Patient found:", user);
       } else if (decoded.user && decoded.user.phone) {
         user = await Patient.findOne({ phone: decoded.user.phone });
         console.log("Patient found:", user);
@@ -35,13 +34,13 @@ const validateToken = asyncHandler(async (req, res, next) => {
 
       // If not a patient, check for doctor
       if (!user) {
-        user = await Doctor.findOne({ phone: decoded.user.phone });
+        user = await Doctor.findOne({ phone: decoded.phone });
         console.log("Doctor found:", user);
       }
 
       // If still not found, check for admin
       if (!user) {
-        user = await Admin.findOne({ phone: decoded.user.phone });
+        user = await Admin.findOne({ phone: decoded.phone });
         console.log("Admin found:", user);
       }
 
