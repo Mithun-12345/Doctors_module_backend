@@ -1,24 +1,31 @@
 const mongoose = require("mongoose");
 
-const salaryStructureSchema = new mongoose.Schema({
-  employeeId: { type: String, required: true },
-  baseSalary: { type: Number, required: true },
-  allowances: {
-    transportAllowance: { type: Number, default: 0 },
-    houseRentAllowance: { type: Number, default: 0 },
-  },
-  totalAllowances: { type: Number, required: true },
-  deductions: {
-    providentFund: { type: Number, default: 0 },
-    gratuity: { type: Number, default: 0 },
-    professionalTax: { type: Number, default: 0 },
-  },
-  totalDeductions: { type: Number, required: true },
-  grossSalary: { type: Number, required: true },
-  netSalary: { type: Number, required: true },
-  
-  
+// Schema for Allowances
+const AllowanceSchema = new mongoose.Schema({
+  name: { type: String, required: true }, // Name of the allowance (e.g., House Rent Allowance)
+  value: { type: Number, required: true }, // Value in ₹
 });
 
-module.exports = mongoose.model("SalaryStructure", salaryStructureSchema);
-  
+// Schema for Deductions
+const DeductionSchema = new mongoose.Schema({
+  name: { type: String, required: true }, // Name of the deduction (e.g., Tax)
+  value: { type: Number, required: true }, // Percentage (e.g., 10 for 10%)
+});
+
+// Main Salary Structure Schema
+const SalaryStructureSchema = new mongoose.Schema({
+  employeeID: { type: String, required: true }, // Employee ID
+  name: { type: String, required: true },
+  baseSalary: { type: Number, required: true }, // Base salary in ₹
+  allowances: [AllowanceSchema], // Array of allowances
+  deductions: [DeductionSchema], // Array of deductions
+  grossSalary: { type: Number, required: true }, // Gross salary in ₹
+  netSalary: { type: Number, required: true }, // Net salary in ₹
+  totalAllowances: { type: Number, required: true }, // Total allowances in ₹
+  totalDeductions: { type: Number, required: true }, // Total deductions in ₹
+});
+
+// Model creation
+const SalaryStructure = mongoose.model("SalaryStructure", SalaryStructureSchema);
+
+module.exports = SalaryStructure;
