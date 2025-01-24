@@ -1,6 +1,7 @@
 const asyncHandler = require("express-async-handler");
 const axios = require('axios');
 const Patient = require("../models/patientModel");
+const PatientDetails = require("../models/patientDetails");
 const ChronicPatient = require("../models/chronicModel");
 const FamilyLink = require("../models/FamilyLink");
 const Appointment = require("../models/appointmentModel");
@@ -131,9 +132,12 @@ exports.patientDetails = asyncHandler(async (req, res) => {
     return res.status(404).json({ message: "Patient not found" });
   }
 
+  const patientDetails = await PatientDetails.findOne({ patientId: patient._id });
+  console.log(patientDetails)
+  console.log(" Disease name:  " + patientDetails.diseaseType.name);
   let chronicPatient = false;
 
-  if (patient.diseaseType.name.toLowerCase() === "chronic") {
+  if (patientDetails.diseaseType.name.toLowerCase() === "chronic") {
     const chronicPatientRecord = await ChronicPatient.findOne({ phone });
     if (chronicPatientRecord) {
       chronicPatient = true;

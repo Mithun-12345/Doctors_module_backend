@@ -100,6 +100,10 @@ const appointmentSchema = new mongoose.Schema(
     symptomNotKnown: {
       //no need in frontend
       type: String,
+    },
+    status:{
+      type: String,
+      default: "pending"
     }
   },
   { timestamps: true }

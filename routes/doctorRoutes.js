@@ -11,7 +11,9 @@ const {
   getDoctorFollow,
   getDoctorById,
   getSettings,
-  updateSettings
+  updateSettings,
+  getAllAppointments,
+  getAllAppointmentsWithPatientData
 } = require("../controllers/doctorController");
 
 const { googleAuth, googleCallback } = require("../controllers/googleController");
@@ -48,6 +50,7 @@ router.get('/getDoctorFollow', validateToken, getDoctorFollow);
 router.get('/byId/:id',validateToken, getDoctorById);
 router.get('/getsettings',  validateToken,getSettings);
 router.put('/updatesettings',  validateToken,updateSettings);
-
+router.get('/getAllAppointments', validateToken, getAllAppointments);
+router.get('/getAllAppointmentsWithPatientData', getAllAppointmentsWithPatientData);
 
 module.exports = router;

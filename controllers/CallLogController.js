@@ -4,6 +4,7 @@ const Message = require('../models/messageModel');
 const Doctor = require('../models/doctorModel');
 const ChronicForm=require('../models/chronicModel');
 const FirstForm=require('../models/patientModel');
+const MedicalDetails = require('../models/patientDetails');
 
 const twilio = require('twilio');
 
@@ -49,7 +50,6 @@ exports.sendMessage = async (req, res) => {
   }
 };
 
-const MedicalDetails = require('../models/patientDetails');
 exports.sendFirstFormMessage = async (req, res) => {
   try {
     const { to, message, patientId } = req.body;
@@ -173,25 +173,34 @@ exports.incrementCallCount = async (req, res) => {
 };
 
 exports.updateEnquiryStatus = async (req, res) => {
-    const { patientId } = req.params;
-    const { enquiryStatus } = req.body;
-    console.log("End point reached......uodate");
-    console.log(enquiryStatus);
-    try {
-      const patient = await Patient.findById(patientId);
-  
-      if (!patient) {
-        return res.status(404).json({ message: 'Patient not found' });
-      }
-  
-      patient.enquiryStatus = enquiryStatus;
-      await patient.save();
-  
-      res.status(200).json({ message: 'Enquiry status updated successfully', patient });
-    } catch (error) {
-      console.error('Error updating enquiry status:', error);
-      res.status(500).json({ message: 'Internal Server Error' });
+  const { patientId } = req.params; // Extract patient ID from the request parameters
+  const { enquiryStatus } = req.body; // Extract the enquiry status from the request body
+
+  console.log("Endpoint reached for updating enquiry status...");
+  console.log("Received enquiryStatus:", enquiryStatus);
+
+  try {
+    // Find the patient details by patientId
+    const patientDetails = await MedicalDetails.findOne({ patientId });
+
+    if (!patientDetails) {
+      return res.status(404).json({ message: 'Patient details not found' });
     }
+
+    // Update the enquiryStatus field in the patientDetails collection
+    patientDetails.enquiryStatus = enquiryStatus;
+
+    // Save the updated document
+    await patientDetails.save();
+
+    res.status(200).json({
+      message: 'Enquiry status updated successfully',
+      patientDetails,
+    });
+  } catch (error) {
+    console.error('Error updating enquiry status:', error);
+    res.status(500).json({ message: 'Internal Server Error' });
+  }
 };
 
 const Admin = require('../models/Admin');

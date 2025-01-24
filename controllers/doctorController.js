@@ -1,6 +1,7 @@
 const mongoose = require("mongoose");
 const Doctor = require("../models/doctorModel");
 const Appointment = require("../models/appointmentModel.js");
+const Patient = require("../models/patientModel.js")
 const moment = require("moment");
 
 exports.addDoctor = async (req, res) => {
@@ -234,6 +235,7 @@ exports.doctorDetails = async (req, res) => {
         phone: doctor.phone,
         specialization: doctor.specialization,
         experience: doctor.experience,
+        role: doctor.role
         // Add any other relevant fields
       },
     });
@@ -336,5 +338,121 @@ exports.updateSettings = async (req, res) => {
   } catch (error) {
     console.error("Error updating settings:", error);
     res.status(500).json({ error: "Failed to update settings" });
+  }
+};
+
+exports.getAllAppointments = async (req, res) => {
+  try {
+    // Fetch all appointments and populate patient details
+    const appointments = await Appointment.find()
+      .populate("patient", {
+        name: 1,
+        age: 1,
+        newExisting: 1,
+        phone: 1,
+        whatsappNumber: 1,
+        email: 1,
+        gender: 1,
+        medicalRecords: 1,
+        patientEntry: 1,
+        currentLocation: 1,
+        appointmentFixed: 1,
+        appDownload: 1,
+        follow: 1,
+        followComment: 1,
+        followUpTimestamp: 1,
+        familyMembers: 1,
+        createdAt: 1,
+        updatedAt: 1
+      })
+      .lean(); // Fetch as plain objects for easier formatting
+
+    // Transform data into the desired format
+    const formattedData = appointments.map((appointment) => {
+      const patientDetails = appointment.patient || {};
+      return {
+        ...patientDetails,
+        medicalDetails: {
+          _id: appointment._id,
+          patientId: appointment.patient?._id,
+          consultingFor: appointment.consultingFor,
+          diseaseName: appointment.diseaseName,
+          diseaseType: appointment.diseaseType,
+          follow: appointment.follow,
+          followComment: appointment.followComment,
+          followUpTimestamp: appointment.followUpTimestamp,
+          medicalPayment: appointment.medicalPayment,
+          callCount: appointment.callCount,
+          comments: appointment.comments,
+          __v: appointment.__v
+        }
+      };
+    });
+    console.log("data:", formattedData);
+    res.status(200).json(formattedData);
+  } catch (error) {
+    console.error("Error fetching appointments:", error);
+    res.status(500).json({ message: "Internal server error" });
+  }
+};
+
+// API endpoint to fetch patient and appointment data
+exports.getAllAppointmentsWithPatientData = async (req, res) => {
+  try {
+    // Fetch all unique patient IDs from the appointments
+    const appointments = await Appointment.find({});
+    const patientIds = [...new Set(appointments.map(appointment => appointment.patient.toString()))];
+
+    // Fetch patient data for the corresponding IDs
+    const patients = await Patient.find({ _id: { $in: patientIds } });
+
+    // Format response as required
+    const response = [];
+
+    patients.forEach(patient => {
+      const patientAppointments = appointments.filter(appointment => appointment.patient.toString() === patient._id.toString());
+
+      patientAppointments.forEach(appointment => {
+        response.push({
+          _id: patient._id,
+          name: patient.name,
+          age: patient.age,
+          newExisting: patient.newExisting,
+          phone: patient.phone,
+          whatsappNumber: patient.whatsappNumber,
+          email: patient.email,
+          gender: patient.gender,
+          medicalRecords: patient.medicalRecords,
+          patientEntry: patient.patientEntry,
+          currentLocation: patient.currentLocation,
+          appointmentFixed: patient.appointmentFixed,
+          appDownload: patient.appDownload,
+          follow: patient.follow,
+          followComment: patient.followComment,
+          followUpTimestamp: patient.followUpTimestamp,
+          familyMembers: patient.familyMembers,
+          createdAt: patient.createdAt,
+          updatedAt: patient.updatedAt,
+          medicalDetails: {
+            _id: appointment._id,
+            patientId: appointment.patient,
+            consultingFor: appointment.consultingFor,
+            diseaseName: appointment.diseaseName,
+            diseaseType: appointment.diseaseType,
+            follow: appointment.follow,
+            followComment: appointment.followComment,
+            followUpTimestamp: appointment.followUpTimestamp,
+            medicalPayment: appointment.medicalPayment,
+            callCount: appointment.callCount,
+            comments: appointment.comments,
+          },
+        });
+      });
+    });
+
+    res.status(200).json(response);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: "Internal server error" });
   }
 };

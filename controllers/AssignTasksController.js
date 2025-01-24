@@ -153,12 +153,21 @@ exports.getDoctorSpecialAllocations = async (req, res) => {
       } 
  
       // Transform the data to match the expected format 
-      const formattedAllocations = allocations.map(allocation => ({ 
+      // const formattedAllocations = allocations.map(allocation => ({ 
+      //     _id: allocation.patientId._id,
+      //     specialAllocationId: allocation._id, 
+      //     allocationCreatedAt: allocation.createdAt, 
+      //     ...allocation.patientId.toObject() 
+      // })); 
+
+      const formattedAllocations = allocations
+        .filter(allocation => allocation.patientId)
+        .map(allocation => ({ 
           _id: allocation.patientId._id,
           specialAllocationId: allocation._id, 
           allocationCreatedAt: allocation.createdAt, 
-          ...allocation.patientId.toObject() 
-      })); 
+          ...allocation.patientId.toObject(),
+        })); 
  
       res.status(200).json(formattedAllocations); 
   } catch (error) { 
