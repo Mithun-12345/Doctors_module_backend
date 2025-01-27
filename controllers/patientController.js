@@ -677,6 +677,44 @@ exports.addFamily = async (req, res) => {
         message: "First make an appointment to add a family member",
       });
     }
+
+    // //Freezing logic for adding a family member
+    // const alreadyAMember = await FamilyLink.findOne({ phone: myPhone });
+    // if (alreadyAMember) {
+    //   const addedBy = await Patient.findById({ _id: alreadyAMember.userId });
+    //   const gender = addedBy.gender;
+    //   if (
+    //     gender == "Male" &&
+    //     User.gender == "Male" &&
+    //     alreadyAMember.relationship == "Son" &&
+    //     relationship == "Father"
+    //   ) {
+    //     res.json({ message: "Relationship already exists!" });
+    //   } else if (
+    //     gender == "Female" &&
+    //     User.gender == "Male" &&
+    //     alreadyAMember.relationship == "Son" &&
+    //     relationship == "Mother"
+    //   ) {
+    //     res.json({ message: "Relationship already exists!" });
+    //   } else if (
+    //     gender == "Male" &&
+    //     User.gender == "Female" &&
+    //     alreadyAMember.relationship == "Daughter" &&
+    //     relationship == "Father"
+    //   ) {
+    //     res.json({ message: "Relationship already exists!" });
+    //   } else if (
+    //     gender == "Female" &&
+    //     User.gender == "Female" &&
+    //     alreadyAMember.relationship == "Daughter" &&
+    //     relationship == "Mother"
+    //   ) {
+    //     res.json({ message: "Relationship already exists!" });
+    //   }
+    //   //complete the code
+    // }
+
     if (
       !relationship ||
       ![
@@ -854,6 +892,10 @@ exports.getFamilyMembers = async (req, res) => {
       .status(500)
       .json({ success: false, message: "Failed to retrieve family members" });
   }
+};
+
+exports.profile = async (req, res) => {
+  //Select the user who's profile should be displayed
 };
 
 // // Update Appointment
