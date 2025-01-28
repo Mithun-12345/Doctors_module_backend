@@ -28,12 +28,21 @@ router.post("/bookAppointment", validateToken, bookAppointment);
 // router.get("/appointments", validateToken, getAppointmentsByDate);
 // router.get("/appointment/:id", validateToken, getAppointmentById);
 // router.delete("/appointment/:id", validateToken, cancelAppointment);
-router.get("/checkSlots", validateToken, checkAvailableSlots);
+router.post("/checkSlots", validateToken, checkAvailableSlots);
 router.get("/getUserAppointments", validateToken, getUserAppointments);
 router.put("/updateFollowUp/:patientId", updateFollowUpStatus);
 router.put("/updateFollowPatientCall/:patientId", updateFollowPatientCall);
 router.post("/referFriend", validateToken, referFriend);
 router.post("/addFamily", validateToken, addFamily);
 router.get("/getFamilyMembers", validateToken, getFamilyMembers);
+
+const familyMemberController = require('../controllers/patientController');
+router.get('/familyMembers', validateToken, familyMemberController.getFamily);
+router.get('/familyMembers/search', familyMemberController.searchFamilyMembers);
+router.get('/familyMembers/filter', familyMemberController.filterFamilyMembers);
+router.get('/familyMembers/:memberId', familyMemberController.getFamilyMemberDetails);
+router.put('/familyMembers/:memberId/access', familyMemberController.updateFamilyMemberAccess);
+router.post('/familyMembers', familyMemberController.addFamilyMember);
+router.delete('/familyMembers/:memberId', familyMemberController.removeFamilyMember);
 
 module.exports = router;

@@ -4,6 +4,7 @@ const Message = require('../models/messageModel');
 const Doctor = require('../models/doctorModel');
 const ChronicForm=require('../models/chronicModel');
 const FirstForm=require('../models/patientModel');
+const MedicalDetails = require('../models/patientDetails');
 
 const twilio = require('twilio');
 
@@ -12,41 +13,41 @@ const authToken = process.env.TWILIO_AUTH_TOKEN;
 const client = new twilio(accountSid, authToken);
 
 exports.sendMessage = async (req, res) => {
-    try {
-        console.log("Message sent");
-        const messageText = "This is the message text to the user."; // Define the message text here
-        const patientId = req.params.id; // Get the patient ID from the request parameters
-        const patient = await Patient.findById(patientId); // Find the patient by ID
-        console.log(patient.phone); // Use console.log instead of window.alert
+  try {
+    console.log("Sending message...");
 
-        if (!patient) {
-            return res.status(404).json({ message: 'Patient not found' });
-        }
+    const messageText = "This is the message text to the user."; // Define the message text
+    const patientId = req.params.id; // Extract the patient ID from the request parameters
+    const patient = await Patient.findById(patientId); // Find the patient by ID
+    // Find the patient details by patientId
+    const patientDetails = await MedicalDetails.findOne({ patientId });
 
-        await client.messages.create({
-            body: messageText,
-            to: patient.phone,
-            from: process.env.TWILIO_PHONE_NUMBER // Use the Twilio phone number from environment variables
-        });
-
-        // Update the patient's message status and timestamp
-        const updatedPatient = await Patient.findByIdAndUpdate(
-            patientId,
-            {
-                $set: {
-                    'messageSent.status': true,
-                    'messageSent.timeStamp': new Date() // Use new Date() for a proper timestamp
-                }
-            },
-            { new: true }
-        );
-
-        // Return the updated patient data
-        res.status(200).json(updatedPatient);
-    } catch (error) {
-        console.error('Error sending message:', error); // Log the error for debugging
-        res.status(500).json({ message: 'Error sending message', error: error.message }); // Return error message
+    if (!patientDetails) {
+      return res.status(404).json({ message: 'Patient details not found' });
     }
+
+    console.log(patientDetails.phone); // Log the phone number for debugging
+
+    // Send a message via Twilio
+    await client.messages.create({
+      body: messageText,
+      to: patient.phone,
+      from: process.env.TWILIO_PHONE_NUMBER, // Use Twilio phone number from environment variables
+    });
+
+    // Update the patient's messageSent status and timestamp in patientDetails
+    patientDetails.messageSent.status = true;
+    patientDetails.messageSent.timeStamp = new Date(); // Set the current timestamp
+
+    // Save the updated patientDetails
+    const updatedPatientDetails = await patientDetails.save();
+
+    // Return the updated patientDetails
+    res.status(200).json(updatedPatientDetails);
+  } catch (error) {
+    console.error('Error sending message:', error); // Log the error for debugging
+    res.status(500).json({ message: 'Error sending message', error: error.message }); // Return the error message
+  }
 };
 
 exports.sendFirstFormMessage = async (req, res) => {
@@ -61,7 +62,7 @@ exports.sendFirstFormMessage = async (req, res) => {
     });
 
     // Update patient's messageSent status and timestamp
-    const updatedPatient = await Patient.findByIdAndUpdate(
+    const updatedPatient = await MedicalDetails.findByIdAndUpdate(
       patientId,
       {
         $set: {
@@ -172,25 +173,34 @@ exports.incrementCallCount = async (req, res) => {
 };
 
 exports.updateEnquiryStatus = async (req, res) => {
-    const { patientId } = req.params;
-    const { enquiryStatus } = req.body;
-    console.log("End point reached......uodate");
-    console.log(enquiryStatus);
-    try {
-      const patient = await Patient.findById(patientId);
-  
-      if (!patient) {
-        return res.status(404).json({ message: 'Patient not found' });
-      }
-  
-      patient.enquiryStatus = enquiryStatus;
-      await patient.save();
-  
-      res.status(200).json({ message: 'Enquiry status updated successfully', patient });
-    } catch (error) {
-      console.error('Error updating enquiry status:', error);
-      res.status(500).json({ message: 'Internal Server Error' });
+  const { patientId } = req.params; // Extract patient ID from the request parameters
+  const { enquiryStatus } = req.body; // Extract the enquiry status from the request body
+
+  console.log("Endpoint reached for updating enquiry status...");
+  console.log("Received enquiryStatus:", enquiryStatus);
+
+  try {
+    // Find the patient details by patientId
+    const patientDetails = await MedicalDetails.findOne({ patientId });
+
+    if (!patientDetails) {
+      return res.status(404).json({ message: 'Patient details not found' });
     }
+
+    // Update the enquiryStatus field in the patientDetails collection
+    patientDetails.enquiryStatus = enquiryStatus;
+
+    // Save the updated document
+    await patientDetails.save();
+
+    res.status(200).json({
+      message: 'Enquiry status updated successfully',
+      patientDetails,
+    });
+  } catch (error) {
+    console.error('Error updating enquiry status:', error);
+    res.status(500).json({ message: 'Internal Server Error' });
+  }
 };
 
 const Admin = require('../models/Admin');
@@ -206,9 +216,11 @@ exports.login = async (req, res) => {
     // Find user based on role
     if (role === 'admin') {
       user = await Admin.findOne({ phone: phoneNumber });
-    } else if (role === 'doctor') {
+    } else if (role === 'admin-doctor') {
       user = await Doctor.findOne({ phone: phoneNumber });
-    }
+    } else {
+      user = await Doctor.findOne({ phone: phoneNumber });
+    } 
 
     console.log(`User Found: ${user}`);
 
@@ -285,45 +297,67 @@ try {
     }
 };
 
+const PatientDetails = require('../models/patientDetails');
+
 exports.listPatients = async (req, res) => {
-    try {
-      const patients = await Patient.find();
-      res.json(patients);
-    } catch (error) {
-      res.status(500).json({ message: error.message });
-    }
-  };
+  try {
+    // Fetch all patients and populate their medical details
+    const patients = await Patient.aggregate([
+      {
+        $lookup: {
+          from: "patientdetails", // Make sure this matches the collection name in MongoDB
+          localField: "_id",
+          foreignField: "patientId",
+          as: "medicalDetails",
+        },
+      },
+    ]);
+
+    const formattedPatients = patients.map(patient => ({
+      ...patient,
+      medicalDetails: patient.medicalDetails.length > 0 ? patient.medicalDetails[0] : null,
+    }));
+    console.log(formattedPatients);
+    res.json(formattedPatients);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
 
 const asyncHandler = require("express-async-handler");
 exports.updateDiseaseType = asyncHandler(async (req, res) => {
   const { patientId } = req.params; // Extract patient ID from request parameters
   const { diseaseType } = req.body; // Get the disease type from request body
-  const user = req.user;
+  const user = req.user; // Assuming `req.user` contains authenticated user data
+
   console.log("Received request body:", patientId, diseaseType, user);
+
   try {
-      // Find the patient by ID
-      const patient = await Patient.findById(patientId);
-      if (!patient) {
-          return res.status(404).json({ success: false, error: "Patient not found" });
-      }
+    // Find the patient's medical details by patientId
+    const patientDetails = await MedicalDetails.findOne({ patientId });
+    if (!patientDetails) {
+      return res.status(404).json({ success: false, error: "Patient details not found" });
+    }
 
-      // Update the disease type and editedBy fields
-      patient.diseaseType = diseaseType; // Update diseaseType
-      patient.diseaseType.editedby = user.phone; // Set the editor as the current user
+    // Update the diseaseType and editedby fields
+    patientDetails.diseaseType = {
+      ...patientDetails.diseaseType,
+      ...diseaseType, // Merge incoming diseaseType with existing data
+      editedby: user.phone, // Set editedby to the current user's phone
+    };
 
-      // Save the updated patient
-      const updatedPatient = await patient.save();
-
-      res.status(200).json({
-          success: true,
-          patient: updatedPatient,
-      });
+    // Save the updated patient details
+    const updatedPatientDetails = await patientDetails.save();
+    console.log("Updated patient details:", updatedPatientDetails);
+    res.status(200).json({
+      success: true,
+      medicalDetails: updatedPatientDetails,
+    });
   } catch (error) {
-      console.error("Error updating disease type:", error);
-      res.status(500).json({ success: false, error: "Server error" });
+    console.error("Error updating disease type:", error);
+    res.status(500).json({ success: false, error: "Server error" });
   }
 });
-  
 
   exports.patientProfile = async (req, res) => {
     try {
@@ -379,39 +413,43 @@ exports.updateDiseaseType = asyncHandler(async (req, res) => {
 
   exports.commentController = async (req, res) => {
     try {
-      const { patientId } = req.params;
-      const { text } = req.body;  // Changed from textMessage to text
-      
+      const { patientId } = req.params; // Extract the patient ID from the request parameters
+      const { text } = req.body; // Extract the comment text from the request body
+  
       console.log(patientId, text);
-      
+  
       if (!text) {
         return res.status(400).json({ message: 'Comment text is required' });
       }
-      
-      const patient = await Patient.findById(patientId);
-      if (!patient) {
-        return res.status(404).json({ message: 'Patient not found' });
+  
+      // Find the patient details by patientId
+      const patientDetails = await MedicalDetails.findOne({ patientId });
+  
+      if (!patientDetails) {
+        return res.status(404).json({ message: 'Patient details not found' });
       }
-      
-      // Ensure patient.comments is initialized as an array
-      if (!Array.isArray(patient.comments)) {
-        patient.comments = [];
+  
+      // Ensure patientDetails.comments is initialized as an array
+      if (!Array.isArray(patientDetails.comments)) {
+        patientDetails.comments = [];
       }
-      
-      // Add the comment
-      patient.comments.push({
-        text,  // Using text directly
-        createdAt: new Date()
+  
+      // Add the comment to the comments array
+      patientDetails.comments.push({
+        text, // Use the provided comment text
+        createdAt: new Date(), // Set the current timestamp
       });
-      
-      await patient.save();
-      
-      res.status(200).json({ success: true, patient });
+  
+      // Save the updated patient details
+      const updatedPatientDetails = await patientDetails.save();
+  
+      // Respond with success and the updated patient details
+      res.status(200).json({ success: true, patientDetails: updatedPatientDetails });
     } catch (error) {
-      console.error('Error adding comment:', error);
-      res.status(500).json({ message: 'Internal server error' });
+      console.error('Error adding comment:', error); // Log the error for debugging
+      res.status(500).json({ message: 'Internal server error' }); // Return a generic error response
     }
-  };
+  };  
   
 
 
