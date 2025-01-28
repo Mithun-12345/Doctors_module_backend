@@ -1,6 +1,7 @@
 const asyncHandler = require("express-async-handler");
 const axios = require('axios');
 const Patient = require("../models/patientModel");
+const MedicalDetails = require('../models/patientDetails');
 const PatientDetails = require("../models/patientDetails");
 const ChronicPatient = require("../models/chronicModel");
 const FamilyLink = require("../models/FamilyLink");
@@ -28,10 +29,24 @@ const oauth2Client = new google.auth.OAuth2(
 
 //Initial Form
 exports.sendForm = asyncHandler(async (req, res) => {
-  const { name, age, phone, email, gender, diseaseName, diseaseType } =
-    req.body;
+  // const { name, age, phone, email, gender, diseaseName, diseaseType } =
+  //   req.body;
+  const {
+    consultingFor,
+    name,
+    age,
+    phone,
+    whatsappNumber,
+    email,
+    gender,
+    diseaseName,
+    diseaseType, // This will now be an object from the frontend
+    currentLocation,
+    patientEntry,
+    symptomNotKnown,
+  } = req.body;
   const { referralCode, familyToken } = req.query; // Get the referral code from query params
-
+  console.log("Received request body:", req.query);
   // Check if referral code is provided
   let friendDetails = null;
   if (referralCode) {
@@ -73,36 +88,83 @@ exports.sendForm = asyncHandler(async (req, res) => {
   const existingPatient = await Patient.findOne({ phone });
 
   if (existingPatient) {
-    // If patient already exists, return an error response
     return res.status(400).json({
+      success: false,
       message: "Patient with this mobile number already exists",
     });
+  }  
+
+  let processedDiseaseType = {
+    name: '',
+    edit: false
+  };
+  
+  // If diseaseType is provided and is an object
+  if (diseaseType && typeof diseaseType === 'object') {
+    processedDiseaseType = {
+      name: diseaseType.name || '',
+      edit: diseaseType.edit || false
+    };
   }
+
+  const basicDetails = new Patient({
+        name,
+        age,
+        phone,
+        whatsappNumber,
+        email,
+        gender,
+        patientEntry,
+        currentLocation
+      })
+
+      if (referralCode) {
+        basicDetails.coupon = referralCode;
+      }
+
+      const saveBasic = await basicDetails.save();
+
+      const medicalDetails = new MedicalDetails({
+            patientId: saveBasic._id,
+            consultingFor,
+            // name,
+            // age,
+            // phone,
+            // whatsappNumber,
+            // email,
+            // gender,
+            diseaseName,
+            diseaseType: processedDiseaseType,
+            // currentLocation,
+            // patientEntry,
+            symptomNotKnown
+          });
+          
+          // Find if the phone number is already registered
+      
+          const saveMedical = await medicalDetails.save();
+          
+          
 
   // Create a new patient document
-  const patientDocument = new Patient({
-    name,
-    age,
-    phone,
-    email,
-    gender,
-    diseaseName,
-    diseaseType,
-  });
+  // const patientDocument = new Patient({
+  //   name,
+  //   age,
+  //   phone,
+  //   email,
+  //   gender,
+  //   diseaseName,
+  //   diseaseType,
+  // });
 
-  if (referralCode) {
-    //await Patient.save({ coupon: referralCode });
-    patientDocument.coupon = referralCode;
-  }
-
-  await patientDocument.save();
+  // await patientDocument.save();
 
   if (familyToken && familyLink) {
     const senderId = familyLink.userId;
     await Patient.findByIdAndUpdate(senderId, {
       $push: {
         familyMembers: {
-          memberId: patientDocument._id, // Add patient ID as memberId
+          memberId: basicDetails._id, // Add patient ID as memberId
           IndividulAccess: true, // Set IndividulAccess to true
           relationship: familyLink.relationship, // Include relationship role
           name: name, // Store the family member's name here
@@ -113,7 +175,7 @@ exports.sendForm = asyncHandler(async (req, res) => {
 
   res.status(201).json({
     message: "Patient data saved successfully",
-    patient: patientDocument,
+    patient: basicDetails,
   });
 });
 
@@ -782,7 +844,7 @@ exports.referFriend = asyncHandler(async (req, res) => {
   const { friendName, friendPhone } = req.body;
   console.log("Received request body:", req.body);
   const referrerPhone = req.user.phone;
-
+  console.log(referrerPhone);
   const generateReferralCode = () => {
     const chars =
       "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"; // 62 characters
@@ -816,20 +878,23 @@ exports.referFriend = asyncHandler(async (req, res) => {
     const coupon = generateReferralCode();
 
     const check = await Patient.findOne({ phone: friendPhone });
+    console.log("Check",check);
     if (check) {
-      res.json({ message: "Patient with this mobile number already exists!" });
+      return res.status(400).json({ message: "Patient with this mobile number already exists!" });
     }
 
     // Check if a referral for this friend already exists
-    let referral = await Referral.findOne({ referredFriendPhone: friendPhone });
-
+    let referral = await Referral.findOne({
+      referredFriendPhone: friendPhone,
+      referrerId: referrer._id, // Match the same referrer
+    });
     if (referral) {
-      // Update existing referral with a new coupon code
-      referral.code = coupon;
-      //referral.referrerId = referrer._id; // Update the referrer if needed
-      await referral.save();
+      // If the current user has already referred this friend, don't allow duplication
+      return res
+        .status(400)
+        .json({ message: "You have already referred this friend!" });
     } else {
-      // Create a new referral document if it doesn't exist
+      // Create a new referral document for the friend
       referral = await Referral.create({
         code: coupon,
         referrerId: referrer._id, // The referrer's ID
@@ -837,15 +902,15 @@ exports.referFriend = asyncHandler(async (req, res) => {
         referredFriendName: friendName,
       });
     }
-
     // Also pass the referee phone and name via query
     // Send an SMS to the friend with the registration link
     const referralLink = `http://localhost:8000/api/patient/sendRegForm?referralCode=${coupon}`;
-    await client.messages.create({
-      body: `Hi ${friendName}, you've been referred by ${referrer.phone}. Click here to register: ${referralLink}`,
-      from: "+12512728851", // Replace with your Twilio phone number
-      to: friendPhone,
-    });
+    console.log(referralLink);
+    // await client.messages.create({
+    //   body: `Hi ${friendName}, you've been referred by ${referrer.phone}. Click here to register: ${referralLink}`,
+    //   from: "+12512728851", // Replace with your Twilio phone number
+    //   to: friendPhone,
+    // });
 
     res.status(200).json({
       success: true,
@@ -880,6 +945,28 @@ exports.addFamily = async (req, res) => {
         message: "First make an appointment to add a family member",
       });
     }
+    if (relationship.toLowerCase() !== "son" && relationship.toLowerCase() !== "daughter") {
+      // Check if the `relationship` already exists in the user's familyMembers
+      const isPatientExists = User.familyMembers.some(
+        (member) => member.relationship === relationship
+      );
+      console.log("isPatientExists: " + isPatientExists);
+    
+      if (isPatientExists) {
+        return res.status(400).json({ message: "This relationship already exists in familyMembers." });
+      }
+    
+      // Check if the `relationship` already exists in the `familyLink` collection
+      const isFamilyLinkExists = await FamilyLink.findOne({
+        userId: User._id,
+        relationship: relationship,
+      });
+    
+      if (isFamilyLinkExists) {
+        return res.status(400).json({ message: "This relationship already exists in the familyLink collection." });
+      }
+    }
+        
     if (
       !relationship ||
       ![
@@ -889,6 +976,8 @@ exports.addFamily = async (req, res) => {
         "Daughter",
         "Father in law",
         "Mother in law",
+        "Husband",
+        "Wife"
       ].includes(relationship)
     ) {
       return res
@@ -939,8 +1028,15 @@ exports.addFamily = async (req, res) => {
         link: link,
       });
     } else {
-      const { name, age, phone, email, gender, diseaseName, diseaseType } =
-        req.body;
+      const { 
+        name, 
+        age, 
+        phone, 
+        email, 
+        gender, 
+        diseaseName, 
+        diseaseType 
+      } = req.body;
       const {
         dob,
         weight,
@@ -966,17 +1062,34 @@ exports.addFamily = async (req, res) => {
           message: "Patient with this mobile number already exists",
         });
       }
-
+      const currentLocation = country + ", " + state + ", " + city;
       // Create a new patient document
       const patientDocument = new Patient({
         name,
         age,
         phone,
         email,
-        //gender,
+        // gender,
+        // diseaseName,
+        // diseaseType,
+        patientEntry: "Family Tree",
+        currentLocation
+      });
+      const saveBasic = await patientDocument.save();
+
+      const medicalDocument = new MedicalDetails({
+        patientId: saveBasic._id,
+        consultingFor: relationship,
+      //   name,
+      //   age,
+      //   phone,
+      //   email,
+      //   // gender,
         diseaseName,
         diseaseType,
       });
+      const saveMedical = await medicalDocument.save();
+
       if (
         relationship == "Father" ||
         relationship == "Son" ||

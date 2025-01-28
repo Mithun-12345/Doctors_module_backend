@@ -18,6 +18,7 @@ exports.createPatient = async (req, res) => {
       patientEntry,
       symptomNotKnown,
     } = req.body;
+    const { referralCode, familyToken } = req.query; // Get the referral code from query params
 
     // Validate diseaseType
     let processedDiseaseType = {
