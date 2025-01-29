@@ -1,6 +1,7 @@
 const asyncHandler = require("express-async-handler");
-const axios = require('axios');
+const axios = require("axios");
 const Patient = require("../models/patientModel");
+const MedicalDetails = require("../models/patientDetails");
 const PatientDetails = require("../models/patientDetails");
 const ChronicPatient = require("../models/chronicModel");
 const FamilyLink = require("../models/FamilyLink");
@@ -13,7 +14,6 @@ const momentIST = require("moment-timezone");
 const twilio = require("twilio");
 const crypto = require("crypto");
 const { google } = require("googleapis");
-
 
 // patientController.js
 
@@ -28,10 +28,24 @@ const oauth2Client = new google.auth.OAuth2(
 
 //Initial Form
 exports.sendForm = asyncHandler(async (req, res) => {
-  const { name, age, phone, email, gender, diseaseName, diseaseType } =
-    req.body;
+  // const { name, age, phone, email, gender, diseaseName, diseaseType } =
+  //   req.body;
+  const {
+    consultingFor,
+    name,
+    age,
+    phone,
+    whatsappNumber,
+    email,
+    gender,
+    diseaseName,
+    diseaseType, // This will now be an object from the frontend
+    currentLocation,
+    patientEntry,
+    symptomNotKnown,
+  } = req.body;
   const { referralCode, familyToken } = req.query; // Get the referral code from query params
-
+  console.log("Received request body:", req.query);
   // Check if referral code is provided
   let friendDetails = null;
   if (referralCode) {
@@ -73,36 +87,81 @@ exports.sendForm = asyncHandler(async (req, res) => {
   const existingPatient = await Patient.findOne({ phone });
 
   if (existingPatient) {
-    // If patient already exists, return an error response
     return res.status(400).json({
+      success: false,
       message: "Patient with this mobile number already exists",
     });
   }
 
-  // Create a new patient document
-  const patientDocument = new Patient({
+  let processedDiseaseType = {
+    name: "",
+    edit: false,
+  };
+
+  // If diseaseType is provided and is an object
+  if (diseaseType && typeof diseaseType === "object") {
+    processedDiseaseType = {
+      name: diseaseType.name || "",
+      edit: diseaseType.edit || false,
+    };
+  }
+
+  const basicDetails = new Patient({
     name,
     age,
     phone,
+    whatsappNumber,
     email,
     gender,
-    diseaseName,
-    diseaseType,
+    patientEntry,
+    currentLocation,
   });
 
   if (referralCode) {
-    //await Patient.save({ coupon: referralCode });
-    patientDocument.coupon = referralCode;
+    basicDetails.coupon = referralCode;
   }
 
-  await patientDocument.save();
+  const saveBasic = await basicDetails.save();
+
+  const medicalDetails = new MedicalDetails({
+    patientId: saveBasic._id,
+    consultingFor,
+    // name,
+    // age,
+    // phone,
+    // whatsappNumber,
+    // email,
+    // gender,
+    diseaseName,
+    diseaseType: processedDiseaseType,
+    // currentLocation,
+    // patientEntry,
+    symptomNotKnown,
+  });
+
+  // Find if the phone number is already registered
+
+  const saveMedical = await medicalDetails.save();
+
+  // Create a new patient document
+  // const patientDocument = new Patient({
+  //   name,
+  //   age,
+  //   phone,
+  //   email,
+  //   gender,
+  //   diseaseName,
+  //   diseaseType,
+  // });
+
+  // await patientDocument.save();
 
   if (familyToken && familyLink) {
     const senderId = familyLink.userId;
     await Patient.findByIdAndUpdate(senderId, {
       $push: {
         familyMembers: {
-          memberId: patientDocument._id, // Add patient ID as memberId
+          memberId: basicDetails._id, // Add patient ID as memberId
           IndividulAccess: true, // Set IndividulAccess to true
           relationship: familyLink.relationship, // Include relationship role
           name: name, // Store the family member's name here
@@ -113,7 +172,7 @@ exports.sendForm = asyncHandler(async (req, res) => {
 
   res.status(201).json({
     message: "Patient data saved successfully",
-    patient: patientDocument,
+    patient: basicDetails,
   });
 });
 
@@ -132,8 +191,10 @@ exports.patientDetails = asyncHandler(async (req, res) => {
     return res.status(404).json({ message: "Patient not found" });
   }
 
-  const patientDetails = await PatientDetails.findOne({ patientId: patient._id });
-  console.log(patientDetails)
+  const patientDetails = await PatientDetails.findOne({
+    patientId: patient._id,
+  });
+  console.log(patientDetails);
   console.log(" Disease name:  " + patientDetails.diseaseType.name);
   let chronicPatient = false;
 
@@ -263,7 +324,6 @@ exports.checkAvailableSlots = asyncHandler(async (req, res) => {
   res.status(200).json({ availableSlots });
 });
 
-
 // Function to add an event to Google Calendar
 const addEventToGoogleCalendar = async (doctorId, appointment) => {
   try {
@@ -295,9 +355,9 @@ const addEventToGoogleCalendar = async (doctorId, appointment) => {
         timeZone: "Asia/Kolkata", // Set to Indian Standard Time
       },
       end: {
-        dateTime: `${appointment.appointmentDate}T${
-          String(parseInt(appointment.timeSlot.split(":")[0]) + 1).padStart(2, "0")
-        }:00:00`,
+        dateTime: `${appointment.appointmentDate}T${String(
+          parseInt(appointment.timeSlot.split(":")[0]) + 1
+        ).padStart(2, "0")}:00:00`,
         timeZone: "Asia/Kolkata", // Set to Indian Standard Time
       },
       conferenceData: {
@@ -330,7 +390,7 @@ const addEventToGoogleCalendar = async (doctorId, appointment) => {
   } catch (error) {
     console.error("Failed to add event to Google Calendar:", error);
     throw new Error("Could not add event to Google Calendar.");
-  }
+  }
 };
 
 //zoom function
@@ -339,9 +399,15 @@ const addAppointmentToCalendar = async (doctorId, appointment) => {
     // Step 1: Fetch doctor information and check for necessary tokens
     const doctor = await Doctor.findById(doctorId);
     if (!doctor) throw new Error("Doctor not found");
-    
-    if (!doctor.zoomAccessToken || !doctor.googleAccessToken || !doctor.googleRefreshToken) {
-      throw new Error("Doctor is missing required OAuth tokens for Zoom or Google");
+
+    if (
+      !doctor.zoomAccessToken ||
+      !doctor.googleAccessToken ||
+      !doctor.googleRefreshToken
+    ) {
+      throw new Error(
+        "Doctor is missing required OAuth tokens for Zoom or Google"
+      );
     }
 
     // Step 2: Create a Zoom meeting
@@ -357,11 +423,15 @@ const addAppointmentToCalendar = async (doctorId, appointment) => {
       },
     };
 
-    const zoomResponse = await axios.post("https://api.zoom.us/v2/users/me/meetings", meetingDetails, {
-      headers: {
-        Authorization: `Bearer ${doctor.zoomAccessToken}`,
-      },
-    });
+    const zoomResponse = await axios.post(
+      "https://api.zoom.us/v2/users/me/meetings",
+      meetingDetails,
+      {
+        headers: {
+          Authorization: `Bearer ${doctor.zoomAccessToken}`,
+        },
+      }
+    );
 
     const zoomLink = zoomResponse.data.join_url;
 
@@ -382,9 +452,9 @@ const addAppointmentToCalendar = async (doctorId, appointment) => {
         timeZone: "Asia/Kolkata",
       },
       end: {
-        dateTime: `${appointment.appointmentDate}T${
-          String(parseInt(appointment.timeSlot.split(":")[0]) + 1).padStart(2, "0")
-        }:00:00`,
+        dateTime: `${appointment.appointmentDate}T${String(
+          parseInt(appointment.timeSlot.split(":")[0]) + 1
+        ).padStart(2, "0")}:00:00`,
         timeZone: "Asia/Kolkata",
       },
       attendees: [{ email: appointment.patientEmail }],
@@ -402,7 +472,10 @@ const addAppointmentToCalendar = async (doctorId, appointment) => {
       resource: event,
       conferenceDataVersion: 1, // Enable Meet link creation
     });
-    console.log("Zoom link embedded in Google Calendar event description:", zoomLink);
+    console.log(
+      "Zoom link embedded in Google Calendar event description:",
+      zoomLink
+    );
 
     return {
       //googleMeetLink: calendarEvent.data.hangoutLink,
@@ -418,7 +491,7 @@ const addAppointmentToCalendar = async (doctorId, appointment) => {
 // Book appointment
 exports.bookAppointment = asyncHandler(async (req, res) => {
   const phone = req.user.phone;
-  const { appointmentDate, timeSlot} = req.body; // Use familyMemberId
+  const { appointmentDate, timeSlot } = req.body; // Use familyMemberId
   const doctorId = "6702d510df4e82e6d85b1d48";
   let patient;
 
@@ -571,11 +644,12 @@ exports.bookAppointment = asyncHandler(async (req, res) => {
       referral.firstAppointmentDone = true;
       await referral.save();
     } else {
-      console.log(`No referral found with code ${couponCode} that hasn't been used.`);
+      console.log(
+        `No referral found with code ${couponCode} that hasn't been used.`
+      );
     }
   }
-    //patient.coupon = "";
-  
+  //patient.coupon = "";
 
   //book appointment
   const newAppointment = new Appointment({
@@ -595,10 +669,10 @@ exports.bookAppointment = asyncHandler(async (req, res) => {
     // If everything goes well, update the patient's follow-up status
     patient.follow = "Follow up-C"; // Update follow status
     await patient.save(); // Save the updated patient
-    const calendarType = doctor.videoPlatform;  // Assuming this field exists in the doctor's schema
-  
+    const calendarType = doctor.videoPlatform; // Assuming this field exists in the doctor's schema
+
     let calendarEvent;
-    if (calendarType === 'googleMeet') {
+    if (calendarType === "googleMeet") {
       // If Google Meet is selected
       calendarEvent = await addEventToGoogleCalendar(doctor, {
         patient: patient._id,
@@ -607,7 +681,7 @@ exports.bookAppointment = asyncHandler(async (req, res) => {
         appointmentDate,
         timeSlot,
       });
-    } else if (calendarType === 'zoom') {
+    } else if (calendarType === "zoom") {
       // If Zoom is selected
       calendarEvent = await addAppointmentToCalendar(doctor, {
         patient: patient._id,
@@ -617,15 +691,16 @@ exports.bookAppointment = asyncHandler(async (req, res) => {
         timeSlot,
       });
     } else {
-      return res.status(400).json({ message: "Invalid calendar type in doctor's preferences." });
+      return res
+        .status(400)
+        .json({ message: "Invalid calendar type in doctor's preferences." });
     }
 
-    
-   //scheduleMeetingActivation(appointments);
+    //scheduleMeetingActivation(appointments);
     // Return success response with applied coupon info
     res.status(201).json({
       message: "Appointment booked successfully",
-      calendarEvent, 
+      calendarEvent,
       appointment: newAppointment,
       // zoomMeetingLink: zoomCalendarEvent.zoomLink,
       // appliedCoupon: appliedCoupon ? appliedCoupon.code : null,
@@ -782,7 +857,7 @@ exports.referFriend = asyncHandler(async (req, res) => {
   const { friendName, friendPhone } = req.body;
   console.log("Received request body:", req.body);
   const referrerPhone = req.user.phone;
-
+  console.log(referrerPhone);
   const generateReferralCode = () => {
     const chars =
       "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"; // 62 characters
@@ -816,20 +891,25 @@ exports.referFriend = asyncHandler(async (req, res) => {
     const coupon = generateReferralCode();
 
     const check = await Patient.findOne({ phone: friendPhone });
+    console.log("Check", check);
     if (check) {
-      res.json({ message: "Patient with this mobile number already exists!" });
+      return res
+        .status(400)
+        .json({ message: "Patient with this mobile number already exists!" });
     }
 
     // Check if a referral for this friend already exists
-    let referral = await Referral.findOne({ referredFriendPhone: friendPhone });
-
+    let referral = await Referral.findOne({
+      referredFriendPhone: friendPhone,
+      referrerId: referrer._id, // Match the same referrer
+    });
     if (referral) {
-      // Update existing referral with a new coupon code
-      referral.code = coupon;
-      //referral.referrerId = referrer._id; // Update the referrer if needed
-      await referral.save();
+      // If the current user has already referred this friend, don't allow duplication
+      return res
+        .status(400)
+        .json({ message: "You have already referred this friend!" });
     } else {
-      // Create a new referral document if it doesn't exist
+      // Create a new referral document for the friend
       referral = await Referral.create({
         code: coupon,
         referrerId: referrer._id, // The referrer's ID
@@ -837,15 +917,15 @@ exports.referFriend = asyncHandler(async (req, res) => {
         referredFriendName: friendName,
       });
     }
-
     // Also pass the referee phone and name via query
     // Send an SMS to the friend with the registration link
     const referralLink = `http://localhost:8000/api/patient/sendRegForm?referralCode=${coupon}`;
-    await client.messages.create({
-      body: `Hi ${friendName}, you've been referred by ${referrer.phone}. Click here to register: ${referralLink}`,
-      from: "+12512728851", // Replace with your Twilio phone number
-      to: friendPhone,
-    });
+    console.log(referralLink);
+    // await client.messages.create({
+    //   body: `Hi ${friendName}, you've been referred by ${referrer.phone}. Click here to register: ${referralLink}`,
+    //   from: "+12512728851", // Replace with your Twilio phone number
+    //   to: friendPhone,
+    // });
 
     res.status(200).json({
       success: true,
@@ -880,43 +960,35 @@ exports.addFamily = async (req, res) => {
         message: "First make an appointment to add a family member",
       });
     }
+    if (
+      relationship.toLowerCase() !== "son" &&
+      relationship.toLowerCase() !== "daughter"
+    ) {
+      // Check if the `relationship` already exists in the user's familyMembers
+      const isPatientExists = User.familyMembers.some(
+        (member) => member.relationship === relationship
+      );
+      console.log("isPatientExists: " + isPatientExists);
 
-    // //Freezing logic for adding a family member
-    // const alreadyAMember = await FamilyLink.findOne({ phone: myPhone });
-    // if (alreadyAMember) {
-    //   const addedBy = await Patient.findById({ _id: alreadyAMember.userId });
-    //   const gender = addedBy.gender;
-    //   if (
-    //     gender == "Male" &&
-    //     User.gender == "Male" &&
-    //     alreadyAMember.relationship == "Son" &&
-    //     relationship == "Father"
-    //   ) {
-    //     res.json({ message: "Relationship already exists!" });
-    //   } else if (
-    //     gender == "Female" &&
-    //     User.gender == "Male" &&
-    //     alreadyAMember.relationship == "Son" &&
-    //     relationship == "Mother"
-    //   ) {
-    //     res.json({ message: "Relationship already exists!" });
-    //   } else if (
-    //     gender == "Male" &&
-    //     User.gender == "Female" &&
-    //     alreadyAMember.relationship == "Daughter" &&
-    //     relationship == "Father"
-    //   ) {
-    //     res.json({ message: "Relationship already exists!" });
-    //   } else if (
-    //     gender == "Female" &&
-    //     User.gender == "Female" &&
-    //     alreadyAMember.relationship == "Daughter" &&
-    //     relationship == "Mother"
-    //   ) {
-    //     res.json({ message: "Relationship already exists!" });
-    //   }
-    //   //complete the code
-    // }
+      if (isPatientExists) {
+        return res.status(400).json({
+          message: "This relationship already exists in familyMembers.",
+        });
+      }
+
+      // Check if the `relationship` already exists in the `familyLink` collection
+      const isFamilyLinkExists = await FamilyLink.findOne({
+        userId: User._id,
+        relationship: relationship,
+      });
+
+      if (isFamilyLinkExists) {
+        return res.status(400).json({
+          message:
+            "This relationship already exists in the familyLink collection.",
+        });
+      }
+    }
 
     if (
       !relationship ||
@@ -927,6 +999,8 @@ exports.addFamily = async (req, res) => {
         "Daughter",
         "Father in law",
         "Mother in law",
+        "Husband",
+        "Wife",
       ].includes(relationship)
     ) {
       return res
@@ -935,7 +1009,11 @@ exports.addFamily = async (req, res) => {
     }
     if (IndividulAccess) {
       const { familyMemberPhone, familyMemberName } = req.body;
-      console.log("Received request body:", familyMemberName, familyMemberPhone);
+      console.log(
+        "Received request body:",
+        familyMemberName,
+        familyMemberPhone
+      );
       const check = await Patient.findOne({ phone: familyMemberPhone });
       if (check) {
         return res.json({
@@ -1004,17 +1082,34 @@ exports.addFamily = async (req, res) => {
           message: "Patient with this mobile number already exists",
         });
       }
-
+      const currentLocation = country + ", " + state + ", " + city;
       // Create a new patient document
       const patientDocument = new Patient({
         name,
         age,
         phone,
         email,
-        //gender,
+        // gender,
+        // diseaseName,
+        // diseaseType,
+        patientEntry: "Family Tree",
+        currentLocation,
+      });
+      const saveBasic = await patientDocument.save();
+
+      const medicalDocument = new MedicalDetails({
+        patientId: saveBasic._id,
+        consultingFor: relationship,
+        //   name,
+        //   age,
+        //   phone,
+        //   email,
+        //   // gender,
         diseaseName,
         diseaseType,
       });
+      const saveMedical = await medicalDocument.save();
+
       if (
         relationship == "Father" ||
         relationship == "Son" ||
@@ -1070,59 +1165,58 @@ exports.addFamily = async (req, res) => {
 
 exports.getFamily = async (req, res) => {
   try {
-      // Find the patient document using the authenticated user's ID
-      const patient = await Patient.findOne({ _id: req.user.id });
-      
-      if (!patient) {
-          return res.status(404).json({
-              success: false,
-              message: 'Patient not found'
-          });
-      }
+    // Find the patient document using the authenticated user's ID
+    const patient = await Patient.findOne({ _id: req.user.id });
 
-      // Check if familyMembers array exists
-      if (!patient.familyMembers || !Array.isArray(patient.familyMembers)) {
-          return res.json({
-              success: true,
-              familyMembers: []
-          });
-      }
+    if (!patient) {
+      return res.status(404).json({
+        success: false,
+        message: "Patient not found",
+      });
+    }
 
-      // Map through family members to structure the response
-      const enrichedFamilyMembers = patient.familyMembers.map(member => ({
-          _id: member.memberId,
-          name: member.name,
-          relationship: member.relationship,
-          IndividulAccess: member.IndividulAccess || false,
-          dob: member.dob,
-          weight: member.weight,
-          height: member.height,
-          occupation: member.occupation,
-          country: member.country,
-          state: member.state,
-          city: member.city,
-          complaint: member.complaint,
-          symptoms: member.symptoms,
-          associatedDisease: member.associatedDisease,
-          allopathy: member.allopathy,
-          diseaseHistory: member.diseaseHistory,
-          surgeryHistory: member.surgeryHistory,
-          allergies: member.allergies,
-          bodyType: member.bodyType
-      }));
-
+    // Check if familyMembers array exists
+    if (!patient.familyMembers || !Array.isArray(patient.familyMembers)) {
       return res.json({
-          success: true,
-          familyMembers: enrichedFamilyMembers
+        success: true,
+        familyMembers: [],
       });
+    }
 
+    // Map through family members to structure the response
+    const enrichedFamilyMembers = patient.familyMembers.map((member) => ({
+      _id: member.memberId,
+      name: member.name,
+      relationship: member.relationship,
+      IndividulAccess: member.IndividulAccess || false,
+      dob: member.dob,
+      weight: member.weight,
+      height: member.height,
+      occupation: member.occupation,
+      country: member.country,
+      state: member.state,
+      city: member.city,
+      complaint: member.complaint,
+      symptoms: member.symptoms,
+      associatedDisease: member.associatedDisease,
+      allopathy: member.allopathy,
+      diseaseHistory: member.diseaseHistory,
+      surgeryHistory: member.surgeryHistory,
+      allergies: member.allergies,
+      bodyType: member.bodyType,
+    }));
+
+    return res.json({
+      success: true,
+      familyMembers: enrichedFamilyMembers,
+    });
   } catch (error) {
-      console.error('Error fetching family members:', error);
-      return res.status(500).json({
-          success: false,
-          message: 'Server error while fetching family members',
-          error: error.message
-      });
+    console.error("Error fetching family members:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Server error while fetching family members",
+      error: error.message,
+    });
   }
 };
 
@@ -1167,7 +1261,7 @@ exports.getPatientDetails = async (req, res) => {
     const patient = await Patient.findById(patientId);
 
     if (!patient) {
-      return res.status(404).json({ message: 'Patient not found' });
+      return res.status(404).json({ message: "Patient not found" });
     }
 
     const patientDetails = {
@@ -1186,224 +1280,228 @@ exports.getPatientDetails = async (req, res) => {
 
     res.json(patientDetails);
   } catch (error) {
-      console.error('Error fetching family member details:', error);
-      res.status(500).json({
-          success: false,
-          message: 'Error fetching family member details',
-          error: error.message
-      });
+    console.error("Error fetching family member details:", error);
+    res.status(500).json({
+      success: false,
+      message: "Error fetching family member details",
+      error: error.message,
+    });
   }
 };
 
 exports.getFamilyMemberDetails = async (req, res) => {
   try {
-      const { memberId } = req.params;
-      const userId = req.user.id;
+    const { memberId } = req.params;
+    const userId = req.user.id;
 
-      const familyMember = await FamilyLink.findOne({
-          memberId,
-          userId
+    const familyMember = await FamilyLink.findOne({
+      memberId,
+      userId,
+    });
+
+    if (!familyMember) {
+      return res.status(404).json({
+        success: false,
+        message: "Family member not found",
       });
+    }
 
-      if (!familyMember) {
-          return res.status(404).json({
-              success: false,
-              message: 'Family member not found'
-          });
-      }
-
-      res.status(200).json({
-          success: true,
-          familyMember
-      });
+    res.status(200).json({
+      success: true,
+      familyMember,
+    });
   } catch (error) {
-      console.error('Error fetching family member details:', error);
-      res.status(500).json({
-          success: false,
-          message: 'Error fetching family member details',
-          error: error.message
-      });
+    console.error("Error fetching family member details:", error);
+    res.status(500).json({
+      success: false,
+      message: "Error fetching family member details",
+      error: error.message,
+    });
   }
 };
 
 // Update family member access
 exports.updateFamilyMemberAccess = async (req, res) => {
   try {
-      const { memberId } = req.params;
-      const { IndividulAccess } = req.body;
-      const userId = req.user.id;
+    const { memberId } = req.params;
+    const { IndividulAccess } = req.body;
+    const userId = req.user.id;
 
-      const familyMember = await FamilyLink.findOneAndUpdate(
-          { memberId, userId },
-          { IndividulAccess },
-          { new: true }
-      );
+    const familyMember = await FamilyLink.findOneAndUpdate(
+      { memberId, userId },
+      { IndividulAccess },
+      { new: true }
+    );
 
-      if (!familyMember) {
-          return res.status(404).json({
-              success: false,
-              message: 'Family member not found'
-          });
-      }
-
-      res.status(200).json({
-          success: true,
-          familyMember
+    if (!familyMember) {
+      return res.status(404).json({
+        success: false,
+        message: "Family member not found",
       });
+    }
+
+    res.status(200).json({
+      success: true,
+      familyMember,
+    });
   } catch (error) {
-      console.error('Error updating family member access:', error);
-      res.status(500).json({
-          success: false,
-          message: 'Error updating family member access',
-          error: error.message
-      });
+    console.error("Error updating family member access:", error);
+    res.status(500).json({
+      success: false,
+      message: "Error updating family member access",
+      error: error.message,
+    });
   }
 };
 
 // Add new family member
 exports.addFamilyMember = async (req, res) => {
   try {
-      const { name, relationship } = req.body;
-      const userId = req.user.id;
+    const { name, relationship } = req.body;
+    const userId = req.user.id;
 
-      // Validate relationship
-      const validRelationships = ['Father', 'Mother', 'Son', 'Daughter', 'Father in law', 'Mother in law'];
-      if (!validRelationships.includes(relationship)) {
-          return res.status(400).json({
-              success: false,
-              message: 'Invalid relationship type'
-          });
-      }
-
-      const newFamilyMember = new FamilyLink({
-          name,
-          relationship,
-          memberId: new mongoose.Types.ObjectId(),
-          userId,
-          IndividulAccess: false
+    // Validate relationship
+    const validRelationships = [
+      "Father",
+      "Mother",
+      "Son",
+      "Daughter",
+      "Father in law",
+      "Mother in law",
+    ];
+    if (!validRelationships.includes(relationship)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid relationship type",
       });
+    }
 
-      await newFamilyMember.save();
+    const newFamilyMember = new FamilyLink({
+      name,
+      relationship,
+      memberId: new mongoose.Types.ObjectId(),
+      userId,
+      IndividulAccess: false,
+    });
 
-      res.status(201).json({
-          success: true,
-          familyMember: newFamilyMember
-      });
+    await newFamilyMember.save();
+
+    res.status(201).json({
+      success: true,
+      familyMember: newFamilyMember,
+    });
   } catch (error) {
-      console.error('Error adding family member:', error);
-      res.status(500).json({
-          success: false,
-          message: 'Error adding family member',
-          error: error.message
-      });
+    console.error("Error adding family member:", error);
+    res.status(500).json({
+      success: false,
+      message: "Error adding family member",
+      error: error.message,
+    });
   }
 };
 
 // Remove family member
 exports.removeFamilyMember = async (req, res) => {
   try {
-      const { memberId } = req.params;
-      const userId = req.user.id;
+    const { memberId } = req.params;
+    const userId = req.user.id;
 
-      const result = await FamilyLink.findOneAndDelete({
-          memberId,
-          userId
+    const result = await FamilyLink.findOneAndDelete({
+      memberId,
+      userId,
+    });
+
+    if (!result) {
+      return res.status(404).json({
+        success: false,
+        message: "Family member not found",
       });
+    }
 
-      if (!result) {
-          return res.status(404).json({
-              success: false,
-              message: 'Family member not found'
-          });
-      }
-
-      res.status(200).json({
-          success: true,
-          message: 'Family member removed successfully'
-      });
+    res.status(200).json({
+      success: true,
+      message: "Family member removed successfully",
+    });
   } catch (error) {
-      console.error('Error removing family member:', error);
-      res.status(500).json({
-          success: false,
-          message: 'Error removing family member',
-          error: error.message
-      });
+    console.error("Error removing family member:", error);
+    res.status(500).json({
+      success: false,
+      message: "Error removing family member",
+      error: error.message,
+    });
   }
 };
 
 // Search family members
 exports.searchFamilyMembers = async (req, res) => {
   try {
-      const { query } = req.query;
-      const userId = req.user.id;
+    const { query } = req.query;
+    const userId = req.user.id;
 
-      const searchRegex = new RegExp(query, 'i');
+    const searchRegex = new RegExp(query, "i");
 
-      const familyMembers = await FamilyLink.find({
-          userId,
-          $or: [
-              { name: searchRegex },
-              { relationship: searchRegex }
-          ]
-      }).select('name relationship memberId IndividulAccess');
+    const familyMembers = await FamilyLink.find({
+      userId,
+      $or: [{ name: searchRegex }, { relationship: searchRegex }],
+    }).select("name relationship memberId IndividulAccess");
 
-      res.status(200).json({
-          success: true,
-          familyMembers
-      });
+    res.status(200).json({
+      success: true,
+      familyMembers,
+    });
   } catch (error) {
-      console.error('Error searching family members:', error);
-      res.status(500).json({
-          success: false,
-          message: 'Error searching family members',
-          error: error.message
-      });
+    console.error("Error searching family members:", error);
+    res.status(500).json({
+      success: false,
+      message: "Error searching family members",
+      error: error.message,
+    });
   }
 };
 
 // Filter family members by relationship
 exports.filterFamilyMembers = async (req, res) => {
   try {
-      const { relationship } = req.query;
-      const userId = req.user.id;
+    const { relationship } = req.query;
+    const userId = req.user.id;
 
-      const query = { userId };
-      
-      if (relationship !== 'All') {
-          if (relationship === 'Parents') {
-              query.relationship = { 
-                  $in: ['Father', 'Mother', 'Father in law', 'Mother in law'] 
-              };
-          } else if (relationship === 'Children') {
-              query.relationship = { 
-                  $in: ['Son', 'Daughter'] 
-              };
-          } else if (relationship === 'In-Laws') {
-              query.relationship = { 
-                  $regex: /in law/i 
-              };
-          } else if (relationship === 'Individual Access') {
-              query.IndividulAccess = true;
-          } else if (relationship === 'No Access') {
-              query.IndividulAccess = false;
-          }
+    const query = { userId };
+
+    if (relationship !== "All") {
+      if (relationship === "Parents") {
+        query.relationship = {
+          $in: ["Father", "Mother", "Father in law", "Mother in law"],
+        };
+      } else if (relationship === "Children") {
+        query.relationship = {
+          $in: ["Son", "Daughter"],
+        };
+      } else if (relationship === "In-Laws") {
+        query.relationship = {
+          $regex: /in law/i,
+        };
+      } else if (relationship === "Individual Access") {
+        query.IndividulAccess = true;
+      } else if (relationship === "No Access") {
+        query.IndividulAccess = false;
       }
+    }
 
-      const familyMembers = await FamilyLink.find(query)
-          .select('name relationship memberId IndividulAccess')
-          .sort({ relationship: 1, name: 1 });
+    const familyMembers = await FamilyLink.find(query)
+      .select("name relationship memberId IndividulAccess")
+      .sort({ relationship: 1, name: 1 });
 
-      res.status(200).json({
-          success: true,
-          familyMembers
-      });
+    res.status(200).json({
+      success: true,
+      familyMembers,
+    });
   } catch (error) {
-      console.error('Error filtering family members:', error);
-      res.status(500).json({
-          success: false,
-          message: 'Error filtering family members',
-          error: error.message
-      });
+    console.error("Error filtering family members:", error);
+    res.status(500).json({
+      success: false,
+      message: "Error filtering family members",
+      error: error.message,
+    });
   }
 };
 

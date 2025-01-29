@@ -2,7 +2,6 @@ const mongoose = require("mongoose");
 
 const patientSchema = new mongoose.Schema(
   {
-
     password: { type: String, required: false },
     name: {
       type: String,
@@ -21,6 +20,7 @@ const patientSchema = new mongoose.Schema(
     phone: {
       type: String,
       required: false,
+      unique: true,
     },
     whatsappNumber: {
       type: Number,
@@ -34,7 +34,6 @@ const patientSchema = new mongoose.Schema(
       type: String,
       required: false,
     },
-
 
     medicalRecords: {
       // no need in frontend set default as No
@@ -55,10 +54,6 @@ const patientSchema = new mongoose.Schema(
       type: String,
     },
 
-
-
-
-
     appointmentFixed: {
       //no need in frontend
       type: String,
@@ -71,7 +66,6 @@ const patientSchema = new mongoose.Schema(
       type: Number,
       default: 0,
     },
-
 
     coupon: {
       type: String,
