@@ -759,6 +759,29 @@ exports.getUserAppointments = async (req, res) => {
           $lt: moment(currentDate).endOf("month").toDate(),
         };
         break;
+      case "nextAppointment":
+        const nextAppointment = await Appointment.findOne({
+          patient: userId,
+          appointmentDate: { $gte: new Date() },
+        })
+          .populate("patient", "name") // Get patient name
+          .sort({ appointmentDate: 1, timeSlot: 1 }) // Get closest upcoming appointment
+          .select("appointmentDate timeSlot diseaseName patient");
+
+        if (!nextAppointment) {
+          return res
+            .status(404)
+            .json({ message: "No upcoming appointments found" });
+        }
+
+        const appointmentDate = new Date(nextAppointment.appointmentDate);
+        return res.json({
+          patientName: nextAppointment.patient.name,
+          diseaseName: nextAppointment.diseaseName,
+          date: appointmentDate.getDate(),
+          month: appointmentDate.toLocaleString("default", { month: "long" }),
+          time: nextAppointment.timeSlot,
+        });
       default:
         // If no filter or 'all', fetch all appointments
         break;
