@@ -29,11 +29,11 @@ exports.sendMessage = async (req, res) => {
     console.log(patientDetails.phone); // Log the phone number for debugging
 
     // Send a message via Twilio
-    await client.messages.create({
-      body: messageText,
-      to: patient.phone,
-      from: process.env.TWILIO_PHONE_NUMBER, // Use Twilio phone number from environment variables
-    });
+    // await client.messages.create({
+    //   body: messageText,
+    //   to: patient.phone,
+    //   from: process.env.TWILIO_PHONE_NUMBER, // Use Twilio phone number from environment variables
+    // });
 
     // Update the patient's messageSent status and timestamp in patientDetails
     patientDetails.messageSent.status = true;
@@ -55,11 +55,11 @@ exports.sendFirstFormMessage = async (req, res) => {
     const { to, message, patientId } = req.body;
 
     // Send SMS using Twilio
-    const twilioResponse = await client.messages.create({
-      body: message,
-      from: process.env.TWILIO_PHONE_NUMBER,
-      to: to
-    });
+    // const twilioResponse = await client.messages.create({
+    //   body: message,
+    //   from: process.env.TWILIO_PHONE_NUMBER,
+    //   to: to
+    // });
 
     // Update patient's messageSent status and timestamp
     const updatedPatient = await MedicalDetails.findByIdAndUpdate(

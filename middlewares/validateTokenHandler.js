@@ -17,17 +17,17 @@ const validateToken = asyncHandler(async (req, res, next) => {
     
     try {
       const decoded = jwt.verify(token, process.env.ACCESS_TOKEN_SECRET);
-      console.log("Decoded token:", decoded);
+      // console.log("Decoded token:", decoded);
 
       // Check if decoded has a phone property directly
       let user;
       // console.log("Decoded phone:", decoded.user.phone);
       if (decoded.phone) {
         user = await Patient.findOne({ phone: decoded.phone });
-        console.log("Patient found:", user);
+        // console.log("Patient found:", user);
       } else if (decoded.user && decoded.user.phone) {
         user = await Patient.findOne({ phone: decoded.user.phone });
-        console.log("Patient found:", user);
+        // console.log("Patient found:", user);
       } else {
         return res.status(401).json({ success: false, error: "Invalid token structure" });
       }
@@ -35,13 +35,13 @@ const validateToken = asyncHandler(async (req, res, next) => {
       // If not a patient, check for doctor
       if (!user) {
         user = await Doctor.findOne({ phone: decoded.phone });
-        console.log("Doctor found:", user);
+        // console.log("Doctor found:", user);
       }
 
       // If still not found, check for admin
       if (!user) {
         user = await Admin.findOne({ phone: decoded.phone });
-        console.log("Admin found:", user);
+        // console.log("Admin found:", user);
       }
 
       if (!user) {

@@ -59,6 +59,7 @@ const appointmentSchema = new mongoose.Schema(
     diseaseType: {
       name: {
         type: String,
+        default: "Acute",
         required: false, // Allows this field to be optional
       },
       edit: {
@@ -74,7 +75,7 @@ const appointmentSchema = new mongoose.Schema(
     follow: {
       // no need in frontend set default as PCall
       type: String,
-      default: "Follow up-PCall",
+      default: "Follow up-C",
     },
     followComment: {
       //no need in frontend
@@ -104,6 +105,10 @@ const appointmentSchema = new mongoose.Schema(
     status:{
       type: String,
       default: "pending"
+    },
+    meetLink: {
+      type: String,
+      required: false,
     }
   },
   { timestamps: true }
