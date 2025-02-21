@@ -13,6 +13,6 @@ router.get("/zoom/callback", zoomCallback);
 router.get("/google/authorize", validateToken, googleAuthorize);
 
 // Google OAuth Callback Route (Protected)
-router.get("/google/callback", validateToken, googleCallback);
+router.get("/google/callback", googleCallback);
 
 module.exports = router;

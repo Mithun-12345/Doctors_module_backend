@@ -50,12 +50,14 @@ const zoomCallback = async (req, res) => {
 // Google OAuth Authorization
 const googleAuthorize = (req, res) => {
   const url = `https://accounts.google.com/o/oauth2/v2/auth?scope=https://www.googleapis.com/auth/calendar&access_type=offline&response_type=code&redirect_uri=${GOOGLE_REDIRECT_URI}&client_id=${GOOGLE_CLIENT_ID}`;
+  console.log(url);
   res.redirect(url);
 };
 
 // Google OAuth Callback
 const googleCallback = async (req, res) => {
   const code = req.query.code;
+  const doctorId = "67b7f696fd7cb84dd0837b47";
   try {
     const response = await axios.post("https://oauth2.googleapis.com/token", {
       code,
@@ -68,6 +70,15 @@ const googleCallback = async (req, res) => {
     const { access_token, refresh_token } = response.data;
     console.log("Google Access Token:", access_token);
     console.log("Google Refresh Token:", refresh_token);
+
+    const doctor = await DoctorModel.findById(doctorId);
+    if (!doctor) {
+      throw new Error("Doctor not found");
+    }
+
+    doctor.googleAccessToken = access_token;
+    // doctor.googleRefreshToken = refresh_token;
+    await doctor.save();
 
     res.send("Google OAuth Flow Completed Successfully!");
   } catch (error) {

@@ -31,7 +31,7 @@ const salaryRoutes = require("./routes/payrollRoutes.js");
 const salaryStructure = require("./routes/SalaryStructureRoutes.js");
 const shiftRoutes = require("./routes/shiftRoutes.js");
 const attendance = require("./routes/attendanceRoute.js");
-const videoCallRoutes = require("./routes/videoCallRoutes"); // Import the new router
+const videoCallRoutes = require("./routes/VideoCallRoutes"); // Import the new router
 
 dbConnection();
 
