@@ -31,6 +31,7 @@ const salaryRoutes = require("./routes/payrollRoutes.js");
 const salaryStructure = require("./routes/SalaryStructureRoutes.js");
 const shiftRoutes = require("./routes/shiftRoutes.js");
 const attendance = require("./routes/attendanceRoute.js");
+const videoCallRoutes = require("./routes/videoCallRoutes"); // Import the new router
 
 dbConnection();
 
@@ -69,10 +70,17 @@ app.use("/api/salary", salaryStructure);
 app.use("/api/shift", shiftRoutes);
 app.use("/api/attendance", attendance);
 app.use("/uploads", express.static(path.join(__dirname, "uploads")));
+app.use("/api/video-call", videoCallRoutes);
+
 const options = {
   key: fs.readFileSync("server.key"),
   cert: fs.readFileSync("server.crt"),
 };
+
+mongoose
+  .connect(process.env.MONGODB_LOCAL_URI)
+  .then(() => console.log("MongoDB connected"))
+  .catch((err) => console.log(err));
 
 // Middleware: Set Content Security Policy for security
 app.use(
@@ -118,89 +126,6 @@ app.get("/api/example", (req, res) => {
   res.json({ message: "Hello from the API!" });
 });
 
-// Serve static files from the React app
-app.use(express.static(path.join(__dirname, "client/build")));
-
-// Handle all other requests by serving React's index.html
-app.get("*", (req, res) => {
-  res.sendFile(path.join(__dirname, "client/build", "index.html"));
-});
-
-app.get("/google/authorize", (req, res) => {
-  const url = `https://accounts.google.com/o/oauth2/v2/auth?scope=https://www.googleapis.com/auth/calendar&access_type=offline&response_type=code&redirect_uri=${GOOGLE_REDIRECT_URI}&client_id=${GOOGLE_CLIENT_ID}`;
-  res.redirect(url);
-});
-
-app.get("/google/callback", async (req, res) => {
-  const code = req.query.code;
-
-  try {
-    const response = await axios.post("https://oauth2.googleapis.com/token", {
-      code,
-      client_id: GOOGLE_CLIENT_ID,
-      client_secret: GOOGLE_CLIENT_SECRET,
-      redirect_uri: GOOGLE_REDIRECT_URI,
-      grant_type: "authorization_code",
-    });
-
-    const { access_token, refresh_token } = response.data;
-
-    // Save tokens securely in your DB (for simplicity, just logging here)
-    console.log("Google Access Token:", access_token);
-    console.log("Google Refresh Token:", refresh_token);
-
-    // Return success or continue with the flow
-    res.send("Google OAuth Flow Completed Successfully!");
-  } catch (error) {
-    console.error("Google OAuth Error:", error);
-    res.status(500).send("Error in Google OAuth flow");
-  }
-});
-
-app.get("/zoom/authorize", (req, res) => {
-  const url = `https://zoom.us/oauth/authorize?response_type=code&client_id=${ZOOM_CLIENT_ID}&redirect_uri=${ZOOM_REDIRECT_URI}`;
-  res.redirect(url);
-});
-
-// Step 2: Exchange Zoom Authorization Code for Tokens
-app.get("/zoom/callback", async (req, res) => {
-  const code = req.query.code;
-
-  try {
-    const response = await axios.post("https://zoom.us/oauth/token", null, {
-      params: {
-        code,
-        client_id: ZOOM_CLIENT_ID,
-        client_secret: ZOOM_CLIENT_SECRET,
-        redirect_uri: ZOOM_REDIRECT_URI,
-        grant_type: "authorization_code",
-      },
-      headers: {
-        Authorization: `Basic ${Buffer.from(
-          `${ZOOM_CLIENT_ID}:${ZOOM_CLIENT_SECRET}`
-        ).toString("base64")}`,
-      },
-    });
-
-    const { access_token, refresh_token } = response.data;
-
-    // Save tokens securely in your DB (for simplicity, just logging here)
-    console.log("Zoom Access Token:", access_token);
-    console.log("Zoom Refresh Token:", refresh_token);
-
-    // Return success or continue with the flow
-    res.send("Zoom OAuth Flow Completed Successfully!");
-  } catch (error) {
-    console.error("Zoom OAuth Error:", error);
-    res.status(500).send("Error in Zoom OAuth flow");
-  }
-});
-
-mongoose
-  .connect(process.env.MONGODB_LOCAL_URI)
-  .then(() => console.log("MongoDB connected"))
-  .catch((err) => console.log(err));
-
 app.get("/api/chat/:senderId/:receiverId", async (req, res) => {
   try {
     const { senderId, receiverId } = req.params;
@@ -215,15 +140,6 @@ app.get("/api/chat/:senderId/:receiverId", async (req, res) => {
     res.json(messages);
   } catch (err) {
     res.status(500).json({ message: "Server error", err });
-  }
-});
-
-app.get("/test", async (req, res) => {
-  try {
-    const patients = await patientModel.find();
-    res.json(patients);
-  } catch (error) {
-    res.status(500).json({ message: "Server error", error });
   }
 });
 
