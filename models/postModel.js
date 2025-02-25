@@ -1,21 +1,23 @@
 const mongoose = require("mongoose");
 
-const postSchema = new mongoose.Schema({
-  doctorId: {
+const PostSchema = new mongoose.Schema({
+  author: {
     type: mongoose.Schema.Types.ObjectId,
     ref: "Doctor",
     required: true,
   },
-  content: { type: String, required: true }, 
-  likes: [{ type: mongoose.Schema.Types.ObjectId, ref: "Patient" }],
+  text: { type: String, default: "" },
+  mediaUrl: { type: String },
+  mediaType: { type: String, enum: ["image", "video", "text"], required: true },
+  likes: [{ type: mongoose.Schema.Types.ObjectId, ref: "Doctor" }],
   comments: [
     {
-      userId: { type: mongoose.Schema.Types.ObjectId, ref: "OTP" },
-      comment: { type: String, required: true },
-      date: { type: Date, default: Date.now },
+      user: { type: mongoose.Schema.Types.ObjectId, ref: "Doctor" },
+      text: { type: String, required: true },
+      createdAt: { type: Date, default: Date.now },
     },
   ],
-  date: { type: Date, default: Date.now },
+  createdAt: { type: Date, default: Date.now },
 });
 
-module.exports = mongoose.model("DoctorPost", postSchema);
+module.exports = mongoose.model("Post", PostSchema);
