@@ -1,4 +1,4 @@
-const Post = require("../models/postModel");
+const { Post, Comment } = require("../models/postModel");
 const Doctor = require("../models/doctorModel");
 const Patient = require("../models/patientModel");
 const cloudinary = require("cloudinary").v2;
@@ -95,6 +95,7 @@ exports.commentPost = async (req, res) => {
   try {
     const { text } = req.body;
     const post = await Post.findById(req.params.id);
+
     if (!post)
       return res
         .status(404)
@@ -106,15 +107,106 @@ exports.commentPost = async (req, res) => {
       userId = await Patient.findOne({ phone });
     }
 
-    const comment = { user: userId, text };
-    post.comments.push(comment);
+    // Create a new top-level comment
+    const newComment = new Comment({
+      user: userId,
+      text,
+      parentComment: null, // Top-level comment has no parent
+    });
 
+    // Save the comment first
+    const savedComment = await newComment.save();
+
+    // Add comment reference to the post
+    post.comments.push(savedComment._id);
     await post.save();
-    res.status(200).json({ success: true, comments: post.comments });
+
+    res.status(200).json({
+      success: true,
+      comment: savedComment,
+    });
   } catch (error) {
     res.status(500).json({ success: false, error: error.message });
   }
 };
+
+// Reply to an existing comment
+exports.replyToComment = async (req, res) => {
+  try {
+    const { text } = req.body;
+    // const { commentId } = req.params;
+
+    // Find the parent comment
+    const parentComment = await Comment.findById(req.params.id);
+    if (!parentComment)
+      return res
+        .status(404)
+        .json({ success: false, message: "Comment not found" });
+
+    const phone = req.user.phone;
+    let userId = await Doctor.findOne({ phone });
+    if (!userId) {
+      userId = await Patient.findOne({ phone });
+    }
+
+    // Create a new reply comment
+    const newReply = new Comment({
+      user: userId,
+      text,
+      parentComment: parentComment._id, // Set parent reference
+    });
+
+    // Save the reply
+    const savedReply = await newReply.save();
+
+    // Add reply reference to parent comment
+    parentComment.replies.push(savedReply._id);
+    await parentComment.save();
+
+    res.status(200).json({
+      success: true,
+      reply: savedReply,
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+};
+
+// Get a post with comments and nested replies
+// exports.getPostWithComments = async (req, res) => {
+//   try {
+//     const post = await Post.findById(req.params.id)
+//       .populate({
+//         path: "comments",
+//         populate: [
+//           {
+//             path: "user",
+//             select: "name profilePic", // Include only necessary fields
+//           },
+//           {
+//             path: "replies",
+//             populate: {
+//               path: "user",
+//               select: "name profilePic",
+//             },
+//           },
+//         ],
+//       })
+//       .populate("author", "name profilePic");
+
+//     if (!post)
+//       return res
+//         .status(404)
+//         .json({ success: false, message: "Post not found" });
+
+//     res.status(200).json({
+//       success: true,
+//       post,
+//     });
+//   } catch (error) {
+//     res.status(500).json({ success: false, error: error.message });
+//   }
+// };
 
 //Update can be done only for text part and not on the file/s
 exports.updatePost = async (req, res) => {
@@ -224,6 +316,5 @@ exports.getPaginatedPosts = async (req, res) => {
 
 //Handle multiple images upload with size/limit restriction
 //If video, only one video should be uploaded for a post
-//Comment/Reply a comment
 //Like a comment
 //Home page that display all posts where each post will have doctor name, profile picture, and time of post(Eg.,1d,2w,1m,2y)

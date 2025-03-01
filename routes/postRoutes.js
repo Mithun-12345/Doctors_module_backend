@@ -6,10 +6,11 @@ const {
   commentPost,
   updatePost,
   deletePost,
-  getPaginatedPosts
+  getPaginatedPosts,
+  replyToComment,
 } = require("../controllers/postController");
 const upload = require("../middlewares/uploadMiddleware");
-const validateToken = require("../middlewares/validateTokenHandler"); 
+const validateToken = require("../middlewares/validateTokenHandler");
 
 const router = express.Router();
 
@@ -17,6 +18,7 @@ router.post("/", validateToken, upload.single("media"), createPost);
 router.get("/", validateToken, getPosts);
 router.post("/:id/like", validateToken, likePost);
 router.post("/:id/comment", validateToken, commentPost);
+router.post("/:id/reply", validateToken, replyToComment);
 router.put("/:id", validateToken, updatePost);
 router.delete("/:id", validateToken, deletePost);
 router.get("/homePosts", validateToken, getPaginatedPosts);
