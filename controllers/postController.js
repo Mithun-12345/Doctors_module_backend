@@ -58,11 +58,52 @@ exports.getPosts = async (req, res) => {
         .json({ success: false, message: "Doctor not found" });
     }
 
+    const page = parseInt(req.query.page) || 1; // Post page number
+    const limit = parseInt(req.query.limit) || 10; // Posts per request
+    const skip = (page - 1) * limit;
+
+    const commentPage = parseInt(req.query.commentPage) || 1; // Comment page number
+    const commentLimit = parseInt(req.query.commentLimit) || 5; // Comments per post
+    const commentSkip = (commentPage - 1) * commentLimit;
+
     const posts = await Post.find({ author: doctor._id })
       .sort({ createdAt: -1 })
-      .populate("author", "name"); // Populate doctor details (name and profile photo)
+      .skip(skip)
+      .limit(limit)
+      .populate("author", "name profilePhoto") // Include author's profile picture
+      .populate({
+        path: "comments",
+        options: {
+          sort: { createdAt: -1 },
+          skip: commentSkip,
+          limit: commentLimit,
+        }, // Paginate comments
+        populate: [
+          {
+            path: "user",
+            select: "name profilePhoto", // Populate user who commented
+          },
+          {
+            path: "replies",
+            populate: {
+              path: "user",
+              select: "name profilePhoto", // Populate user who replied
+            },
+          },
+        ],
+      });
 
-    res.status(200).json({ success: true, posts });
+    const totalPosts = await Post.countDocuments({ author: doctor._id });
+    const totalPages = Math.ceil(totalPosts / limit);
+
+    res.status(200).json({
+      success: true,
+      posts,
+      page,
+      totalPages,
+      commentPage,
+      commentLimit,
+    });
   } catch (error) {
     res.status(500).json({ success: false, error: error.message });
   }
@@ -172,42 +213,6 @@ exports.replyToComment = async (req, res) => {
   }
 };
 
-// Get a post with comments and nested replies
-// exports.getPostWithComments = async (req, res) => {
-//   try {
-//     const post = await Post.findById(req.params.id)
-//       .populate({
-//         path: "comments",
-//         populate: [
-//           {
-//             path: "user",
-//             select: "name profilePic", // Include only necessary fields
-//           },
-//           {
-//             path: "replies",
-//             populate: {
-//               path: "user",
-//               select: "name profilePic",
-//             },
-//           },
-//         ],
-//       })
-//       .populate("author", "name profilePic");
-
-//     if (!post)
-//       return res
-//         .status(404)
-//         .json({ success: false, message: "Post not found" });
-
-//     res.status(200).json({
-//       success: true,
-//       post,
-//     });
-//   } catch (error) {
-//     res.status(500).json({ success: false, error: error.message });
-//   }
-// };
-
 //Update can be done only for text part and not on the file/s
 exports.updatePost = async (req, res) => {
   try {
@@ -290,15 +295,40 @@ exports.deletePost = async (req, res) => {
 
 exports.getPaginatedPosts = async (req, res) => {
   try {
-    const page = parseInt(req.query.page) || 1; // Get page number from query
-    const limit = parseInt(req.query.limit) || 10; // Limit posts per request
+    const page = parseInt(req.query.page) || 1; // Post page number
+    const limit = parseInt(req.query.limit) || 10; // Posts per request
     const skip = (page - 1) * limit;
 
+    const commentPage = parseInt(req.query.commentPage) || 1; // Comment page number
+    const commentLimit = parseInt(req.query.commentLimit) || 5; // Comments per post
+    const commentSkip = (commentPage - 1) * commentLimit;
+
     const posts = await Post.find()
-      .populate("author", "name") // Get doctor's name & image; After updating profile picture make a space after name and give the mongodb filed for profile picture
       .sort({ createdAt: -1 }) // Newest posts first
       .skip(skip)
-      .limit(limit);
+      .limit(limit)
+      .populate("author", "name profilePhoto") // Include doctor's profile picture
+      .populate({
+        path: "comments",
+        options: {
+          sort: { createdAt: -1 },
+          skip: commentSkip,
+          limit: commentLimit,
+        }, // Paginate comments
+        populate: [
+          {
+            path: "user",
+            select: "name profilePhoto", // Populate user who commented
+          },
+          {
+            path: "replies",
+            populate: {
+              path: "user",
+              select: "name profilePhoto", // Populate user who replied
+            },
+          },
+        ],
+      });
 
     const totalPosts = await Post.countDocuments();
     const totalPages = Math.ceil(totalPosts / limit);
@@ -308,13 +338,15 @@ exports.getPaginatedPosts = async (req, res) => {
       posts,
       page,
       totalPages,
+      commentPage,
+      commentLimit,
     });
   } catch (error) {
     res.status(500).json({ success: false, error: error.message });
   }
 };
 
-//Handle multiple images upload with size/limit restriction
-//If video, only one video should be uploaded for a post
-//Like a comment
+//Handle multiple images upload with size/limit restriction - If video, only one video should be uploaded for a post
+//Like a comment and like a post
 //Home page that display all posts where each post will have doctor name, profile picture, and time of post(Eg.,1d,2w,1m,2y)
+//Update a comment/reply and mark as 'Edited'
