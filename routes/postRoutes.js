@@ -1,19 +1,30 @@
 const express = require("express");
-const postController = require("../controllers/postController");
+const {
+  createPost,
+  getPosts,
+  likePost,
+  commentPost,
+  updatePost,
+  deletePost,
+  getPaginatedPosts,
+  replyToComment,
+  likeComment,
+  updateComment,
+} = require("../controllers/postController");
+const upload = require("../middlewares/uploadMiddleware");
 const validateToken = require("../middlewares/validateTokenHandler");
 
 const router = express.Router();
 
-router.post("/createPost", validateToken, postController.createPost);
-router.get("/showPost", validateToken, postController.showPost);
-router.get("/showSinglePost/:id", validateToken, postController.showSinglePost);
-router.delete("/deletePost/:id", validateToken, postController.deletePost);
-router.patch(
-  "/updatePost/:id",
-  validateToken,
-  postController.updatePostContent
-);
-router.post("/addComment/:id", validateToken, postController.addComment);
-router.post("/toggleLike/:id", validateToken, postController.toggleLike);
+router.post("/", validateToken, upload.single("media"), createPost);
+router.get("/", validateToken, getPosts);
+router.post("/:id/like", validateToken, likePost);
+router.post("/:id/comment", validateToken, commentPost);
+router.post("/:id/reply", validateToken, replyToComment);
+router.put("/:id", validateToken, updatePost);
+router.delete("/:id", validateToken, deletePost);
+router.get("/homePosts", validateToken, getPaginatedPosts);
+router.post("/:id/likeComment", validateToken, likeComment);
+router.put("/:id/updateComment", validateToken, updateComment);
 
 module.exports = router;

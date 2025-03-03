@@ -15,6 +15,7 @@ const {
   referFriend,
   addFamily,
   getFamilyMembers,
+  fetchProfile
 } = require("../controllers/patientController");
 const validateToken = require("../middlewares/validateTokenHandler");
 
@@ -35,5 +36,17 @@ router.put("/updateFollowPatientCall/:patientId", updateFollowPatientCall);
 router.post("/referFriend", validateToken, referFriend);
 router.post("/addFamily", validateToken, addFamily);
 router.get("/getFamilyMembers", validateToken, getFamilyMembers);
+
+const familyMemberController = require('../controllers/patientController');
+const { validate } = require("../models/patientModel");
+router.get('/familyMembers', validateToken, familyMemberController.getFamily);
+router.get('/familyMembers/search', familyMemberController.searchFamilyMembers);
+router.get('/familyMembers/filter', familyMemberController.filterFamilyMembers);
+router.get('/familyMembers/:memberId', familyMemberController.getFamilyMemberDetails);
+router.put('/familyMembers/:memberId/access', familyMemberController.updateFamilyMemberAccess);
+router.post('/familyMembers', familyMemberController.addFamilyMember);
+router.delete('/familyMembers/:memberId', familyMemberController.removeFamilyMember);
+
+router.get('/profile', validateToken, fetchProfile);
 
 module.exports = router;

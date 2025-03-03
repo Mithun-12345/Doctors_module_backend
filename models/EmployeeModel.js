@@ -1,6 +1,6 @@
-const mongoose = require("mongoose");
+const mongoose = require('mongoose');
 
-const doctorSchema = new mongoose.Schema({
+const employeeSchema = new mongoose.Schema({
   // Personal Details
   name: { type: String, required: true },
   dateOfBirth: { type: Date, required: true },
@@ -30,7 +30,7 @@ const doctorSchema = new mongoose.Schema({
   workLocation: { type: String, required: true },
   reportingManager: { type: String, required: true },
   // workShift: { type: String, required: true },
-  workShift: { type: String, required: true },
+  workShift: { type: mongoose.Schema.Types.ObjectId, ref: "Shift", required: true },
 
 
   // Compensation Details
@@ -38,7 +38,7 @@ const doctorSchema = new mongoose.Schema({
   allowances: { type: Number, default: 0 },
   deductions: { type: Number, default: 0 },
   bankAccountNumber: { type: String, required: true },
-  bankName: { type: String, required: true },
+  bankName: { type: String, required: false },
   ifscCode: { type: String, required: true },
   paymentFrequency: { type: String,required: true },
   pfNumber: { type: String },
@@ -65,37 +65,9 @@ const doctorSchema = new mongoose.Schema({
   // Additional Details
   certifications: { type: [String] },
   medicalRegistrationNumber: { type: String },
-  documents: [
-    {
-      originalname: String,
-      path: String,
-      size: Number,
-    },
-  ],
-  digitalSignature: {
-    originalname: String,
-    path: String,
-    size: Number,
-    },
-   
-  follow: {
-    type: String,
-    default: ""
-  },
-  videoPlatform: {
-    type: String, 
-    enum: ['googleMeet', 'zoom'],
-    default: 'googleMeet',
-  },
-  googleAccessToken: { type: String },  // Field for Google access token
-  googleRefreshToken: { type: String }, // Field for Google refresh token
-  zoomAccessToken: { type: String },    // Field for Zoom access token
-  zoomRefreshToken: { type: String },   // Field for Zoom refresh token
-  zoomTokenExpiration: { type: Date },
+  //documents: { type: [String] }, // Array of document file paths or names
+
   // Timestamps
 }, { timestamps: true });
-  
 
-const Doctor = mongoose.model("Doctor", doctorSchema);
-
-module.exports = Doctor;
+module.exports = mongoose.model('Employee', employeeSchema);

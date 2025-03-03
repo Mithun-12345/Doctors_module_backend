@@ -18,6 +18,8 @@ const familyLinkSchema = new mongoose.Schema({
       "Daughter",
       "Father in law",
       "Mother in law",
+      "Husband",
+      "Wife",
     ],
     required: true,
   },

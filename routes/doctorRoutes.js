@@ -8,10 +8,24 @@ const {
   doctorDetails,
   getAssistantDoctors,
   getUserRole,
-  getDoctorFollow
+  getDoctorFollow,
+  getDoctorById,
+  getSettings,
+  updateSettings,
+  getAllAppointments,
+  getAllAppointmentsWithPatientData
 } = require("../controllers/doctorController");
 
+const { googleAuth, googleCallback } = require("../controllers/googleController");
+const { zoomAuth, zoomCallback } = require("../controllers/zoomController");
+
 const router = express.Router();
+
+router.get("/google/authorize", googleAuth);
+router.get("/google/callback", googleCallback);
+
+router.get("/zoom/authorize", zoomAuth);
+router.get("/zoom/callback", zoomCallback);
 
 // @route   POST /api/doctor/addDoctor
 // @desc    Add a new doctor
@@ -33,4 +47,10 @@ router.get('/getAssistantDoctors', validateToken, getAssistantDoctors);
 router.get('/getUserRole', validateToken, getUserRole);
 router.get('/details', validateToken, doctorDetails);
 router.get('/getDoctorFollow', validateToken, getDoctorFollow);
+router.get('/byId/:id',validateToken, getDoctorById);
+router.get('/getsettings',  validateToken,getSettings);
+router.put('/updatesettings',  validateToken,updateSettings);
+router.get('/getAllAppointments', validateToken, getAllAppointments);
+router.get('/getAllAppointmentsWithPatientData', getAllAppointmentsWithPatientData);
+
 module.exports = router;

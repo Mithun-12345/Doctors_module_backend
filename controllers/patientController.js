@@ -1,5 +1,8 @@
 const asyncHandler = require("express-async-handler");
+const axios = require("axios");
 const Patient = require("../models/patientModel");
+const MedicalDetails = require("../models/patientDetails");
+const PatientDetails = require("../models/patientDetails");
 const ChronicPatient = require("../models/chronicModel");
 const FamilyLink = require("../models/FamilyLink");
 const Appointment = require("../models/appointmentModel");
@@ -10,17 +13,80 @@ const moment = require("moment");
 const momentIST = require("moment-timezone");
 const twilio = require("twilio");
 const crypto = require("crypto");
-
+const { google } = require("googleapis");
+const { createGoogleMeet } = require("./Gmeet");
+// patientController.js
+const UserGoogleTokens = require("../models/UserTokenSchema");
 const accountSid = process.env.TWILIO_ACCOUNT_SID;
 const authToken = process.env.TWILIO_AUTH_TOKEN;
 const client = new twilio(accountSid, authToken);
 
+const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID;
+const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET;
+const GOOGLE_REDIRECT_URI = process.env.GOOGLE_REDIRECT_URI;
+
+const ZOOM_CLIENT_ID = process.env.ZOOM_CLIENT_ID;
+const ZOOM_CLIENT_SECRET = process.env.ZOOM_CLIENT_SECRET;
+const ZOOM_REDIRECT_URI = process.env.ZOOM_REDIRECT_URI;
+
+const oauth2Client = new google.auth.OAuth2(
+  GOOGLE_CLIENT_ID,
+  GOOGLE_CLIENT_SECRET,
+  GOOGLE_REDIRECT_URI
+);
+
+const refreshGoogleToken = async (doctor) => {
+  try {
+    const { tokens } = await oauth2Client.refreshToken(doctor.googleRefreshToken);
+    return tokens.access_token;
+  } catch (error) {
+    console.error('Error refreshing Google token:', error);
+    throw new Error('Failed to refresh Google token');
+  }
+};
+
+// Step 2: Handle OAuth callback and get access token
+exports.handleGoogleCallback = async (req, res) => {
+  const { code } = req.query;
+
+  try {
+    const { tokens } = await oauth2Client.getToken(code);
+    oauth2Client.setCredentials(tokens);
+
+    // Save the tokens (e.g., in the database) for the user
+    const accessToken = tokens.access_token;
+    const refreshToken = tokens.refresh_token;
+
+    // Use the access token to create a Google Meet link
+    const meetLink = await createGoogleMeet(accessToken, appointmentDate, timeSlot, patient, doctor);
+
+    res.status(200).json({ meetLink });
+  } catch (error) {
+    console.error("Error during Google OAuth callback:", error);
+    res.status(500).json({ error: "Failed to authenticate with Google" });
+  }
+};
+
 //Initial Form
 exports.sendForm = asyncHandler(async (req, res) => {
-  const { name, age, phone, email, gender, diseaseName, diseaseType } =
-    req.body;
+  // const { name, age, phone, email, gender, diseaseName, diseaseType } =
+  //   req.body;
+  const {
+    consultingFor,
+    name,
+    age,
+    phone,
+    whatsappNumber,
+    email,
+    gender,
+    diseaseName,
+    diseaseType, // This will now be an object from the frontend
+    currentLocation,
+    patientEntry,
+    symptomNotKnown,
+  } = req.body;
   const { referralCode, familyToken } = req.query; // Get the referral code from query params
-
+  console.log("Received request body:", req.query);
   // Check if referral code is provided
   let friendDetails = null;
   if (referralCode) {
@@ -39,47 +105,104 @@ exports.sendForm = asyncHandler(async (req, res) => {
   const familyLink = await FamilyLink.findOne({ token: familyToken });
 
   let familyDetails = null;
+  let familyGender;
   if (familyToken && familyLink) {
+    if (
+      familyLink.relationship == "Father" ||
+      familyLink.relationship == "Son" ||
+      familyLink.relationship == "Father-in-law"
+    ) {
+      familyGender = "Male";
+    } else {
+      familyGender = "Female";
+    }
     const familyDetails = {
       name: familyLink.name,
       phone: familyLink.phone,
+      gender: familyGender,
     };
+    console.log(familyDetails);
   }
 
   // Check if the patient with the given phone already exists
   const existingPatient = await Patient.findOne({ phone });
 
   if (existingPatient) {
-    // If patient already exists, return an error response
     return res.status(400).json({
+      success: false,
       message: "Patient with this mobile number already exists",
     });
   }
 
-  // Create a new patient document
-  const patientDocument = new Patient({
+  let processedDiseaseType = {
+    name: "",
+    edit: false,
+  };
+
+  // If diseaseType is provided and is an object
+  if (diseaseType && typeof diseaseType === "object") {
+    processedDiseaseType = {
+      name: diseaseType.name || "",
+      edit: diseaseType.edit || false,
+    };
+  }
+
+  const basicDetails = new Patient({
     name,
     age,
     phone,
+    whatsappNumber,
     email,
     gender,
-    diseaseName,
-    diseaseType,
+    patientEntry,
+    currentLocation,
   });
 
   if (referralCode) {
-    //await Patient.save({ coupon: referralCode });
-    patientDocument.coupon = referralCode;
+    basicDetails.coupon = referralCode;
   }
 
-  await patientDocument.save();
+  const saveBasic = await basicDetails.save();
+
+  const medicalDetails = new MedicalDetails({
+    patientId: saveBasic._id,
+    consultingFor,
+    // name,
+    // age,
+    // phone,
+    // whatsappNumber,
+    // email,
+    // gender,
+    diseaseName,
+    diseaseType: processedDiseaseType,
+    // currentLocation,
+    // patientEntry,
+    symptomNotKnown,
+  });
+
+  // Find if the phone number is already registered
+
+  const saveMedical = await medicalDetails.save();
+
+  // Create a new patient document
+  // const patientDocument = new Patient({
+  //   name,
+  //   age,
+  //   phone,
+  //   email,
+  //   gender,
+  //   diseaseName,
+  //   diseaseType,
+  // });
+
+  // await patientDocument.save();
 
   if (familyToken && familyLink) {
     const senderId = familyLink.userId;
     await Patient.findByIdAndUpdate(senderId, {
       $push: {
         familyMembers: {
-          memberId: patientDocument._id, // Add patient ID as memberId
+          memberId: basicDetails._id, // Add patient ID as memberId
           IndividulAccess: true, // Set IndividulAccess to true
           relationship: familyLink.relationship, // Include relationship role
           name: name, // Store the family member's name here
@@ -90,13 +213,35 @@ exports.sendForm = asyncHandler(async (req, res) => {
 
   res.status(201).json({
     message: "Patient data saved successfully",
-    patient: patientDocument,
+    patient: basicDetails,
   });
 });
 
 //Patient Profile
+// exports.patientDetails = asyncHandler(async (req, res) => {
+//   console.log("Patient Details endpoint reached");
+//   const phone = req.user.phone;
+//   if (!phone) {
+//     return res.status(400).json({ message: "Phone number not available" });
+//   }
+
+//   // Fetch the patient
+//   const patient = await Patient.findOne({ phone });
+
+//   if (!patient) {
+//     return res.status(404).json({ message: "Patient not found" });
+//   }
+
+//   const patientDetails = await PatientDetails.findOne({
+//     patientId: patient._id,
+//   });
+  
+//   co
+// });
+
 exports.patientDetails = asyncHandler(async (req, res) => {
   console.log("Patient Details endpoint reached");
+
   const phone = req.user.phone;
   if (!phone) {
     return res.status(400).json({ message: "Phone number not available" });
@@ -104,21 +249,34 @@ exports.patientDetails = asyncHandler(async (req, res) => {
 
   // Fetch the patient
   const patient = await Patient.findOne({ phone });
-
   if (!patient) {
     return res.status(404).json({ message: "Patient not found" });
   }
 
-  let chronicPatient = false;
-
-  if (patient.diseaseType.name.toLowerCase() === "chronic") {
-    const chronicPatientRecord = await ChronicPatient.findOne({ phone });
-    if (chronicPatientRecord) {
-      chronicPatient = true;
-    }
+  // Fetch patient details
+  const patientDetails = await PatientDetails.findOne({ patientId: patient._id });
+  if (!patientDetails) {
+    return res.status(404).json({ message: "Patient details not found" });
   }
 
-  res.status(200).json({ patient, chronicPatient });
+  // Fetch medical details
+  const medicalDetails = await MedicalDetails.findOne({ patientId: patient._id });
+  if (!medicalDetails) {
+    return res.status(404).json({ message: "Medical details not found" });
+  }
+
+  // Determine if the patient has a chronic condition
+  const isChronic = medicalDetails.diseaseType?.name === "Chronic";
+
+  // Response
+  res.status(200).json({
+    patientId: patient._id,
+    phone: patient.phone,
+    consultingFor: medicalDetails.consultingFor,
+    diseaseName: medicalDetails.diseaseName,
+    diseaseType: medicalDetails.diseaseType,
+    isChronic,
+  });
 });
 
 //Chronic Form
@@ -193,7 +351,18 @@ exports.checkAvailableSlots = asyncHandler(async (req, res) => {
   const phone = req.user.phone;
 
   const patient = await Patient.findOne({ phone });
-  const diseaseType = patient.diseaseType.name.toLowerCase();
+  const patientDetails = await PatientDetails.findOne({ patientId: patient._id });
+  if (!patientDetails) {
+    return res.status(404).json({ message: "Patient details not found" });
+  }
+
+  // Fetch medical details
+  const medicalDetails = await MedicalDetails.findOne({ patientId: patient._id });
+  if (!medicalDetails) {
+    return res.status(404).json({ message: "Medical details not found" });
+  }
+  // console.log(medicalDetails);
+  const diseaseType = medicalDetails.diseaseType.name.toLowerCase();
 
   const timeSlots = [
     "10:00",
@@ -237,31 +406,238 @@ exports.checkAvailableSlots = asyncHandler(async (req, res) => {
   res.status(200).json({ availableSlots });
 });
 
+const addEventToGoogleCalendar = async (doctorId, appointment) => {
+  try {
+    // Only select the fields we need for calendar integration
+    const doctor = await Doctor.findById(doctorId)
+      .select('googleAccessToken googleRefreshToken name email')
+      .lean(); // Use lean() to get a plain JavaScript object without Mongoose validation
+
+    if (!doctor) {
+      throw new Error("Doctor not found");
+    }
+
+    // Check if the doctor has the necessary tokens
+    if (!doctor.googleAccessToken || !doctor.googleRefreshToken) {
+      throw new Error("Doctor does not have Google OAuth tokens");
+    }
+
+    // Use the tokens to set the credentials for googleClient
+    oauth2Client.setCredentials({
+      access_token: doctor.googleAccessToken,
+      refresh_token: doctor.googleRefreshToken,
+    });
+
+    // Set up Google Calendar API
+    const calendar = google.calendar({ version: "v3", auth: oauth2Client });
+
+    // Prepare event details
+    const event = {
+      summary: `Appointment with ${appointment.patientName}`,
+      description: `Consultation for ${appointment.reason || 'General Consultation'}`,
+      start: {
+        dateTime: `${appointment.appointmentDate}T${appointment.timeSlot}:00`,
+        timeZone: "Asia/Kolkata",
+      },
+      end: {
+        dateTime: `${appointment.appointmentDate}T${
+          String(parseInt(appointment.timeSlot.split(":")[0]) + 1).padStart(2, "0")
+        }:00:00`,
+        timeZone: "Asia/Kolkata",
+      },
+      conferenceData: {
+        createRequest: {
+          requestId: `appointment-${appointment._id || Date.now()}`,
+          conferenceSolutionKey: { type: "hangoutsMeet" },
+        },
+      },
+      attendees: [{ email: appointment.patientEmail }],
+    };
+
+    try {
+      // Insert the event into the doctor's Google Calendar
+      const calendarEvent = await calendar.events.insert({
+        calendarId: "primary",
+        resource: event,
+        conferenceDataVersion: 1,
+      });
+
+      // If token was refreshed, update it in the database
+      if (calendarEvent.config && calendarEvent.config.headers) {
+        const newAccessToken = calendarEvent.config.headers.Authorization.split(' ')[1];
+        if (newAccessToken !== doctor.googleAccessToken) {
+          await Doctor.findByIdAndUpdate(doctorId, {
+            googleAccessToken: newAccessToken
+          });
+        }
+      }
+
+      return {
+        id: calendarEvent.data.id,
+        meetLink: calendarEvent.data.hangoutLink,
+        start: calendarEvent.data.start,
+        end: calendarEvent.data.end
+      };
+
+    } catch (error) {
+      if (error.message.includes('invalid_token') || error.message.includes('Invalid Credentials')) {
+        // Token expired, try to refresh
+        const { tokens } = await oauth2Client.refreshToken(doctor.googleRefreshToken);
+        
+        // Update the doctor's access token
+        await Doctor.findByIdAndUpdate(doctorId, {
+          googleAccessToken: tokens.access_token
+        });
+        
+        // Retry with new token
+        oauth2Client.setCredentials({
+          access_token: tokens.access_token,
+          refresh_token: doctor.googleRefreshToken,
+        });
+        
+        const calendarEvent = await calendar.events.insert({
+          calendarId: "primary",
+          resource: event,
+          conferenceDataVersion: 1,
+        });
+        
+        return {
+          id: calendarEvent.data.id,
+          meetLink: calendarEvent.data.hangoutLink,
+          start: calendarEvent.data.start,
+          end: calendarEvent.data.end
+        };
+      }
+      throw error;
+    }
+  } catch (error) {
+    console.error("Failed to add event to Google Calendar:", error);
+    throw new Error("Could not add event to Google Calendar.");
+  }
+};
+
+//zoom function
+const addAppointmentToCalendar = async (doctorId, appointment) => {
+  try {
+    const doctor = await Doctor.findById(doctorId);
+    if (!doctor) throw new Error("Doctor not found");
+    
+    if (!doctor.zoomAccessToken) {
+      throw new Error("Doctor is missing Zoom access token");
+    }
+
+    // Convert time to ISO string format
+    const startTime = new Date(`${appointment.appointmentDate}T${appointment.timeSlot}:00`);
+    const isoStartTime = startTime.toISOString();
+
+    const meetingDetails = {
+      topic: `Appointment with ${appointment.patientName}`,
+      type: 2, // Scheduled meeting
+      start_time: isoStartTime,
+      duration: 60,
+      timezone: "Asia/Kolkata",
+      settings: {
+        host_video: true,
+        participant_video: true,
+        join_before_host: true,
+        waiting_room: false,
+        mute_upon_entry: false,
+      }
+    };
+
+    // Add more detailed error logging
+    try {
+      const zoomResponse = await axios.post(
+        "https://api.zoom.us/v2/users/me/meetings",
+        meetingDetails,
+        {
+          headers: {
+            'Authorization': `Bearer ${doctor.zoomAccessToken}`,
+            'Content-Type': 'application/json',
+            'Accept': 'application/json'
+          }
+        }
+      );
+
+      const zoomLink = zoomResponse.data.join_url;
+      console.log("Zoom Link:", zoomLink);
+      // Rest of your calendar code...
+      oauth2Client.setCredentials({
+        access_token: process.env.GOOGLE_ACCESS_TOKEN,
+        refresh_token: process.env.GOOGLE_REFRESH_TOKEN,
+      });
+
+      const calendar = google.calendar({ version: "v3", auth: oauth2Client });
+
+      const event = {
+        summary: `Appointment with ${appointment.patientName}`,
+        description: `Consultation\nZoom Link: ${zoomLink}`,
+        start: {
+          dateTime: isoStartTime,
+          timeZone: "Asia/Kolkata",
+        },
+        end: {
+          dateTime: new Date(startTime.getTime() + 60 * 60000).toISOString(), // Add 60 minutes
+          timeZone: "Asia/Kolkata",
+        },
+        attendees: [{ email: appointment.patientEmail }],
+      };
+
+      const calendarEvent = await calendar.events.insert({
+        calendarId: "primary",
+        resource: event,
+      });
+
+      return {
+        googleEventId: calendarEvent.data.id,
+        zoomLink,
+      };
+
+    } catch (zoomError) {
+      console.error("Zoom API Error Details:", {
+        status: zoomError.response?.status,
+        statusText: zoomError.response?.statusText,
+        data: zoomError.response?.data,
+      });
+      throw new Error(`Zoom meeting creation failed: ${zoomError.response?.data?.message || zoomError.message}`);
+    }
+
+  } catch (error) {
+    console.error("Failed to add appointment to calendar:", error.message);
+    throw error; // Throw the actual error instead of a generic one
+  }
+};
 // Book appointment
 exports.bookAppointment = asyncHandler(async (req, res) => {
   const phone = req.user.phone;
-  const { appointmentDate, timeSlot, familyMemberId } = req.body; // Use familyMemberId
-  const doctorId = "66c8312667b91b0b7730e725";
+  const { appointmentDate, timeSlot, consultingFor, fullName, consultingReason, symptom} = req.body; // Use familyMemberId
+  const doctorId = "67b7f696fd7cb84dd0837b47";
   let patient;
 
   const user = await Patient.findOne({ phone });
   if (!user) return res.status(404).json({ message: "Patient not found" });
   patient = user;
+  const medicalDetails = await MedicalDetails.findOne({ patientId: user._id });
 
-  if (familyMemberId) {
-    const familyMember = user.familyMembers.find(
-      (member) => member.memberId.toString() === familyMemberId
-    );
-    if (!familyMember || familyMember.IndividulAccess) {
-      return res.status(400).json({
-        message: "Cannot book appointment for this family member.",
-      });
-    }
-    patient = await Patient.findOne({ _id: familyMember.memberId });
-    console.log(patient);
-  } else {
-    patient = user;
+  if (!medicalDetails) {
+    console.log("Medical details not found");
+    return res.status(404).json({ message: "Medical details not found" });
   }
+
+  // if (familyMemberId) {
+  //   const familyMember = user.familyMembers.find(
+  //     (member) => member.memberId.toString() === familyMemberId
+  //   );
+  //   if (!familyMember || familyMember.IndividulAccess) {
+  //     return res.status(400).json({
+  //       message: "Cannot book appointment for this family member.",
+  //     });
+  //   }
+  //   patient = await Patient.findOne({ _id: familyMember.memberId });
+  //   console.log(patient);
+  // } else {
+  //   patient = user;
+  // }
 
   // Find the doctor by ID
   const doctor = await Doctor.findById(doctorId);
@@ -270,8 +646,8 @@ exports.bookAppointment = asyncHandler(async (req, res) => {
   }
 
   // Check if the patient has a chronic condition
-  patient.diseaseType.name = "acute"; //comment it later
-  const isChronic = patient.diseaseType.name.toLowerCase() === "chronic";
+  // patient.diseaseType.name = "acute"; //comment it later
+  const isChronic = medicalDetails.diseaseType.name.toLowerCase() === "chronic";
 
   // Validate the requested time slot
   const timeSlots = [
@@ -389,15 +765,27 @@ exports.bookAppointment = asyncHandler(async (req, res) => {
     // sender.coupon = couponCode;
     // await sender.save();
     // console.log("Coupon:", sender.coupon);
-    referral.firstAppointmentDone = true;
-    referral.save();
-    //patient.coupon = "";
+    if (referral) {
+      referral.firstAppointmentDone = true;
+      await referral.save();
+    } else {
+      console.log(`No referral found with code ${couponCode} that hasn't been used.`);
+    }
   }
+    //patient.coupon = "";
+  
 
   //book appointment
   const newAppointment = new Appointment({
     patient: patient._id,
+    patientEmail: patient.email,
+    patientName: patient.name,
+    consultingFor:consultingFor,
+    consultingPersonName:fullName,
+    reason:consultingReason,
+    symptom:symptom,
     doctor: doctor._id,
+    doctorName:doctor.name,
     appointmentDate,
     timeSlot,
     isChronic,
@@ -410,12 +798,51 @@ exports.bookAppointment = asyncHandler(async (req, res) => {
     // If everything goes well, update the patient's follow-up status
     patient.follow = "Follow up-C"; // Update follow status
     await patient.save(); // Save the updated patient
+      
+    let calendarEvent;
+    if (doctor.videoPlatform === 'googleMeet') {
+      calendarEvent = await addEventToGoogleCalendar(doctorId, {
+        _id: newAppointment._id,
+        patientName: patient.name,
+        patientEmail: patient.email,
+        appointmentDate,
+        timeSlot,
+        reason: consultingReason
+      });
+      
+      // Save the Meet link to the appointment
+      if (calendarEvent && calendarEvent.meetLink) {
+        console.log("Meet link successfully saved:", calendarEvent.meetLink);
+        newAppointment.meetLink = calendarEvent.meetLink;
+        await newAppointment.save();
+      }
+    } else if (doctor.videoPlatform === 'zoom') {
+      // If Zoom is selected
+      calendarEvent = await addAppointmentToCalendar(doctor, {
+        patient: patient._id,
+        patientName: patient.name,
+        patientEmail: patient.email,
+        appointmentDate,
+        timeSlot,
+      });
+      if (calendarEvent && calendarEvent.zoomLink) {
+        console.log("Meet link successfully saved:", calendarEvent.zoomLink);
+        newAppointment.meetLink = calendarEvent.zoomLink;
+        await newAppointment.save();
+      }
+    } else {
+      return res.status(400).json({ message: "Invalid calendar type in doctor's preferences." });
+    }
 
+    
+   //scheduleMeetingActivation(appointments);
     // Return success response with applied coupon info
     res.status(201).json({
       message: "Appointment booked successfully",
+      calendarEvent, 
       appointment: newAppointment,
-      appliedCoupon: appliedCoupon ? appliedCoupon.code : null,
+      // zoomMeetingLink: zoomCalendarEvent.zoomLink,
+      // appliedCoupon: appliedCoupon ? appliedCoupon.code : null,
     });
   } catch (error) {
     // If an error occurs, revert coupon status
@@ -440,12 +867,283 @@ exports.bookAppointment = asyncHandler(async (req, res) => {
   }
 });
 
+
+// YET
+// exports.bookAppointment = asyncHandler(async (req, res) => {
+//   const phone = req.user.phone;
+//   const { appointmentDate, timeSlot, familyMemberId } = req.body;
+//   const doctorId = "66c8312667b91b0b7730e725";
+//   let patient;
+
+//   const user = await Patient.findOne({ phone });
+//   if (!user) return res.status(404).json({ message: "Patient not found" });
+//   patient = user;
+//   const medicalDetails = await MedicalDetails.findOne({ patientId: user._id });
+  
+//   if (!medicalDetails) {
+//     console.log("Medical details not found");
+//     return res.status(404).json({ message: "Medical details not found" });
+//   }
+  
+//   if (familyMemberId) {
+//     const familyMember = user.familyMembers.find(
+//       (member) => member.memberId.toString() === familyMemberId
+//     );
+//     if (!familyMember || familyMember.IndividulAccess) {
+//       return res.status(400).json({
+//         message: "Cannot book appointment for this family member.",
+//       });
+//     }
+//     patient = await Patient.findOne({ _id: familyMember.memberId });
+//     console.log(patient);
+//   } else {
+//     patient = user;
+//   }
+
+//   // Find the doctor by ID
+//   const doctor = await Doctor.findById(doctorId);
+//   if (!doctor || doctor.role !== "admin-doctor") {
+//     return res.status(404).json({ message: "Doctor not found" });
+//   }
+
+//   // Check if the patient has a chronic condition
+//   // patient.diseaseType.name = "acute"; //comment it later
+//   const isChronic = medicalDetails.diseaseType.name.toLowerCase() === "chronic";
+
+//   // Validate the requested time slot
+//   const timeSlots = ["10:00", "11:00", "12:00", "13:00", "14:00", "15:00", "16:00", "17:00"];
+//   const requestedSlotIndex = timeSlots.indexOf(timeSlot);
+
+//   if (requestedSlotIndex === -1) {
+//     return res.status(400).json({ message: "Invalid time slot" });
+//   }
+
+//   const currentDate = new Date();
+//   const appointmentDateObj = new Date(appointmentDate);
+//   const oneMonthLater = new Date();
+//   oneMonthLater.setMonth(currentDate.getMonth() + 1);
+
+//   if (appointmentDateObj < currentDate) {
+//     return res.status(400).json({ message: "Cannot book appointments in the past" });
+//   }
+
+//   if (appointmentDateObj > oneMonthLater) {
+//     return res.status(400).json({ message: "Appointments can only be booked within a month" });
+//   }
+
+//   // Fetch existing appointments for that date
+//   const appointments = await Appointment.find({ appointmentDate });
+//   const isMorningSlot = (slot) => timeSlots.indexOf(slot) < 4;
+
+//   if (isChronic) {
+//     const chronicBookingInMorning = appointments.some(
+//       (appt) => appt.isChronic && isMorningSlot(appt.timeSlot)
+//     );
+//     const chronicBookingInAfternoon = appointments.some(
+//       (appt) => appt.isChronic && !isMorningSlot(appt.timeSlot)
+//     );
+
+//     if (
+//       (isMorningSlot(timeSlot) && chronicBookingInMorning) ||
+//       (!isMorningSlot(timeSlot) && chronicBookingInAfternoon)
+//     ) {
+//       return res.status(400).json({
+//         message: "The selected time slot is not available for chronic patients",
+//       });
+//     }
+//   } else {
+//     const isSlotBooked = appointments.some((appt) => appt.timeSlot === timeSlot);
+//     if (isSlotBooked) {
+//       return res.status(400).json({ message: "Time slot is not available" });
+//     }
+//   }
+
+//   // Find available coupons for the referrer
+//   const referrerCoupons = await Referral.find({
+//     referrerId: patient._id,
+//     isUsed: false,
+//     firstAppointmentDone: true,
+//   });
+
+//   let appliedCoupon = null;
+//   if (referrerCoupons.length > 0) {
+//     appliedCoupon = referrerCoupons[0];
+//     appliedCoupon.isUsed = true;
+//     await appliedCoupon.save();
+//     console.log(`Coupon ${appliedCoupon.code} automatically applied for referrer ${patient.name}.`);
+//   }
+
+//   const previousAppointments = await Appointment.findOne({ patient: patient._id });
+//   const couponCode = patient.coupon;
+
+//   if (!previousAppointments && couponCode) {
+//     const referral = await Referral.findOne({
+//       code: couponCode,
+//       isUsed: false,
+//     });
+//     if (referral) {
+//       referral.firstAppointmentDone = true;
+//       await referral.save();
+//     }
+//   }
+
+//   try {
+//     // Get user's Google tokens
+//     console.log("Reaching......");
+//     const userGoogleTokens = await UserGoogleTokens.findOne({ userId: patient._id });
+//     console.log(userGoogleTokens);
+//     let meetLink = null;
+//     let googleEventId = null;
+
+//     if (userGoogleTokens) {
+//       try {
+//         // Try to create meet with current token
+//         const result = await createGoogleMeet(
+//           {
+//             access_token: userGoogleTokens.accessToken,
+//             refresh_token: userGoogleTokens.refreshToken
+//           },
+//           appointmentDate,
+//           timeSlot,
+//           patient,
+//           doctor
+//         );
+        
+//         meetLink = result.meetLink;
+//         googleEventId = result.eventId;
+//       } catch (error) {
+//         if (error.message === 'Google token expired') {
+//           try {
+//             // Refresh token and retry
+//             const newTokens = await refreshGoogleToken(userGoogleTokens.refreshToken);
+            
+//             await UserGoogleTokens.findOneAndUpdate(
+//               { userId: patient._id },
+//               {
+//                 accessToken: newTokens.access_token,
+//                 refreshToken: newTokens.refresh_token || userGoogleTokens.refreshToken
+//               }
+//             );
+
+//             const result = await createGoogleMeet(
+//               newTokens,
+//               appointmentDate,
+//               timeSlot,
+//               patient,
+//               doctor
+//             );
+            
+//             meetLink = result.meetLink;
+//             googleEventId = result.eventId;
+//           } catch (refreshError) {
+//             console.error('Error refreshing token:', refreshError);
+//           }
+//         } else {
+//           console.error('Error creating Google Meet:', error);
+//         }
+//       }
+//     }
+
+//     const newAppointment = new Appointment({
+//       patient: patient._id,
+//       doctor: doctor._id,
+//       appointmentDate,
+//       timeSlot,
+//       isChronic,
+//       meetLink,
+//       googleEventId
+//     });
+
+//     await newAppointment.save();
+//     patient.follow = "Follow up-C";
+//     await patient.save();
+
+//     res.status(201).json({
+//       message: "Appointment booked successfully",
+//       appointment: newAppointment,
+//       appliedCoupon: appliedCoupon ? appliedCoupon.code : null,
+//     });
+//   } catch (error) {
+//     if (appliedCoupon) {
+//       appliedCoupon.isUsed = false;
+//       await appliedCoupon.save();
+//     }
+    
+//     if (!previousAppointments && couponCode) {
+//       const referral = await Referral.findOne({
+//         code: couponCode,
+//         isUsed: false,
+//       });
+//       if (referral) {
+//         referral.firstAppointmentDone = false;
+//         await referral.save();
+//       }
+//     }
+
+//     console.error("Failed to book appointment:", error);
+//     res.status(500).json({
+//       message: "Failed to book appointment",
+//       error: error.message
+//     });
+//   }
+// });
+
+
+// async function createGoogleMeet(accessToken, appointmentDate, timeSlot, patient, doctor) {
+//   try {
+//     // Set the OAuth2 client credentials using the access token
+//     oauth2Client.setCredentials({ access_token: accessToken });
+
+//     // Create an instance of the Google Calendar API
+//     const calendar = google.calendar({ version: "v3", auth: oauth2Client });
+
+//     // Calculate the start time for the appointment
+//     const appointmentStart = new Date(appointmentDate);
+//     const timeSlotIndex = ["10:00", "11:00", "12:00", "13:00", "14:00", "15:00", "16:00", "17:00"].indexOf(timeSlot);
+//     if (timeSlotIndex === -1) throw new Error("Invalid time slot");
+
+//     appointmentStart.setHours(10 + timeSlotIndex);
+
+//     // Prepare the event data with conference solution (Google Meet)
+//     const event = {
+//       summary: "Doctor Consultation - " + doctor.name,
+//       description: `Video consultation with Dr. ${doctor.name} for patient ${patient.name}`,
+//       start: { dateTime: appointmentStart.toISOString(), timeZone: "UTC" },
+//       end: { dateTime: new Date(appointmentStart.getTime() + 60 * 60 * 1000).toISOString(), timeZone: "UTC" }, // 1 hour duration
+//       attendees: [
+//         { email: patient.email },
+//         { email: doctor.email },
+//       ],
+//       conferenceData: {
+//         createRequest: {
+//           requestId: String(Date.now()), // Unique request ID
+//           conferenceSolutionKey: { type: "hangoutsMeet" }, // Google Meet conference solution
+//         },
+//       },
+//     };
+
+//     // Create the event in the user's Google Calendar
+//     const response = await calendar.events.insert({
+//       calendarId: "primary",
+//       resource: event,
+//       conferenceDataVersion: 1,
+//     });
+
+//     // Extract and return the Google Meet link
+//     return response.data.hangoutLink;
+//   } catch (error) {
+//     console.error("Error creating Google Meet link:", error);
+//     return null;
+//   }
+// }
+
 exports.getUserAppointments = async (req, res) => {
   console.log("User Appointments endpoint reached");
   try {
     const userId = req.user.id; // Assuming you have user authentication middleware
     const { filter } = req.query;
-
+    console.log("user id:", userId);
+    console.log("Filter:", filter);
     let query = { patient: userId };
     const currentDate = moment().startOf("day");
 
@@ -471,6 +1169,30 @@ exports.getUserAppointments = async (req, res) => {
           $lt: moment(currentDate).endOf("month").toDate(),
         };
         break;
+      case "nextAppointment":
+        console.log("Inside");
+        const nextAppointment = await Appointment.findOne({
+          patient: userId,
+          appointmentDate: { $gte: new Date() },
+        })
+          .populate("patient", "name") // Get patient name
+          .sort({ appointmentDate: 1, timeSlot: 1 }) // Get closest upcoming appointment
+          .select("appointmentDate timeSlot diseaseName patient");
+        console.log("nextAppointment", nextAppointment);
+        if (!nextAppointment) {
+          return res
+            .status(404)
+            .json({ message: "No upcoming appointments found" });
+        }
+
+        const appointmentDate = new Date(nextAppointment.appointmentDate);
+        return res.json({
+          patientName: nextAppointment.patient.name,
+          diseaseName: nextAppointment.diseaseName,
+          date: appointmentDate.getDate(),
+          month: appointmentDate.toLocaleString("default", { month: "long" }),
+          time: nextAppointment.timeSlot,
+        });
       default:
         // If no filter or 'all', fetch all appointments
         break;
@@ -491,39 +1213,40 @@ exports.getUserAppointments = async (req, res) => {
 exports.updateFollowUpStatus = async (req, res) => {
   try {
     const { patientId } = req.params;
-    const patient = await Patient.findById(patientId);
-    if (!patient) {
-      return res.status(404).json({ message: "Patient not found" });
+    const appointment = await Appointment.findById(patientId);
+    if (!appointment) {
+      return res.status(404).json({ message: "appointment not found" });
     }
+    
     const exDtTm = new Date();
 
     // Update follow-up status
-    switch (patient.follow) {
+    switch (appointment.follow) {
       case "Follow up-C":
-        patient.follow = "Follow up-P";
+        appointment.follow = "Follow up-P";
         break;
       case "Follow up-P":
-        patient.follow = "Follow up-Mship";
-        patient.followUpTimestamp = exDtTm; // Store timestamp when status changes to Mship
+        appointment.follow = "Follow up-Mship";
+        appointment.followUpTimestamp = exDtTm; // Store timestamp when status changes to Mship
         break;
       case "Follow up-Mship":
-        patient.follow = "Follow up-MP";
+        appointment.follow = "Follow up-MP";
         break;
       case "Follow up-MP":
-        patient.follow = "Follow up-ship";
+        appointment.follow = "Follow up-ship";
         break;
       default:
         return res.status(400).json({ message: "Invalid follow-up status" });
     }
 
-    await patient.save();
+    await appointment.save();
 
     res.status(200).json({
       message: "Follow-up status updated successfully",
-      patient: {
-        id: patient._id,
-        follow: patient.follow,
-        followUpTimestamp: patient.followUpTimestamp,
+      appointment: {
+        id: appointment._id,
+        follow: appointment.follow,
+        followUpTimestamp: appointment.followUpTimestamp,
       },
     });
   } catch (error) {
@@ -567,8 +1290,9 @@ exports.updateFollowPatientCall = async (req, res) => {
 
 exports.referFriend = asyncHandler(async (req, res) => {
   const { friendName, friendPhone } = req.body;
+  console.log("Received request body:", req.body);
   const referrerPhone = req.user.phone;
-
+  console.log(referrerPhone);
   const generateReferralCode = () => {
     const chars =
       "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"; // 62 characters
@@ -602,20 +1326,25 @@ exports.referFriend = asyncHandler(async (req, res) => {
     const coupon = generateReferralCode();
 
     const check = await Patient.findOne({ phone: friendPhone });
+    console.log("Check", check);
     if (check) {
-      res.json({ message: "Patient with this mobile number already exists!" });
+      return res
+        .status(400)
+        .json({ message: "Patient with this mobile number already exists!" });
     }
 
     // Check if a referral for this friend already exists
-    let referral = await Referral.findOne({ referredFriendPhone: friendPhone });
-
+    let referral = await Referral.findOne({
+      referredFriendPhone: friendPhone,
+      referrerId: referrer._id, // Match the same referrer
+    });
     if (referral) {
-      // Update existing referral with a new coupon code
-      referral.code = coupon;
-      //referral.referrerId = referrer._id; // Update the referrer if needed
-      await referral.save();
+      // If the current user has already referred this friend, don't allow duplication
+      return res
+        .status(400)
+        .json({ message: "You have already referred this friend!" });
     } else {
-      // Create a new referral document if it doesn't exist
+      // Create a new referral document for the friend
       referral = await Referral.create({
         code: coupon,
         referrerId: referrer._id, // The referrer's ID
@@ -623,10 +1352,10 @@ exports.referFriend = asyncHandler(async (req, res) => {
         referredFriendName: friendName,
       });
     }
-
     // Also pass the referee phone and name via query
     // Send an SMS to the friend with the registration link
     const referralLink = `http://localhost:8000/api/patient/sendRegForm?referralCode=${coupon}`;
+    console.log(referralLink);
     // await client.messages.create({
     //   body: `Hi ${friendName}, you've been referred by ${referrer.phone}. Click here to register: ${referralLink}`,
     //   from: "+12512728851", // Replace with your Twilio phone number
@@ -646,6 +1375,7 @@ exports.referFriend = asyncHandler(async (req, res) => {
 
 exports.addFamily = async (req, res) => {
   try {
+    console.log("Endpoint reached addFamily at patientController");
     const { IndividulAccess, relationship } = req.body;
     const myPhone = req.user.phone;
     const User = await Patient.findOne({ phone: myPhone });
@@ -666,6 +1396,36 @@ exports.addFamily = async (req, res) => {
       });
     }
     if (
+      relationship.toLowerCase() !== "son" &&
+      relationship.toLowerCase() !== "daughter"
+    ) {
+      // Check if the `relationship` already exists in the user's familyMembers
+      const isPatientExists = User.familyMembers.some(
+        (member) => member.relationship === relationship
+      );
+      console.log("isPatientExists: " + isPatientExists);
+
+      if (isPatientExists) {
+        return res.status(400).json({
+          message: "This relationship already exists in familyMembers.",
+        });
+      }
+
+      // Check if the `relationship` already exists in the `familyLink` collection
+      const isFamilyLinkExists = await FamilyLink.findOne({
+        userId: User._id,
+        relationship: relationship,
+      });
+
+      if (isFamilyLinkExists) {
+        return res.status(400).json({
+          message:
+            "This relationship already exists in the familyLink collection.",
+        });
+      }
+    }
+
+    if (
       !relationship ||
       ![
         "Father",
@@ -674,6 +1434,8 @@ exports.addFamily = async (req, res) => {
         "Daughter",
         "Father in law",
         "Mother in law",
+        "Husband",
+        "Wife",
       ].includes(relationship)
     ) {
       return res
@@ -682,6 +1444,11 @@ exports.addFamily = async (req, res) => {
     }
     if (IndividulAccess) {
       const { familyMemberPhone, familyMemberName } = req.body;
+      console.log(
+        "Received request body:",
+        familyMemberName,
+        familyMemberPhone
+      );
       const check = await Patient.findOne({ phone: familyMemberPhone });
       if (check) {
         return res.json({
@@ -750,17 +1517,43 @@ exports.addFamily = async (req, res) => {
           message: "Patient with this mobile number already exists",
         });
       }
-
+      const currentLocation = country + ", " + state + ", " + city;
       // Create a new patient document
       const patientDocument = new Patient({
         name,
         age,
         phone,
         email,
-        gender,
+        // gender,
+        // diseaseName,
+        // diseaseType,
+        patientEntry: "Family Tree",
+        currentLocation,
+      });
+      const saveBasic = await patientDocument.save();
+
+      const medicalDocument = new MedicalDetails({
+        patientId: saveBasic._id,
+        consultingFor: relationship,
+        //   name,
+        //   age,
+        //   phone,
+        //   email,
+        //   // gender,
         diseaseName,
         diseaseType,
       });
+      const saveMedical = await medicalDocument.save();
+
+      if (
+        relationship == "Father" ||
+        relationship == "Son" ||
+        relationship == "Father-in-law"
+      ) {
+        patientDocument.gender = "Male";
+      } else {
+        patientDocument.gender = "Female";
+      }
       await patientDocument.save();
       const chronicPatientDocument = new ChronicPatient({
         phone,
@@ -805,6 +1598,64 @@ exports.addFamily = async (req, res) => {
   }
 };
 
+exports.getFamily = async (req, res) => {
+  try {
+    // Find the patient document using the authenticated user's ID
+    console.log("Reached!");
+    const patient = await Patient.findOne({ _id: req.user.id });
+
+    if (!patient) {
+      return res.status(404).json({
+        success: false,
+        message: "Patient not found",
+      });
+    }
+
+    // Check if familyMembers array exists
+    if (!patient.familyMembers || !Array.isArray(patient.familyMembers)) {
+      return res.json({
+        success: true,
+        familyMembers: [],
+      });
+    }
+
+    // Map through family members to structure the response
+    const enrichedFamilyMembers = patient.familyMembers.map((member) => ({
+      _id: member.memberId,
+      name: member.name,
+      relationship: member.relationship,
+      IndividulAccess: member.IndividulAccess || false,
+      dob: member.dob,
+      weight: member.weight,
+      height: member.height,
+      occupation: member.occupation,
+      country: member.country,
+      state: member.state,
+      city: member.city,
+      complaint: member.complaint,
+      symptoms: member.symptoms,
+      associatedDisease: member.associatedDisease,
+      allopathy: member.allopathy,
+      diseaseHistory: member.diseaseHistory,
+      surgeryHistory: member.surgeryHistory,
+      allergies: member.allergies,
+      bodyType: member.bodyType,
+    }));
+
+    return res.json({
+      success: true,
+      familyMembers: enrichedFamilyMembers,
+    });
+  } catch (error) {
+    console.error("Error fetching family members:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Server error while fetching family members",
+      error: error.message,
+    });
+  }
+};
+
 //getting family members details while making appointments
 exports.getFamilyMembers = async (req, res) => {
   try {
@@ -832,6 +1683,277 @@ exports.getFamilyMembers = async (req, res) => {
     res
       .status(500)
       .json({ success: false, message: "Failed to retrieve family members" });
+  }
+};
+
+exports.getPatientDetails = async (req, res) => {
+  console.log("Patient Details endpoint reached");
+  const patientId = req.user.id; // Adjust this based on your authentication method
+  console.log(patientId);
+  const patient = await Patient.findById(patientId);
+  try {
+    const patientId = req.user.id; // Adjust this based on your authentication method
+    console.log(patientId);
+    const patient = await Patient.findById(patientId);
+
+    if (!patient) {
+      return res.status(404).json({ message: "Patient not found" });
+    }
+
+    const patientDetails = {
+      consultingFor: patient.consultingFor,
+      name: patient.name,
+      age: patient.age,
+      phone: patient.phone,
+      whatsappNumber: patient.whatsappNumber,
+      email: patient.email,
+      gender: patient.gender,
+      diseaseName: patient.diseaseName,
+      diseaseType: patient.diseaseType,
+      currentLocation: patient.currentLocation,
+      patientEntry: patient.patientEntry,
+    };
+
+    res.json(patientDetails);
+  } catch (error) {
+    console.error("Error fetching family member details:", error);
+    res.status(500).json({
+      success: false,
+      message: "Error fetching family member details",
+      error: error.message,
+    });
+  }
+};
+
+exports.getFamilyMemberDetails = async (req, res) => {
+  try {
+    const { memberId } = req.params;
+    const userId = req.user.id;
+
+    const familyMember = await FamilyLink.findOne({
+      memberId,
+      userId,
+    });
+
+    if (!familyMember) {
+      return res.status(404).json({
+        success: false,
+        message: "Family member not found",
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      familyMember,
+    });
+  } catch (error) {
+    console.error("Error fetching family member details:", error);
+    res.status(500).json({
+      success: false,
+      message: "Error fetching family member details",
+      error: error.message,
+    });
+  }
+};
+
+// Update family member access
+exports.updateFamilyMemberAccess = async (req, res) => {
+  try {
+    const { memberId } = req.params;
+    const { IndividulAccess } = req.body;
+    const userId = req.user.id;
+
+    const familyMember = await FamilyLink.findOneAndUpdate(
+      { memberId, userId },
+      { IndividulAccess },
+      { new: true }
+    );
+
+    if (!familyMember) {
+      return res.status(404).json({
+        success: false,
+        message: "Family member not found",
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      familyMember,
+    });
+  } catch (error) {
+    console.error("Error updating family member access:", error);
+    res.status(500).json({
+      success: false,
+      message: "Error updating family member access",
+      error: error.message,
+    });
+  }
+};
+
+// Add new family member
+exports.addFamilyMember = async (req, res) => {
+  try {
+    const { name, relationship } = req.body;
+    const userId = req.user.id;
+
+    // Validate relationship
+    const validRelationships = [
+      "Father",
+      "Mother",
+      "Son",
+      "Daughter",
+      "Father in law",
+      "Mother in law",
+    ];
+    if (!validRelationships.includes(relationship)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid relationship type",
+      });
+    }
+
+    const newFamilyMember = new FamilyLink({
+      name,
+      relationship,
+      memberId: new mongoose.Types.ObjectId(),
+      userId,
+      IndividulAccess: false,
+    });
+
+    await newFamilyMember.save();
+
+    res.status(201).json({
+      success: true,
+      familyMember: newFamilyMember,
+    });
+  } catch (error) {
+    console.error("Error adding family member:", error);
+    res.status(500).json({
+      success: false,
+      message: "Error adding family member",
+      error: error.message,
+    });
+  }
+};
+
+// Remove family member
+exports.removeFamilyMember = async (req, res) => {
+  try {
+    const { memberId } = req.params;
+    const userId = req.user.id;
+
+    const result = await FamilyLink.findOneAndDelete({
+      memberId,
+      userId,
+    });
+
+    if (!result) {
+      return res.status(404).json({
+        success: false,
+        message: "Family member not found",
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      message: "Family member removed successfully",
+    });
+  } catch (error) {
+    console.error("Error removing family member:", error);
+    res.status(500).json({
+      success: false,
+      message: "Error removing family member",
+      error: error.message,
+    });
+  }
+};
+
+// Search family members
+exports.searchFamilyMembers = async (req, res) => {
+  try {
+    const { query } = req.query;
+    const userId = req.user.id;
+
+    const searchRegex = new RegExp(query, "i");
+
+    const familyMembers = await FamilyLink.find({
+      userId,
+      $or: [{ name: searchRegex }, { relationship: searchRegex }],
+    }).select("name relationship memberId IndividulAccess");
+
+    res.status(200).json({
+      success: true,
+      familyMembers,
+    });
+  } catch (error) {
+    console.error("Error searching family members:", error);
+    res.status(500).json({
+      success: false,
+      message: "Error searching family members",
+      error: error.message,
+    });
+  }
+};
+
+// Filter family members by relationship
+exports.filterFamilyMembers = async (req, res) => {
+  try {
+    const { relationship } = req.query;
+    const userId = req.user.id;
+
+    const query = { userId };
+
+    if (relationship !== "All") {
+      if (relationship === "Parents") {
+        query.relationship = {
+          $in: ["Father", "Mother", "Father in law", "Mother in law"],
+        };
+      } else if (relationship === "Children") {
+        query.relationship = {
+          $in: ["Son", "Daughter"],
+        };
+      } else if (relationship === "In-Laws") {
+        query.relationship = {
+          $regex: /in law/i,
+        };
+      } else if (relationship === "Individual Access") {
+        query.IndividulAccess = true;
+      } else if (relationship === "No Access") {
+        query.IndividulAccess = false;
+      }
+    }
+
+    const familyMembers = await FamilyLink.find(query)
+      .select("name relationship memberId IndividulAccess")
+      .sort({ relationship: 1, name: 1 });
+
+    res.status(200).json({
+      success: true,
+      familyMembers,
+    });
+  } catch (error) {
+    console.error("Error filtering family members:", error);
+    res.status(500).json({
+      success: false,
+      message: "Error filtering family members",
+      error: error.message,
+    });
+  }
+};
+
+exports.fetchProfile = async (req, res) => {
+  try {
+    const patientId = req.user.id; // Assuming the patient ID is stored in the JWT token
+    const patient = await Patient.findById(patientId).select('-password'); // Exclude sensitive data
+
+    if (!patient) {
+      return res.status(404).json({ message: 'Patient not found' });
+    }
+    
+    res.status(200).json(patient);
+  } catch (error) {
+    console.error('Error fetching profile:', error);
+    res.status(500).json({ message: 'Failed to fetch profile' });
   }
 };
 
