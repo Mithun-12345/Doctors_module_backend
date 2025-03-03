@@ -148,6 +148,36 @@ const patientSchema = new mongoose.Schema(
       type: String,
       required: false,
     },
+    familyMembers: [
+      {
+        memberId: {
+          type: mongoose.Schema.Types.ObjectId,
+          ref: "Patient",
+          required: true,
+        },
+        IndividulAccess: {
+          type: Boolean,
+          default: false,
+        },
+        relationship: {
+          type: String,
+          enum: [
+            "Father",
+            "Mother",
+            "Son",
+            "Daughter",
+            "Father in law",
+            "Mother in law",
+          ],
+          required: true,
+        },
+        name: {
+          type: String,
+          required: true, // Add name field to identify the family member
+        },
+        _id: false,
+      },
+    ],
   },
   { timestamps: true }
 );
