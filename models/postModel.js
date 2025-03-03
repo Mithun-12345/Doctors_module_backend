@@ -12,6 +12,8 @@ const CommentSchema = new mongoose.Schema({
     type: String,
     required: true,
   },
+  edited: { type: Boolean, default: false },
+  likes: [{ type: mongoose.Schema.Types.ObjectId, ref: "Doctor" }],
   replies: [
     // Self-referencing for nested comments
     {
@@ -44,6 +46,7 @@ const PostSchema = new mongoose.Schema({
   mediaUrl: { type: String },
   mediaType: { type: String, enum: ["image", "video", "text"], required: true },
   likes: [{ type: mongoose.Schema.Types.ObjectId, ref: "Doctor" }],
+  edited: { type: Boolean, default: false },
   comments: [
     // Reference to top-level comments
     {

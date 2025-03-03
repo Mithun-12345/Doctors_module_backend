@@ -8,6 +8,8 @@ const {
   deletePost,
   getPaginatedPosts,
   replyToComment,
+  likeComment,
+  updateComment,
 } = require("../controllers/postController");
 const upload = require("../middlewares/uploadMiddleware");
 const validateToken = require("../middlewares/validateTokenHandler");
@@ -22,5 +24,7 @@ router.post("/:id/reply", validateToken, replyToComment);
 router.put("/:id", validateToken, updatePost);
 router.delete("/:id", validateToken, deletePost);
 router.get("/homePosts", validateToken, getPaginatedPosts);
+router.post("/:id/likeComment", validateToken, likeComment);
+router.put("/:id/updateComment", validateToken, updateComment);
 
 module.exports = router;

@@ -131,6 +131,30 @@ exports.likePost = async (req, res) => {
   }
 };
 
+//Like a comment
+exports.likeComment = async (req, res) => {
+  try {
+    const comment = await Comment.findById(req.params.id);
+    if (!comment)
+      return res
+        .status(404)
+        .json({ success: false, message: "Comment not found" });
+
+    if (comment.likes.includes(req.user.id)) {
+      comment.likes = comment.likes.filter(
+        (id) => id.toString() !== req.user.id
+      );
+    } else {
+      comment.likes.push(req.user.id);
+    }
+
+    await comment.save();
+    res.status(200).json({ success: true, likes: comment.likes.length }); //Like count is returned
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+};
+
 // Comment on a Post
 exports.commentPost = async (req, res) => {
   try {
@@ -241,6 +265,7 @@ exports.updatePost = async (req, res) => {
     // Only update text (media should remain unchanged)
     if (req.body.text) {
       post.text = req.body.text;
+      post.edited = true;
     }
 
     await post.save();
@@ -346,7 +371,33 @@ exports.getPaginatedPosts = async (req, res) => {
   }
 };
 
+//Updating comment text and marking as edited
+exports.updateComment = async (req, res) => {
+  try {
+    const comment = await Comment.findById(req.params.id);
+    if (!comment) {
+      return res
+        .status(404)
+        .json({ success: false, message: "Comment not found" });
+    }
+    const phone = req.user.phone;
+    let user =
+      (await Doctor.findOne({ phone })) || (await Patient.findOne({ phone }));
+    if (!user || comment.user.toString() !== user._id.toString()) {
+      return res
+        .status(403)
+        .json({ success: false, message: "Unauthorized to edit the comment" });
+    }
+    if (req.body.text) {
+      comment.text = req.body.text;
+      comment.edited = true;
+    }
+    await comment.save();
+    res.status(200).json({ success: true, comment });
+  } catch (e) {
+    res.status(500).json({ success: false, message: e.message });
+  }
+};
+
 //Handle multiple images upload with size/limit restriction - If video, only one video should be uploaded for a post
-//Like a comment and like a post
 //Home page that display all posts where each post will have doctor name, profile picture, and time of post(Eg.,1d,2w,1m,2y)
-//Update a comment/reply and mark as 'Edited'
