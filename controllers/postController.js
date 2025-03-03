@@ -2,6 +2,10 @@ const { Post, Comment } = require("../models/postModel");
 const Doctor = require("../models/doctorModel");
 const Patient = require("../models/patientModel");
 const cloudinary = require("cloudinary").v2;
+const moment = require("moment");
+
+// Helper function to format time
+const formatTimeAgo = (date) => moment(date).fromNow();
 
 // Create a Post
 exports.createPost = async (req, res) => {
@@ -93,12 +97,26 @@ exports.getPosts = async (req, res) => {
         ],
       });
 
+    // Format the time for posts and comments
+    const formattedPosts = posts.map((post) => ({
+      ...post.toObject(),
+      timeAgo: formatTimeAgo(post.createdAt),
+      comments: post.comments.map((comment) => ({
+        ...comment.toObject(),
+        timeAgo: formatTimeAgo(comment.createdAt),
+        replies: comment.replies.map((reply) => ({
+          ...reply.toObject(),
+          timeAgo: formatTimeAgo(reply.createdAt),
+        })),
+      })),
+    }));
+
     const totalPosts = await Post.countDocuments({ author: doctor._id });
     const totalPages = Math.ceil(totalPosts / limit);
 
     res.status(200).json({
       success: true,
-      posts,
+      posts: formattedPosts,
       page,
       totalPages,
       commentPage,
@@ -355,12 +373,26 @@ exports.getPaginatedPosts = async (req, res) => {
         ],
       });
 
+    // Format the time for posts and comments
+    const formattedPosts = posts.map((post) => ({
+      ...post.toObject(),
+      timeAgo: formatTimeAgo(post.createdAt),
+      comments: post.comments.map((comment) => ({
+        ...comment.toObject(),
+        timeAgo: formatTimeAgo(comment.createdAt),
+        replies: comment.replies.map((reply) => ({
+          ...reply.toObject(),
+          timeAgo: formatTimeAgo(reply.createdAt),
+        })),
+      })),
+    }));
+
     const totalPosts = await Post.countDocuments();
     const totalPages = Math.ceil(totalPosts / limit);
 
     res.status(200).json({
       success: true,
-      posts,
+      posts: formattedPosts,
       page,
       totalPages,
       commentPage,
