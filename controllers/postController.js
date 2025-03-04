@@ -62,50 +62,70 @@ exports.getPosts = async (req, res) => {
         .json({ success: false, message: "Doctor not found" });
     }
 
-    const page = parseInt(req.query.page) || 1; // Post page number
-    const limit = parseInt(req.query.limit) || 10; // Posts per request
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 10;
     const skip = (page - 1) * limit;
 
-    const commentPage = parseInt(req.query.commentPage) || 1; // Comment page number
-    const commentLimit = parseInt(req.query.commentLimit) || 5; // Comments per post
+    const commentPage = parseInt(req.query.commentPage) || 1;
+    const commentLimit = parseInt(req.query.commentLimit) || 5;
     const commentSkip = (commentPage - 1) * commentLimit;
 
+    // Fetch posts
     const posts = await Post.find({ author: doctor._id })
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(limit)
-      .populate("author", "name profilePhoto") // Include author's profile picture
+      .populate("author", "name profilePhoto")
       .populate({
         path: "comments",
         options: {
           sort: { createdAt: -1 },
           skip: commentSkip,
           limit: commentLimit,
-        }, // Paginate comments
-        populate: [
-          {
-            path: "user",
-            select: "name profilePhoto", // Populate user who commented
-          },
-          {
-            path: "replies",
-            populate: {
-              path: "user",
-              select: "name profilePhoto", // Populate user who replied
-            },
-          },
-        ],
+        },
+        populate: { path: "replies" },
       });
 
-    // Format the time for posts and comments
+    // Collect all user IDs (from comments and replies)
+    let userIds = new Set();
+    posts.forEach((post) => {
+      post.comments.forEach((comment) => {
+        userIds.add(comment.user.toString());
+        comment.replies.forEach((reply) => userIds.add(reply.user.toString()));
+      });
+    });
+
+    // Fetch all users in a single query
+    const users = await Promise.all([
+      Doctor.find({ _id: { $in: [...userIds] } }).select(
+        "_id name profilePhoto"
+      ),
+      Patient.find({ _id: { $in: [...userIds] } }).select(
+        "_id name profilePhoto"
+      ),
+    ]);
+    const allUsers = [...users[0], ...users[1]];
+
+    // Create a user lookup map
+    const userMap = {};
+    allUsers.forEach((user) => {
+      userMap[user._id] = {
+        ...user.toObject(),
+        userType: user instanceof Doctor ? "Doctor" : "Patient",
+      };
+    });
+
+    // Format posts with user details and timeAgo
     const formattedPosts = posts.map((post) => ({
       ...post.toObject(),
       timeAgo: formatTimeAgo(post.createdAt),
       comments: post.comments.map((comment) => ({
         ...comment.toObject(),
+        user: userMap[comment.user] || null, // Attach user details
         timeAgo: formatTimeAgo(comment.createdAt),
         replies: comment.replies.map((reply) => ({
           ...reply.toObject(),
+          user: userMap[reply.user] || null,
           timeAgo: formatTimeAgo(reply.createdAt),
         })),
       })),
@@ -186,13 +206,22 @@ exports.commentPost = async (req, res) => {
 
     const phone = req.user.phone;
     let userId = await Doctor.findOne({ phone });
+    let userType = "Doctor";
     if (!userId) {
       userId = await Patient.findOne({ phone });
+      userType = "Patient";
+    }
+
+    if (!text.trim()) {
+      return res
+        .status(400)
+        .json({ success: false, message: "Comment cannot be empty." });
     }
 
     // Create a new top-level comment
     const newComment = new Comment({
       user: userId,
+      userType: userType,
       text,
       parentComment: null, // Top-level comment has no parent
     });
@@ -228,13 +257,22 @@ exports.replyToComment = async (req, res) => {
 
     const phone = req.user.phone;
     let userId = await Doctor.findOne({ phone });
+    let userType = "Doctor";
     if (!userId) {
       userId = await Patient.findOne({ phone });
+      userType = "Patient";
+    }
+
+    if (!text.trim()) {
+      return res
+        .status(400)
+        .json({ success: false, message: "Comment cannot be empty." });
     }
 
     // Create a new reply comment
     const newReply = new Comment({
       user: userId,
+      userType,
       text,
       parentComment: parentComment._id, // Set parent reference
     });
@@ -328,6 +366,7 @@ exports.deletePost = async (req, res) => {
       await cloudinary.uploader.destroy(publicId);
     }
     await Post.findByIdAndDelete(post._id);
+    await Comment.deleteMany({ _id: { $in: post.comments } });
     return res
       .status(200)
       .json({ success: true, message: "Post deleted successfully" });
@@ -338,50 +377,70 @@ exports.deletePost = async (req, res) => {
 
 exports.getPaginatedPosts = async (req, res) => {
   try {
-    const page = parseInt(req.query.page) || 1; // Post page number
-    const limit = parseInt(req.query.limit) || 10; // Posts per request
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 10;
     const skip = (page - 1) * limit;
 
-    const commentPage = parseInt(req.query.commentPage) || 1; // Comment page number
-    const commentLimit = parseInt(req.query.commentLimit) || 5; // Comments per post
+    const commentPage = parseInt(req.query.commentPage) || 1;
+    const commentLimit = parseInt(req.query.commentLimit) || 5;
     const commentSkip = (commentPage - 1) * commentLimit;
 
+    // Fetch posts
     const posts = await Post.find()
-      .sort({ createdAt: -1 }) // Newest posts first
+      .sort({ createdAt: -1 })
       .skip(skip)
       .limit(limit)
-      .populate("author", "name profilePhoto") // Include doctor's profile picture
+      .populate("author", "name profilePhoto")
       .populate({
         path: "comments",
         options: {
           sort: { createdAt: -1 },
           skip: commentSkip,
           limit: commentLimit,
-        }, // Paginate comments
-        populate: [
-          {
-            path: "user",
-            select: "name profilePhoto", // Populate user who commented
-          },
-          {
-            path: "replies",
-            populate: {
-              path: "user",
-              select: "name profilePhoto", // Populate user who replied
-            },
-          },
-        ],
+        },
+        populate: { path: "replies" },
       });
 
-    // Format the time for posts and comments
+    // Collect all user IDs (from comments and replies)
+    let userIds = new Set();
+    posts.forEach((post) => {
+      post.comments.forEach((comment) => {
+        userIds.add(comment.user.toString());
+        comment.replies.forEach((reply) => userIds.add(reply.user.toString()));
+      });
+    });
+
+    // Fetch all users in a single query
+    const users = await Promise.all([
+      Doctor.find({ _id: { $in: [...userIds] } }).select(
+        "_id name profilePhoto"
+      ),
+      Patient.find({ _id: { $in: [...userIds] } }).select(
+        "_id name profilePhoto"
+      ),
+    ]);
+    const allUsers = [...users[0], ...users[1]];
+
+    // Create a user lookup map
+    const userMap = {};
+    allUsers.forEach((user) => {
+      userMap[user._id] = {
+        ...user.toObject(),
+        userType: user instanceof Doctor ? "Doctor" : "Patient",
+      };
+    });
+
+    // Format posts with user details and timeAgo
     const formattedPosts = posts.map((post) => ({
       ...post.toObject(),
       timeAgo: formatTimeAgo(post.createdAt),
       comments: post.comments.map((comment) => ({
         ...comment.toObject(),
+        user: userMap[comment.user] || null, // Attach user details
         timeAgo: formatTimeAgo(comment.createdAt),
         replies: comment.replies.map((reply) => ({
           ...reply.toObject(),
+          user: userMap[reply.user] || null,
           timeAgo: formatTimeAgo(reply.createdAt),
         })),
       })),
@@ -432,4 +491,3 @@ exports.updateComment = async (req, res) => {
 };
 
 //Handle multiple images upload with size/limit restriction - If video, only one video should be uploaded for a post
-//Home page that display all posts where each post will have doctor name, profile picture, and time of post(Eg.,1d,2w,1m,2y)
