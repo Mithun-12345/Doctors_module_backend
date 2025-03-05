@@ -123,7 +123,7 @@ app.get("http://localhost:5000/api/generate-employee-id", (req, res) => {
 
 // Example API route
 app.get("/api/example", (req, res) => {
-  res.json({ message: "Hello from the API!" });
+  res.json({ message: "Hello jijijihui the API!" });
 });
 
 app.get("/api/chat/:senderId/:receiverId", async (req, res) => {
@@ -236,6 +236,6 @@ app.post("/api/validate-token", validateToken, (req, res) => {
 });
 
 const PORT = process.env.PORT || 8000;
-app.listen(PORT, () => {
+app.listen(PORT,() => {
   console.log(`Server running on port ${PORT}`);
 });

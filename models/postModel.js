@@ -4,8 +4,11 @@ const mongoose = require("mongoose");
 const CommentSchema = new mongoose.Schema({
   user: {
     type: mongoose.Schema.Types.ObjectId,
-    ref: "Doctor",
-    // enum: ["Doctor", "Patient"],
+    required: true,
+  },
+  userType: {
+    type: String,
+    enum: ["Doctor", "Patient"],
     required: true,
   },
   text: {
