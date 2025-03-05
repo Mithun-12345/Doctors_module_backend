@@ -34,7 +34,7 @@ const validateToken = asyncHandler(async (req, res, next) => {
 
       // If not a patient, check for doctor
       if (!user) {
-        user = await Doctor.findOne({ phone: decoded.user.phone }); //Initially it was : user = await Doctor.findOne({ phone: decoded.phone });
+        user = await Doctor.findOne({ phone: decoded.phone }); //Initially it was : user = await Doctor.findOne({ phone: decoded.phone });
         // console.log("Doctor found:", user);
       }
 

@@ -45,7 +45,7 @@ const appointmentSchema = new mongoose.Schema(
       type: Boolean,
       default: false,
     },
-
+    expiresAt: { type: Date, index: { expires: '1m' } },
     // including from patient model !!!!
     consultingFor: {
       type: String,
@@ -109,6 +109,10 @@ const appointmentSchema = new mongoose.Schema(
     meetLink: {
       type: String,
       required: false,
+    },
+    notes: {
+      type: String,
+      default: "",
     }
   },
   { timestamps: true }

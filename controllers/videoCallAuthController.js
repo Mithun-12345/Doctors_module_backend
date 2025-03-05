@@ -12,7 +12,7 @@ const zoomAuthorize = (req, res) => {
 const zoomCallback = async (req, res) => {
   console.log("Call back called");
   const code = req.query.code;
-  const doctorId = "67b7f696fd7cb84dd0837b47";
+  const doctorId = "67bc3391654d85340a8ce713";
   try {
     const response = await axios.post("https://zoom.us/oauth/token", null, {
       params: {
@@ -57,7 +57,7 @@ const googleAuthorize = (req, res) => {
 // Google OAuth Callback
 const googleCallback = async (req, res) => {
   const code = req.query.code;
-  const doctorId = "67b7f696fd7cb84dd0837b47";
+  const doctorId = "67bc3391654d85340a8ce713";
   try {
     const response = await axios.post("https://oauth2.googleapis.com/token", {
       code,

@@ -445,6 +445,7 @@ exports.getAllAppointmentsWithPatientData = async (req, res) => {
             medicalPayment: appointment.medicalPayment,
             callCount: appointment.callCount,
             comments: appointment.comments,
+            meetLink: appointment.meetLink
           },
         });
       });
@@ -454,5 +455,24 @@ exports.getAllAppointmentsWithPatientData = async (req, res) => {
   } catch (error) {
     console.error(error);
     res.status(500).json({ message: "Internal server error" });
+  }
+};
+
+exports.submitNotes = async (req, res) => {
+  const { appointmentID, notes } = req.body;
+
+  try {
+    const appointment = await Appointment.findById(appointmentID);
+    if (!appointment) {
+      return res.status(404).json({ success: false, message: "Appointment not found" });
+    }
+
+    appointment.notes = notes;
+    await appointment.save();
+
+    res.status(200).json({ success: true, message: "Notes submitted successfully" });
+  } catch (error) {
+    console.error("Error submitting notes:", error);
+    res.status(500).json({ success: false, message: "Internal server error" });
   }
 };
