@@ -418,7 +418,8 @@ const addEventToGoogleCalendar = async (doctorId, appointment) => {
     }
 
     // Check if the doctor has the necessary tokens
-    if (!doctor.googleAccessToken || !doctor.googleRefreshToken) {
+    // if (!doctor.googleAccessToken || !doctor.googleRefreshToken) {
+      if (!doctor.googleAccessToken) {
       throw new Error("Doctor does not have Google OAuth tokens");
     }
 
@@ -516,6 +517,34 @@ const addEventToGoogleCalendar = async (doctorId, appointment) => {
   }
 };
 
+const refreshZoomToken = async (doctor) => {
+  try {
+    console.log("Inside!");
+    const response = await axios.post("https://zoom.us/oauth/token", null, {
+      params: {
+        grant_type: "refresh_token",
+        refresh_token: doctor.zoomRefreshToken,
+      },
+      headers: {
+        Authorization: `Basic ${Buffer.from(`${ZOOM_CLIENT_ID}:${ZOOM_CLIENT_SECRET}`).toString("base64")}`,
+      },
+    });
+
+    const { access_token, refresh_token } = response.data;
+    console.log("yuhh! Zoom Access Token:", access_token);
+    console.log("Zoom Refresh Token:", refresh_token);
+    // Save the new tokens in the doctor's database
+    doctor.zoomAccessToken = access_token;
+    doctor.zoomRefreshToken = refresh_token;
+    await doctor.save();
+
+    return access_token;
+  } catch (error) {
+    console.error("Failed to refresh Zoom token:", error);
+    throw new Error("Zoom token refresh failed");
+  }
+};
+
 //zoom function
 const addAppointmentToCalendar = async (doctorId, appointment) => {
   try {
@@ -525,11 +554,20 @@ const addAppointmentToCalendar = async (doctorId, appointment) => {
     if (!doctor.zoomAccessToken) {
       throw new Error("Doctor is missing Zoom access token");
     }
+    
+    let accessToken = doctor.zoomAccessToken;
+    try {
+      await axios.get("https://api.zoom.us/v2/users/me", {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      });
+    } catch (error) {
+      console.log("Zoom token expired, refreshing...");
+      accessToken = await refreshZoomToken(doctor);
+    }
 
-    // Convert time to ISO string format
     const startTime = new Date(`${appointment.appointmentDate}T${appointment.timeSlot}:00`);
     const isoStartTime = startTime.toISOString();
-
+    
     const meetingDetails = {
       topic: `Appointment with ${appointment.patientName}`,
       type: 2, // Scheduled meeting
@@ -540,11 +578,26 @@ const addAppointmentToCalendar = async (doctorId, appointment) => {
         host_video: true,
         participant_video: true,
         join_before_host: true,
-        waiting_room: false,
-        mute_upon_entry: false,
+        waiting_room: true,  // Enable waiting room for better control
+        mute_upon_entry: true,  // Participants are muted when they join
+        approval_type: 0, // No registration required
+        registration_type: 1,
+        audio: "both", // Allow both computer and phone audio
+        enforce_login: false,
+        auto_recording: "none",
+        // alternative_hosts: doctor.personalEmail,
+        meeting_authentication: false,
+        screen_share: false, // Only host can share screen
+        whiteboard: false, // Disable whiteboard access for participants
+        allow_multiple_devices: false, // Prevent login from multiple devices
+        allow_participants_to_rename: false, // Prevent participants from renaming themselves
+        allow_participants_chat: false, // Disable chat for participants
+        allow_file_transfer: false, // Disable file transfer
+        allow_live_streaming: false, // Disable live streaming
+        allow_participants_unmute: false, // Prevent participants from unmuting themselves
+        allow_participants_reactions: false, // Disable reactions
       }
     };
-
     // Add more detailed error logging
     try {
       const zoomResponse = await axios.post(
@@ -562,34 +615,34 @@ const addAppointmentToCalendar = async (doctorId, appointment) => {
       const zoomLink = zoomResponse.data.join_url;
       console.log("Zoom Link:", zoomLink);
       // Rest of your calendar code...
-      oauth2Client.setCredentials({
-        access_token: process.env.GOOGLE_ACCESS_TOKEN,
-        refresh_token: process.env.GOOGLE_REFRESH_TOKEN,
-      });
+      // oauth2Client.setCredentials({
+      //   access_token: process.env.GOOGLE_ACCESS_TOKEN,
+      //   refresh_token: process.env.GOOGLE_REFRESH_TOKEN,
+      // });
 
-      const calendar = google.calendar({ version: "v3", auth: oauth2Client });
+      // const calendar = google.calendar({ version: "v3", auth: oauth2Client });
 
-      const event = {
-        summary: `Appointment with ${appointment.patientName}`,
-        description: `Consultation\nZoom Link: ${zoomLink}`,
-        start: {
-          dateTime: isoStartTime,
-          timeZone: "Asia/Kolkata",
-        },
-        end: {
-          dateTime: new Date(startTime.getTime() + 60 * 60000).toISOString(), // Add 60 minutes
-          timeZone: "Asia/Kolkata",
-        },
-        attendees: [{ email: appointment.patientEmail }],
-      };
+      // const event = {
+      //   summary: `Appointment with ${appointment.patientName}`,
+      //   description: `Consultation\nZoom Link: ${zoomLink}`,
+      //   start: {
+      //     dateTime: isoStartTime,
+      //     timeZone: "Asia/Kolkata",
+      //   },
+      //   end: {
+      //     dateTime: new Date(startTime.getTime() + 60 * 60000).toISOString(), // Add 60 minutes
+      //     timeZone: "Asia/Kolkata",
+      //   },
+      //   attendees: [{ email: appointment.patientEmail }],
+      // };
 
-      const calendarEvent = await calendar.events.insert({
-        calendarId: "primary",
-        resource: event,
-      });
+      // const calendarEvent = await calendar.events.insert({
+      //   calendarId: "primary",
+      //   resource: event,
+      // });
 
       return {
-        googleEventId: calendarEvent.data.id,
+        // googleEventId: calendarEvent.data.id,
         zoomLink,
       };
 
@@ -607,11 +660,199 @@ const addAppointmentToCalendar = async (doctorId, appointment) => {
     throw error; // Throw the actual error instead of a generic one
   }
 };
+
+exports.finalizeAppointment = asyncHandler(async (req, res) => {
+  const { appointmentId, paymentId } = req.body;
+  
+  // Find the draft appointment
+  const appointment = await Appointment.findById(appointmentId);
+  
+  if (!appointment || appointment.status !== 'draft') {
+    return res.status(404).json({ message: "Draft appointment not found" });
+  }
+  
+  // Find the patient
+  const phone = req.user.phone;
+  const user = await Patient.findOne({ phone });
+  if (!user) return res.status(404).json({ message: "Patient not found" });
+  
+  const doctorId = "67bc3391654d85340a8ce713"; // Get from configuration
+  const doctor = await Doctor.findById(doctorId);
+  if (!doctor) {
+    return res.status(404).json({ message: "Doctor not found" });
+  }
+  
+  // Ensure the appointment belongs to this user
+  if (appointment.patient.toString() !== user._id.toString()) {
+    return res.status(403).json({ message: "Not authorized to finalize this appointment" });
+  }
+  
+  try {
+    // Verify the appointment is still available (double check)
+    const timeSlots = ["10:00", "11:00", "12:00", "13:00", "14:00", "15:00", "16:00", "17:00"];
+    const isMorningSlot = (slot) => timeSlots.indexOf(slot) < 4;
+    
+    // Check for conflicting appointments again (in case something was booked between draft and finalize)
+    const conflictingAppointments = await Appointment.find({
+      appointmentDate: appointment.appointmentDate,
+      status: 'confirmed',
+      _id: { $ne: appointment._id } // Exclude current appointment
+    });
+    
+    if (appointment.isChronic) {
+      const chronicBookingInMorning = conflictingAppointments.some(
+        (appt) => appt.isChronic && isMorningSlot(appt.timeSlot)
+      );
+      const chronicBookingInAfternoon = conflictingAppointments.some(
+        (appt) => appt.isChronic && !isMorningSlot(appt.timeSlot)
+      );
+      
+      if (
+        (isMorningSlot(appointment.timeSlot) && chronicBookingInMorning) ||
+        (!isMorningSlot(appointment.timeSlot) && chronicBookingInAfternoon)
+      ) {
+        return res.status(400).json({
+          message: "The selected time slot is no longer available for chronic patients",
+        });
+      }
+    } else {
+      const isSlotBooked = conflictingAppointments.some(
+        (appt) => appt.timeSlot === appointment.timeSlot
+      );
+      
+      if (isSlotBooked) {
+        return res.status(400).json({ message: "Time slot is no longer available" });
+      }
+    }
+    
+    // Apply referral logic
+    const previousAppointments = await Appointment.find({
+      patient: user._id,
+      status: 'confirmed'
+    });
+    
+    const couponCode = user.coupon;
+    if (previousAppointments.length === 0 && couponCode) {
+      const referral = await Referral.findOne({
+        code: couponCode,
+        isUsed: false,
+      });
+      if (referral) {
+        referral.firstAppointmentDone = true;
+        await referral.save();
+      }
+    }
+    
+    // Auto-apply coupon logic for referrer
+    let appliedCoupon = null;
+    const referrerCoupons = await Referral.find({
+      referrerId: user._id,
+      isUsed: false,
+      firstAppointmentDone: true,
+    });
+    
+    if (referrerCoupons.length > 0) {
+      appliedCoupon = referrerCoupons[0];
+      appliedCoupon.isUsed = true; // Mark the coupon as used
+      await appliedCoupon.save();
+      console.log(
+        `Coupon ${appliedCoupon.code} automatically applied for referrer ${user.name}.`
+      );
+    }
+    
+    // Format the date to YYYY-MM-DD format
+    const formatDateForCalendar = (dateString) => {
+      const date = new Date(dateString);
+      const year = date.getFullYear();
+      const month = String(date.getMonth() + 1).padStart(2, '0');
+      const day = String(date.getDate()).padStart(2, '0');
+      
+      return `${year}-${month}-${day}`;
+    };
+    
+    // Generate meeting link
+    let calendarEvent;
+    const formattedDate = formatDateForCalendar(appointment.appointmentDate);
+    
+    if (doctor.videoPlatform === 'googleMeet') {
+      calendarEvent = await addEventToGoogleCalendar(doctorId, {
+        _id: appointment._id,
+        patientName: user.name,
+        patientEmail: user.email,
+        appointmentDate: formattedDate,
+        timeSlot: appointment.timeSlot,
+        reason: appointment.reason
+      });
+      
+      if (calendarEvent && calendarEvent.meetLink) {
+        appointment.meetLink = calendarEvent.meetLink;
+      }
+    } else if (doctor.videoPlatform === 'zoom') {
+      calendarEvent = await addAppointmentToCalendar(doctor, {
+        patient: user._id,
+        patientName: user.name,
+        patientEmail: user.email,
+        appointmentDate: formattedDate,
+        timeSlot: appointment.timeSlot,
+      });
+      
+      if (calendarEvent && calendarEvent.zoomLink) {
+        appointment.meetLink = calendarEvent.zoomLink;
+      }
+    } else {
+      return res.status(400).json({ message: "Invalid calendar type in doctor's preferences." });
+    }
+    
+    // Update appointment status and add payment details
+    appointment.status = 'confirmed';
+    appointment.paymentId = paymentId;
+    
+    // Update patient follow-up status
+    user.follow = "Follow up-C";
+    await user.save();
+    
+    // Save the updated appointment
+    await appointment.save();
+    
+    res.status(200).json({
+      success: true,
+      message: "Appointment finalized successfully",
+      calendarEvent,
+      appointment,
+      appliedCoupon: appliedCoupon ? appliedCoupon.code : null,
+    });
+  } catch (error) {
+    // If an error occurs, revert coupon status if applied
+    if (appliedCoupon) {
+      appliedCoupon.isUsed = false;
+      await appliedCoupon.save();
+    }
+    
+    // If referral was applied, revert it
+    if (previousAppointments && previousAppointments.length === 0 && couponCode) {
+      const referral = await Referral.findOne({
+        code: couponCode,
+        isUsed: false,
+      });
+      if (referral) {
+        referral.firstAppointmentDone = false;
+        await referral.save();
+      }
+    }
+    
+    console.error("Failed to finalize appointment:", error);
+    res.status(500).json({
+      message: "Failed to finalize appointment",
+      error: error.message,
+    });
+  }
+});
+
 // Book appointment
 exports.bookAppointment = asyncHandler(async (req, res) => {
   const phone = req.user.phone;
   const { appointmentDate, timeSlot, consultingFor, fullName, consultingReason, symptom} = req.body; // Use familyMemberId
-  const doctorId = "67b7f696fd7cb84dd0837b47";
+  const doctorId = "67bc3391654d85340a8ce713";// should be changed
   let patient;
 
   const user = await Patient.findOne({ phone });
@@ -866,276 +1107,6 @@ exports.bookAppointment = asyncHandler(async (req, res) => {
     console.error("Failed to book appointment:", error);
   }
 });
-
-
-// YET
-// exports.bookAppointment = asyncHandler(async (req, res) => {
-//   const phone = req.user.phone;
-//   const { appointmentDate, timeSlot, familyMemberId } = req.body;
-//   const doctorId = "66c8312667b91b0b7730e725";
-//   let patient;
-
-//   const user = await Patient.findOne({ phone });
-//   if (!user) return res.status(404).json({ message: "Patient not found" });
-//   patient = user;
-//   const medicalDetails = await MedicalDetails.findOne({ patientId: user._id });
-  
-//   if (!medicalDetails) {
-//     console.log("Medical details not found");
-//     return res.status(404).json({ message: "Medical details not found" });
-//   }
-  
-//   if (familyMemberId) {
-//     const familyMember = user.familyMembers.find(
-//       (member) => member.memberId.toString() === familyMemberId
-//     );
-//     if (!familyMember || familyMember.IndividulAccess) {
-//       return res.status(400).json({
-//         message: "Cannot book appointment for this family member.",
-//       });
-//     }
-//     patient = await Patient.findOne({ _id: familyMember.memberId });
-//     console.log(patient);
-//   } else {
-//     patient = user;
-//   }
-
-//   // Find the doctor by ID
-//   const doctor = await Doctor.findById(doctorId);
-//   if (!doctor || doctor.role !== "admin-doctor") {
-//     return res.status(404).json({ message: "Doctor not found" });
-//   }
-
-//   // Check if the patient has a chronic condition
-//   // patient.diseaseType.name = "acute"; //comment it later
-//   const isChronic = medicalDetails.diseaseType.name.toLowerCase() === "chronic";
-
-//   // Validate the requested time slot
-//   const timeSlots = ["10:00", "11:00", "12:00", "13:00", "14:00", "15:00", "16:00", "17:00"];
-//   const requestedSlotIndex = timeSlots.indexOf(timeSlot);
-
-//   if (requestedSlotIndex === -1) {
-//     return res.status(400).json({ message: "Invalid time slot" });
-//   }
-
-//   const currentDate = new Date();
-//   const appointmentDateObj = new Date(appointmentDate);
-//   const oneMonthLater = new Date();
-//   oneMonthLater.setMonth(currentDate.getMonth() + 1);
-
-//   if (appointmentDateObj < currentDate) {
-//     return res.status(400).json({ message: "Cannot book appointments in the past" });
-//   }
-
-//   if (appointmentDateObj > oneMonthLater) {
-//     return res.status(400).json({ message: "Appointments can only be booked within a month" });
-//   }
-
-//   // Fetch existing appointments for that date
-//   const appointments = await Appointment.find({ appointmentDate });
-//   const isMorningSlot = (slot) => timeSlots.indexOf(slot) < 4;
-
-//   if (isChronic) {
-//     const chronicBookingInMorning = appointments.some(
-//       (appt) => appt.isChronic && isMorningSlot(appt.timeSlot)
-//     );
-//     const chronicBookingInAfternoon = appointments.some(
-//       (appt) => appt.isChronic && !isMorningSlot(appt.timeSlot)
-//     );
-
-//     if (
-//       (isMorningSlot(timeSlot) && chronicBookingInMorning) ||
-//       (!isMorningSlot(timeSlot) && chronicBookingInAfternoon)
-//     ) {
-//       return res.status(400).json({
-//         message: "The selected time slot is not available for chronic patients",
-//       });
-//     }
-//   } else {
-//     const isSlotBooked = appointments.some((appt) => appt.timeSlot === timeSlot);
-//     if (isSlotBooked) {
-//       return res.status(400).json({ message: "Time slot is not available" });
-//     }
-//   }
-
-//   // Find available coupons for the referrer
-//   const referrerCoupons = await Referral.find({
-//     referrerId: patient._id,
-//     isUsed: false,
-//     firstAppointmentDone: true,
-//   });
-
-//   let appliedCoupon = null;
-//   if (referrerCoupons.length > 0) {
-//     appliedCoupon = referrerCoupons[0];
-//     appliedCoupon.isUsed = true;
-//     await appliedCoupon.save();
-//     console.log(`Coupon ${appliedCoupon.code} automatically applied for referrer ${patient.name}.`);
-//   }
-
-//   const previousAppointments = await Appointment.findOne({ patient: patient._id });
-//   const couponCode = patient.coupon;
-
-//   if (!previousAppointments && couponCode) {
-//     const referral = await Referral.findOne({
-//       code: couponCode,
-//       isUsed: false,
-//     });
-//     if (referral) {
-//       referral.firstAppointmentDone = true;
-//       await referral.save();
-//     }
-//   }
-
-//   try {
-//     // Get user's Google tokens
-//     console.log("Reaching......");
-//     const userGoogleTokens = await UserGoogleTokens.findOne({ userId: patient._id });
-//     console.log(userGoogleTokens);
-//     let meetLink = null;
-//     let googleEventId = null;
-
-//     if (userGoogleTokens) {
-//       try {
-//         // Try to create meet with current token
-//         const result = await createGoogleMeet(
-//           {
-//             access_token: userGoogleTokens.accessToken,
-//             refresh_token: userGoogleTokens.refreshToken
-//           },
-//           appointmentDate,
-//           timeSlot,
-//           patient,
-//           doctor
-//         );
-        
-//         meetLink = result.meetLink;
-//         googleEventId = result.eventId;
-//       } catch (error) {
-//         if (error.message === 'Google token expired') {
-//           try {
-//             // Refresh token and retry
-//             const newTokens = await refreshGoogleToken(userGoogleTokens.refreshToken);
-            
-//             await UserGoogleTokens.findOneAndUpdate(
-//               { userId: patient._id },
-//               {
-//                 accessToken: newTokens.access_token,
-//                 refreshToken: newTokens.refresh_token || userGoogleTokens.refreshToken
-//               }
-//             );
-
-//             const result = await createGoogleMeet(
-//               newTokens,
-//               appointmentDate,
-//               timeSlot,
-//               patient,
-//               doctor
-//             );
-            
-//             meetLink = result.meetLink;
-//             googleEventId = result.eventId;
-//           } catch (refreshError) {
-//             console.error('Error refreshing token:', refreshError);
-//           }
-//         } else {
-//           console.error('Error creating Google Meet:', error);
-//         }
-//       }
-//     }
-
-//     const newAppointment = new Appointment({
-//       patient: patient._id,
-//       doctor: doctor._id,
-//       appointmentDate,
-//       timeSlot,
-//       isChronic,
-//       meetLink,
-//       googleEventId
-//     });
-
-//     await newAppointment.save();
-//     patient.follow = "Follow up-C";
-//     await patient.save();
-
-//     res.status(201).json({
-//       message: "Appointment booked successfully",
-//       appointment: newAppointment,
-//       appliedCoupon: appliedCoupon ? appliedCoupon.code : null,
-//     });
-//   } catch (error) {
-//     if (appliedCoupon) {
-//       appliedCoupon.isUsed = false;
-//       await appliedCoupon.save();
-//     }
-    
-//     if (!previousAppointments && couponCode) {
-//       const referral = await Referral.findOne({
-//         code: couponCode,
-//         isUsed: false,
-//       });
-//       if (referral) {
-//         referral.firstAppointmentDone = false;
-//         await referral.save();
-//       }
-//     }
-
-//     console.error("Failed to book appointment:", error);
-//     res.status(500).json({
-//       message: "Failed to book appointment",
-//       error: error.message
-//     });
-//   }
-// });
-
-
-// async function createGoogleMeet(accessToken, appointmentDate, timeSlot, patient, doctor) {
-//   try {
-//     // Set the OAuth2 client credentials using the access token
-//     oauth2Client.setCredentials({ access_token: accessToken });
-
-//     // Create an instance of the Google Calendar API
-//     const calendar = google.calendar({ version: "v3", auth: oauth2Client });
-
-//     // Calculate the start time for the appointment
-//     const appointmentStart = new Date(appointmentDate);
-//     const timeSlotIndex = ["10:00", "11:00", "12:00", "13:00", "14:00", "15:00", "16:00", "17:00"].indexOf(timeSlot);
-//     if (timeSlotIndex === -1) throw new Error("Invalid time slot");
-
-//     appointmentStart.setHours(10 + timeSlotIndex);
-
-//     // Prepare the event data with conference solution (Google Meet)
-//     const event = {
-//       summary: "Doctor Consultation - " + doctor.name,
-//       description: `Video consultation with Dr. ${doctor.name} for patient ${patient.name}`,
-//       start: { dateTime: appointmentStart.toISOString(), timeZone: "UTC" },
-//       end: { dateTime: new Date(appointmentStart.getTime() + 60 * 60 * 1000).toISOString(), timeZone: "UTC" }, // 1 hour duration
-//       attendees: [
-//         { email: patient.email },
-//         { email: doctor.email },
-//       ],
-//       conferenceData: {
-//         createRequest: {
-//           requestId: String(Date.now()), // Unique request ID
-//           conferenceSolutionKey: { type: "hangoutsMeet" }, // Google Meet conference solution
-//         },
-//       },
-//     };
-
-//     // Create the event in the user's Google Calendar
-//     const response = await calendar.events.insert({
-//       calendarId: "primary",
-//       resource: event,
-//       conferenceDataVersion: 1,
-//     });
-
-//     // Extract and return the Google Meet link
-//     return response.data.hangoutLink;
-//   } catch (error) {
-//     console.error("Error creating Google Meet link:", error);
-//     return null;
-//   }
-// }
 
 exports.getUserAppointments = async (req, res) => {
   console.log("User Appointments endpoint reached");

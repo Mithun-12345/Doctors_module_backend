@@ -445,6 +445,7 @@ exports.getAllAppointmentsWithPatientData = async (req, res) => {
             medicalPayment: appointment.medicalPayment,
             callCount: appointment.callCount,
             comments: appointment.comments,
+            meetLink: appointment.meetLink
           },
         });
       });

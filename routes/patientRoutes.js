@@ -15,7 +15,8 @@ const {
   referFriend,
   addFamily,
   getFamilyMembers,
-  fetchProfile
+  fetchProfile,
+  finalizeAppointment
 } = require("../controllers/patientController");
 const validateToken = require("../middlewares/validateTokenHandler");
 
@@ -25,6 +26,7 @@ router.post("/sendRegForm", sendForm);
 router.post("/sendChronicForm", validateToken, sendChronicForm);
 router.get("/details", validateToken, patientDetails);
 router.post("/bookAppointment", validateToken, bookAppointment);
+router.post("/finalizeAppointment", validateToken, finalizeAppointment);
 // router.patch("/updateAppointment/:id", validateToken, updateAppointment);
 // router.get("/appointments", validateToken, getAppointmentsByDate);
 // router.get("/appointment/:id", validateToken, getAppointmentById);

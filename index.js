@@ -45,14 +45,6 @@ initSocket(server);
 app.use(express.json());
 app.use(cors());
 
-const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID;
-const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET;
-const GOOGLE_REDIRECT_URI = process.env.GOOGLE_REDIRECT_URI;
-
-const ZOOM_CLIENT_ID = process.env.ZOOM_CLIENT_ID;
-const ZOOM_CLIENT_SECRET = process.env.ZOOM_CLIENT_SECRET;
-const ZOOM_REDIRECT_URI = process.env.ZOOM_REDIRECT_URI;
-
 // Routes
 app.use("/api/otp", otpRoute);
 app.use("/api/patient", patientRoute);
@@ -235,7 +227,36 @@ app.post("/api/validate-token", validateToken, (req, res) => {
   });
 });
 
+const morgan = require('morgan');
+const rateLimit = require('express-rate-limit');
+app.use(helmet());
+const limiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 100 // limit each IP to 100 requests per windowMs
+});
+app.use('/api/', limiter);
+
+const paymentRoutes = require('./routes/paymentRoutes');
+app.use('/api/payments', paymentRoutes);
+
+const cron = require('node-cron');
+const Appointment = require('./models/appointmentModel');
+
+// Runs every 1 minute to check for expired drafts
+cron.schedule('* * * * *', async () => {
+  console.log("Checking for drafts");
+  const expiredDrafts = await Appointment.find({
+    status: 'draft',
+    expiresAt: { $lt: new Date() }
+  });
+
+  if (expiredDrafts.length > 0) {
+    console.log(`Deleting ${expiredDrafts.length} expired draft appointments...`);
+    await Appointment.deleteMany({ _id: { $in: expiredDrafts.map(appt => appt._id) } });
+  }
+});
+
 const PORT = process.env.PORT || 8000;
-app.listen(PORT, () => {
+app.listen(PORT, "172.16.104.61", () => {
   console.log(`Server running on port ${PORT}`);
 });
