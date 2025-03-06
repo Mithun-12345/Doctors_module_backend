@@ -13,7 +13,7 @@ const { Server } = require("socket.io");
 require("dotenv").config();
 const Message = require("./models/messageModel");
 const patientModel = require("./models/patientModel");
-const dbConnection = require("./config/dbConnection");
+const dbConnection = require("./configs/dbConnection");
 const otpRoute = require("./routes/otpRoutes");
 const patientRoute = require("./routes/patientRoutes");
 const doctorRoute = require("./routes/doctorRoutes");
@@ -22,7 +22,7 @@ const assignTasks = require("./routes/AssignTasksRoute");
 const chatRoutes = require("./routes/chatRoutes");
 const callLog = require("./routes/CallLogRoutes");
 const formRoutes = require("./routes/formRoute");
-const postRoute = require("./routes/postRoutes");
+const postRoute = require("./routes/postRoutes.js");
 const leaveRoutes = require("./routes/leaveRoutes");
 const { initSocket } = require("./controllers/socketController");
 const employeeRoutes = require("./routes/employeeRoutes");
@@ -257,6 +257,6 @@ cron.schedule('* * * * *', async () => {
 });
 
 const PORT = process.env.PORT || 8000;
-app.listen(PORT, "172.16.104.61", () => {
+app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
 });
