@@ -115,7 +115,7 @@ app.get("http://localhost:5000/api/generate-employee-id", (req, res) => {
 
 // Example API route
 app.get("/api/example", (req, res) => {
-  res.json({ message: "Hello from the API!" });
+  res.json({ message: "Hello jijijihui the API!" });
 });
 
 app.get("/api/chat/:senderId/:receiverId", async (req, res) => {
@@ -254,6 +254,20 @@ cron.schedule('* * * * *', async () => {
     console.log(`Deleting ${expiredDrafts.length} expired draft appointments...`);
     await Appointment.deleteMany({ _id: { $in: expiredDrafts.map(appt => appt._id) } });
   }
+});
+
+app.post("/generateToken", (req, res) => {
+  const { sdkKey, sdkSecret, meetingNumber, role } = req.body;
+  const payload = {
+    sdkKey,
+    mn: meetingNumber,
+    role,
+    exp: Math.floor(Date.now() / 1000) + 60 * 60, // Token expires in 1 hour
+  };
+
+  const token = jwt.sign(payload, sdkSecret, { algorithm: "HS256" });
+  console.log(token);
+  res.json({ token: token });
 });
 
 const PORT = process.env.PORT || 8000;

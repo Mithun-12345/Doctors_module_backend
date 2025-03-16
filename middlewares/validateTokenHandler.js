@@ -7,7 +7,7 @@ const Admin = require("../models/Admin");
 const validateToken = asyncHandler(async (req, res, next) => {
   let token;
   const authHeader = req.headers.authorization || req.headers.Authorization;
-  
+  console.log(authHeader);
   if (authHeader && authHeader.startsWith("Bearer")) {
     token = authHeader.split(" ")[1];
     console.log("Token:", token);
@@ -34,7 +34,7 @@ const validateToken = asyncHandler(async (req, res, next) => {
 
       // If not a patient, check for doctor
       if (!user) {
-        user = await Doctor.findOne({ phone: decoded.user.phone }); //Initially it was : user = await Doctor.findOne({ phone: decoded.phone });
+        user = await Doctor.findOne({ phone: decoded.phone }); //Initially it was : user = await Doctor.findOne({ phone: decoded.phone });
         // console.log("Doctor found:", user);
       }
 

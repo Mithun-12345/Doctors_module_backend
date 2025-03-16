@@ -1,6 +1,11 @@
 const axios = require("axios");
 const { ZOOM_CLIENT_ID, ZOOM_CLIENT_SECRET, ZOOM_REDIRECT_URI, GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, GOOGLE_REDIRECT_URI } = process.env;
 const DoctorModel = require("../models/doctorModel");
+const crypto = require('crypto');
+const dotenv = require('dotenv');
+
+dotenv.config();
+
 // Zoom OAuth Authorization
 const zoomAuthorize = (req, res) => {
   const url = `https://zoom.us/oauth/authorize?response_type=code&client_id=${ZOOM_CLIENT_ID}&redirect_uri=${ZOOM_REDIRECT_URI}`;
@@ -87,9 +92,64 @@ const googleCallback = async (req, res) => {
   }
 };
 
+const generateSignature = async (req, res) => {
+  try {
+    console.log("Generate Signature Endpoint reached");
+    const { meetingNumber, role } = req.body;
+    
+    // Verify required parameters
+    if (!meetingNumber || role === undefined) {
+      return res.status(400).json({ success: false, message: 'Meeting number and role are required' });
+    }
+    
+    // Get API Key and API Secret from environment variables
+    const apiKey = process.env.ZOOM_SDK_KEY;
+    const apiSecret = process.env.ZOOM_SDK_SECRET;
+    
+    if (!apiKey || !apiSecret) {
+      return res.status(500).json({ 
+        success: false, 
+        message: 'Zoom API credentials not configured'
+      });
+    }
+    
+    // Get user info from authenticated request
+    const userEmail = req.user.email || 'email';
+    const userName = req.user.firstName + ' ' + req.user.lastName || 'Doctor';
+    
+    // Timestamp for signature generation (expiration)
+    const timestamp = new Date().getTime() - 30000;
+    
+    // Prepare the message for signature
+    const msg = Buffer.from(apiKey + meetingNumber + timestamp + role).toString('base64');
+    const hash = crypto.createHmac('sha256', apiSecret).update(msg).digest('base64');
+    const signature = Buffer.from(`${apiKey}.${meetingNumber}.${timestamp}.${role}.${hash}`).toString('base64');
+    
+    // Return the signature and connection info
+    return res.status(200).json({
+      success: true,
+      signature: signature,
+      apiKey: apiKey,
+      meetingNumber: meetingNumber,
+      userName: userName,
+      userEmail: userEmail,
+      // Include password if the meeting has one
+      password: '' // Add logic to retrieve meeting password if needed
+    });
+  } catch (error) {
+    console.error('Error generating Zoom signature:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Failed to generate Zoom signature',
+      error: error.message
+    });
+  }
+};
+
 module.exports = {
   zoomAuthorize,
   zoomCallback,
   googleAuthorize,
-  googleCallback
+  googleCallback,
+  generateSignature
 };

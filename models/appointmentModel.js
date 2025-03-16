@@ -109,6 +109,10 @@ const appointmentSchema = new mongoose.Schema(
     meetLink: {
       type: String,
       required: false,
+    },
+    notes: {
+      type: String,
+      default: "",
     }
   },
   { timestamps: true }

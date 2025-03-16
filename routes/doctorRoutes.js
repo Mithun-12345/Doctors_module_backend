@@ -13,7 +13,8 @@ const {
   getSettings,
   updateSettings,
   getAllAppointments,
-  getAllAppointmentsWithPatientData
+  getAllAppointmentsWithPatientData,
+  submitNotes
 } = require("../controllers/doctorController");
 
 const { googleAuth, googleCallback } = require("../controllers/googleController");
@@ -52,5 +53,6 @@ router.get('/getsettings',  validateToken,getSettings);
 router.put('/updatesettings',  validateToken,updateSettings);
 router.get('/getAllAppointments', validateToken, getAllAppointments);
 router.get('/getAllAppointmentsWithPatientData', getAllAppointmentsWithPatientData);
+router.post("/notes", validateToken, submitNotes);
 
 module.exports = router;

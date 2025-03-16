@@ -57,6 +57,7 @@ cloudinary.config({
 
 exports.createPost = async (req, res) => {
   try {
+    console.log("ffefw");
     const { text } = req.body;
     let mediaUrl = null;
     let mediaType = 'text';
@@ -245,6 +246,7 @@ exports.getPosts = async (req, res) => {
 // Like/Unlike a Post
 exports.likePost = async (req, res) => {
   try {
+    console.log(req.user);
     const post = await Post.findById(req.params.id);
     if (!post)
       return res
@@ -266,13 +268,14 @@ exports.likePost = async (req, res) => {
 
 //Like a comment
 exports.likeComment = async (req, res) => {
+  console.log("Reached", req.params.id);
   try {
     const comment = await Comment.findById(req.params.id);
+    console.log(comment);
     if (!comment)
       return res
         .status(404)
         .json({ success: false, message: "Comment not found" });
-
     if (comment.likes.includes(req.user.id)) {
       comment.likes = comment.likes.filter(
         (id) => id.toString() !== req.user.id
@@ -472,6 +475,7 @@ exports.deletePost = async (req, res) => {
 
 exports.getPaginatedPosts = async (req, res) => {
   try {
+    console.log("Getting paginated posts");
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 10;
     const skip = (page - 1) * limit;
