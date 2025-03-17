@@ -32,6 +32,7 @@ const salaryStructure = require("./routes/SalaryStructureRoutes.js");
 const shiftRoutes = require("./routes/shiftRoutes.js");
 const attendance = require("./routes/attendanceRoute.js");
 const videoCallRoutes = require("./routes/VideoCallRoutes"); // Import the new router
+const workshopRoutes = require("./routes/workshopRoutes.js");
 
 dbConnection();
 
@@ -63,6 +64,7 @@ app.use("/api/shift", shiftRoutes);
 app.use("/api/attendance", attendance);
 app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 app.use("/api/video-call", videoCallRoutes);
+app.use("/api/workshop", workshopRoutes);
 
 const options = {
   key: fs.readFileSync("server.key"),
@@ -227,32 +229,36 @@ app.post("/api/validate-token", validateToken, (req, res) => {
   });
 });
 
-const morgan = require('morgan');
-const rateLimit = require('express-rate-limit');
+const morgan = require("morgan");
+const rateLimit = require("express-rate-limit");
 app.use(helmet());
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 100 // limit each IP to 100 requests per windowMs
+  max: 100, // limit each IP to 100 requests per windowMs
 });
-app.use('/api/', limiter);
+app.use("/api/", limiter);
 
-const paymentRoutes = require('./routes/paymentRoutes');
-app.use('/api/payments', paymentRoutes);
+const paymentRoutes = require("./routes/paymentRoutes");
+app.use("/api/payments", paymentRoutes);
 
-const cron = require('node-cron');
-const Appointment = require('./models/appointmentModel');
+const cron = require("node-cron");
+const Appointment = require("./models/appointmentModel");
 
 // Runs every 1 minute to check for expired drafts
-cron.schedule('* * * * *', async () => {
+cron.schedule("* * * * *", async () => {
   console.log("Checking for drafts");
   const expiredDrafts = await Appointment.find({
-    status: 'draft',
-    expiresAt: { $lt: new Date() }
+    status: "draft",
+    expiresAt: { $lt: new Date() },
   });
 
   if (expiredDrafts.length > 0) {
-    console.log(`Deleting ${expiredDrafts.length} expired draft appointments...`);
-    await Appointment.deleteMany({ _id: { $in: expiredDrafts.map(appt => appt._id) } });
+    console.log(
+      `Deleting ${expiredDrafts.length} expired draft appointments...`
+    );
+    await Appointment.deleteMany({
+      _id: { $in: expiredDrafts.map((appt) => appt._id) },
+    });
   }
 });
 
