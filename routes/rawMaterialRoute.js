@@ -1,0 +1,20 @@
+const express = require('express');
+const router = express.Router();
+const medicineController = require('../controllers/medicineController');
+const rawMaterialController = require('../controllers/rawMaterialController');
+
+// Raw Material routes
+router.get('/raw-materials', rawMaterialController.getAllRawMaterials);
+router.get('/raw-materials/:id', rawMaterialController.getRawMaterial);
+router.post('/raw-materials', rawMaterialController.createRawMaterial);
+router.put('/raw-materials/:id', rawMaterialController.updateRawMaterial);
+router.delete('/raw-materials/:id', rawMaterialController.deleteRawMaterial);
+
+router.get('/medicines', medicineController.getAllMedicines);
+router.get('/medicines/:id', medicineController.getMedicine);
+router.post('/medicines', medicineController.createMedicine);
+router.put('/medicines/:id', medicineController.updateMedicine);
+router.delete('/medicines/:id', medicineController.deleteMedicine);
+router.post('/medicines/calculate-price', medicineController.calculatePrice);
+
+module.exports = router;

@@ -32,7 +32,9 @@ const salaryStructure = require("./routes/SalaryStructureRoutes.js");
 const shiftRoutes = require("./routes/shiftRoutes.js");
 const attendance = require("./routes/attendanceRoute.js");
 const videoCallRoutes = require("./routes/VideoCallRoutes"); // Import the new router
-
+const prescriptionRoute = require("./routes/prescription.js");
+const medicineRoute = require("./routes/medicineRoute.js")
+const rawMaterialRoute = require("./routes/rawMaterialRoute.js")
 dbConnection();
 
 dotenv.config();
@@ -63,7 +65,9 @@ app.use("/api/shift", shiftRoutes);
 app.use("/api/attendance", attendance);
 app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 app.use("/api/video-call", videoCallRoutes);
-
+app.use("/api/prescription", prescriptionRoute);
+app.use('/api/medicines', medicineRoute);
+app.use('/api/inventory', rawMaterialRoute);
 const options = {
   key: fs.readFileSync("server.key"),
   cert: fs.readFileSync("server.crt"),
