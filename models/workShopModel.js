@@ -35,6 +35,9 @@ const workshopSchema = new mongoose.Schema({
     required: true,
     min: 0,
   },
+  limit: {
+    type: Number,
+  },
   // createdAt: {
   //   type: Date,
   //   default: Date.now,

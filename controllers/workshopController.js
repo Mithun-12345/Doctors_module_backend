@@ -9,15 +9,22 @@ exports.createWorkshop = async (req, res) => {
     if (!doctor) {
       return res.status(404).json({ message: "Doctor not found" });
     }
-    const { title, description, fee, allowedParticipants, scheduledDateTime } =
-      req.body;
+    const {
+      title,
+      description,
+      fee,
+      allowedParticipants,
+      scheduledDateTime,
+      limit,
+    } = req.body;
     const newWorkshop = new Workshop({
       title,
       description,
       fee,
-      doctor: doctor._id,
+      doctorId: doctor._id,
       allowedParticipants,
       scheduledDateTime,
+      limit,
     });
     await newWorkshop.save();
     res.status(201).json({
@@ -44,8 +51,9 @@ exports.viewPendingWorkshops = async (req, res) => {
       userType = "Patient";
     }
     const workshops = await Workshop.find({
-      allowedParticipants: userType || "Both",
+      $or: [{ allowedParticipants: userType }, { allowedParticipants: "Both" }],
     });
+
     res.status(200).json({ workshops });
   } catch (error) {
     return res.status(500).json({ message: "Internal Server Error" });
@@ -83,9 +91,13 @@ exports.bookWorkshop = async (req, res) => {
         .json({ message: "You are not allowed to book this workshop" });
     }
 
-    // Ensure participants array exists
-    if (!workshop.participants) {
-      workshop.participants = [];
+    // // Ensure participants array exists
+    // if (!workshop.participants) {
+    //   workshop.participants = [];
+    // }
+
+    if (new Date(workshop.scheduledDateTime) < new Date()) {
+      return res.status(400).json({ message: "Workshop has already passed" });
     }
 
     // Check if user already booked the workshop
@@ -96,10 +108,27 @@ exports.bookWorkshop = async (req, res) => {
     }
 
     // Add user to participants and save
-    workshop.participants.push(userId);
-    await workshop.save();
-
-    res.status(200).json({ message: "Workshop booked successfully", workshop });
+    if (typeof workshop.limit === "number") {
+      if (workshop.limit > 0) {
+        workshop.participants.push(userId);
+        workshop.limit--;
+        await workshop.save();
+        return res
+          .status(200)
+          .json({ message: "Workshop booked successfully", workshop });
+      } else {
+        return res
+          .status(400)
+          .json({ message: "Workshop booking limit reached" });
+      }
+    } else {
+      // No limit set
+      workshop.participants.push(userId);
+      await workshop.save();
+      return res
+        .status(200)
+        .json({ message: "Workshop booked successfully", workshop });
+    }
   } catch (error) {
     return res
       .status(500)
