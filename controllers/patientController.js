@@ -246,7 +246,6 @@ exports.patientDetails = asyncHandler(async (req, res) => {
   if (!phone) {
     return res.status(400).json({ message: "Phone number not available" });
   }
-
   // Fetch the patient
   const patient = await Patient.findOne({ phone });
   if (!patient) {

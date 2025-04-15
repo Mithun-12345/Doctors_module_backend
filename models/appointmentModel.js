@@ -92,6 +92,10 @@ const appointmentSchema = new mongoose.Schema(
       enum: ["Yes", "No"],
       default: "No",
     },
+    prescriptionCreated: {
+      type: Boolean,
+      default: false,
+    },
     callCount: {
       //no need in frontend
       type: Number,

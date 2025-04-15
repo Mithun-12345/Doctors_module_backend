@@ -31,7 +31,7 @@ router.post("/finalizeAppointment", validateToken, finalizeAppointment);
 // router.get("/appointments", validateToken, getAppointmentsByDate);
 // router.get("/appointment/:id", validateToken, getAppointmentById);
 // router.delete("/appointment/:id", validateToken, cancelAppointment);
-router.get("/checkSlots", validateToken, checkAvailableSlots);
+router.post("/checkSlots", validateToken, checkAvailableSlots);
 router.get("/getUserAppointments", validateToken, getUserAppointments);
 router.put("/updateFollowUp/:patientId", updateFollowUpStatus);
 router.put("/updateFollowPatientCall/:patientId", updateFollowPatientCall);
