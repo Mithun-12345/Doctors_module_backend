@@ -16,7 +16,7 @@ const workshopSchema = new mongoose.Schema({
   },
   meetLink: {
     type: String,
-    required: true,
+    required: false,
   },
   scheduledDateTime: {
     type: Date,
@@ -24,7 +24,7 @@ const workshopSchema = new mongoose.Schema({
   },
   allowedParticipants: {
     type: String,
-    enum: ["Doctors", "Patients", "Both"],
+    enum: ["Doctor", "Patient", "Everyone"],
     required: true,
   },
   participants: [

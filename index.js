@@ -32,11 +32,10 @@ const salaryStructure = require("./routes/SalaryStructureRoutes.js");
 const shiftRoutes = require("./routes/shiftRoutes.js");
 const attendance = require("./routes/attendanceRoute.js");
 const videoCallRoutes = require("./routes/VideoCallRoutes"); // Import the new router
-const prescriptionRoute = require("./routes/prescription.js");
-const medicineRoute = require("./routes/medicineRoute.js")
-const rawMaterialRoute = require("./routes/rawMaterialRoute.js")
 const workshopRoutes = require("./routes/workshopRoutes.js");
-
+const prescriptionRoute = require("./routes/prescription.js");
+const medicineRoute = require("./routes/medicineRoute.js");
+const rawMaterialRoute = require("./routes/rawMaterialRoute.js");
 dbConnection();
 
 dotenv.config();
@@ -67,20 +66,14 @@ app.use("/api/shift", shiftRoutes);
 app.use("/api/attendance", attendance);
 app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 app.use("/api/video-call", videoCallRoutes);
-app.use("/api/prescription", prescriptionRoute);
-app.use('/api/medicines', medicineRoute);
-app.use('/api/inventory', rawMaterialRoute);
 app.use("/api/workshop", workshopRoutes);
-
+app.use("/api/prescription", prescriptionRoute);
+app.use("/api/medicines", medicineRoute);
+app.use("/api/inventory", rawMaterialRoute);
 const options = {
   key: fs.readFileSync("server.key"),
   cert: fs.readFileSync("server.crt"),
 };
-
-mongoose
-  .connect(process.env.MONGODB_LOCAL_URI)
-  .then(() => console.log("MongoDB connected"))
-  .catch((err) => console.log(err));
 
 // Middleware: Set Content Security Policy for security
 app.use(

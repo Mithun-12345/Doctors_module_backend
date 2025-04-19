@@ -135,6 +135,17 @@ exports.verifyOTP = asyncHandler(async (req, res) => {
       console.log("accessToken:", accessToken);
       console.log("Sending successful response");
       console.log("refreshToken:", refreshToken);
+      console.log("User role:", user.role);
+      if(userType === "Doctor") {
+        res.status(200).json({
+          success: true,
+          accessToken,
+          refreshToken,
+          userId: user._id,
+          userType: userType,
+          role: user.role
+        });  
+      }
       res.status(200).json({
         success: true,
         accessToken,
