@@ -84,6 +84,7 @@ exports.sendForm = asyncHandler(async (req, res) => {
     currentLocation,
     patientEntry,
     symptomNotKnown,
+    password
   } = req.body;
   const { referralCode, familyToken } = req.query; // Get the referral code from query params
   console.log("Received request body:", req.query);
@@ -156,6 +157,7 @@ exports.sendForm = asyncHandler(async (req, res) => {
     gender,
     patientEntry,
     currentLocation,
+    password
   });
 
   if (referralCode) {
