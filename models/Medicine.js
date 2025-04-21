@@ -1,5 +1,5 @@
 // models/Medicine.js
-const mongoose = require('mongoose');
+const mongoose = require("mongoose");
 
 const medicineSchema = new mongoose.Schema({
   name: { type: String, required: true, trim: true },
@@ -11,8 +11,14 @@ const medicineSchema = new mongoose.Schema({
   manufacturer: { type: String, required: true },
   pricePerUnit: { type: Number, required: true, min: 0 },
   dosage: { type: String, required: true },
+  composition: [
+    {
+      rawMaterial: { type: mongoose.Schema.Types.ObjectId, ref: "RawMaterial" },
+      quantity: Number,
+    },
+  ],
   createdAt: { type: Date, default: Date.now },
-  updatedAt: { type: Date, default: Date.now }
+  updatedAt: { type: Date, default: Date.now },
 });
 
-module.exports = mongoose.model('Medicine', medicineSchema);
+module.exports = mongoose.model("Medicine", medicineSchema);

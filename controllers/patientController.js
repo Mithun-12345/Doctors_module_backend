@@ -12,9 +12,11 @@ const Doctor = require("../models/doctorModel");
 const moment = require("moment");
 const momentIST = require("moment-timezone");
 const twilio = require("twilio");
+const fs = require("fs");
 const crypto = require("crypto");
 const { google } = require("googleapis");
 const { createGoogleMeet } = require("./Gmeet");
+const cloudinary = require("cloudinary").v2;
 // patientController.js
 const UserGoogleTokens = require("../models/UserTokenSchema");
 const accountSid = process.env.TWILIO_ACCOUNT_SID;
@@ -37,11 +39,13 @@ const oauth2Client = new google.auth.OAuth2(
 
 const refreshGoogleToken = async (doctor) => {
   try {
-    const { tokens } = await oauth2Client.refreshToken(doctor.googleRefreshToken);
+    const { tokens } = await oauth2Client.refreshToken(
+      doctor.googleRefreshToken
+    );
     return tokens.access_token;
   } catch (error) {
-    console.error('Error refreshing Google token:', error);
-    throw new Error('Failed to refresh Google token');
+    console.error("Error refreshing Google token:", error);
+    throw new Error("Failed to refresh Google token");
   }
 };
 
@@ -58,7 +62,13 @@ exports.handleGoogleCallback = async (req, res) => {
     const refreshToken = tokens.refresh_token;
 
     // Use the access token to create a Google Meet link
-    const meetLink = await createGoogleMeet(accessToken, appointmentDate, timeSlot, patient, doctor);
+    const meetLink = await createGoogleMeet(
+      accessToken,
+      appointmentDate,
+      timeSlot,
+      patient,
+      doctor
+    );
 
     res.status(200).json({ meetLink });
   } catch (error) {
@@ -237,7 +247,7 @@ exports.sendForm = asyncHandler(async (req, res) => {
 //   const patientDetails = await PatientDetails.findOne({
 //     patientId: patient._id,
 //   });
-  
+
 //   co
 // });
 
@@ -255,13 +265,17 @@ exports.patientDetails = asyncHandler(async (req, res) => {
   }
 
   // Fetch patient details
-  const patientDetails = await PatientDetails.findOne({ patientId: patient._id });
+  const patientDetails = await PatientDetails.findOne({
+    patientId: patient._id,
+  });
   if (!patientDetails) {
     return res.status(404).json({ message: "Patient details not found" });
   }
 
   // Fetch medical details
-  const medicalDetails = await MedicalDetails.findOne({ patientId: patient._id });
+  const medicalDetails = await MedicalDetails.findOne({
+    patientId: patient._id,
+  });
   if (!medicalDetails) {
     return res.status(404).json({ message: "Medical details not found" });
   }
@@ -352,13 +366,17 @@ exports.checkAvailableSlots = asyncHandler(async (req, res) => {
   const phone = req.user.phone;
 
   const patient = await Patient.findOne({ phone });
-  const patientDetails = await PatientDetails.findOne({ patientId: patient._id });
+  const patientDetails = await PatientDetails.findOne({
+    patientId: patient._id,
+  });
   if (!patientDetails) {
     return res.status(404).json({ message: "Patient details not found" });
   }
 
   // Fetch medical details
-  const medicalDetails = await MedicalDetails.findOne({ patientId: patient._id });
+  const medicalDetails = await MedicalDetails.findOne({
+    patientId: patient._id,
+  });
   if (!medicalDetails) {
     return res.status(404).json({ message: "Medical details not found" });
   }
@@ -411,7 +429,7 @@ const addEventToGoogleCalendar = async (doctorId, appointment) => {
   try {
     // Only select the fields we need for calendar integration
     const doctor = await Doctor.findById(doctorId)
-      .select('googleAccessToken googleRefreshToken name email')
+      .select("googleAccessToken googleRefreshToken name email")
       .lean(); // Use lean() to get a plain JavaScript object without Mongoose validation
 
     if (!doctor) {
@@ -420,7 +438,7 @@ const addEventToGoogleCalendar = async (doctorId, appointment) => {
 
     // Check if the doctor has the necessary tokens
     // if (!doctor.googleAccessToken || !doctor.googleRefreshToken) {
-      if (!doctor.googleAccessToken) {
+    if (!doctor.googleAccessToken) {
       throw new Error("Doctor does not have Google OAuth tokens");
     }
 
@@ -436,15 +454,17 @@ const addEventToGoogleCalendar = async (doctorId, appointment) => {
     // Prepare event details
     const event = {
       summary: `Appointment with ${appointment.patientName}`,
-      description: `Consultation for ${appointment.reason || 'General Consultation'}`,
+      description: `Consultation for ${
+        appointment.reason || "General Consultation"
+      }`,
       start: {
         dateTime: `${appointment.appointmentDate}T${appointment.timeSlot}:00`,
         timeZone: "Asia/Kolkata",
       },
       end: {
-        dateTime: `${appointment.appointmentDate}T${
-          String(parseInt(appointment.timeSlot.split(":")[0]) + 1).padStart(2, "0")
-        }:00:00`,
+        dateTime: `${appointment.appointmentDate}T${String(
+          parseInt(appointment.timeSlot.split(":")[0]) + 1
+        ).padStart(2, "0")}:00:00`,
         timeZone: "Asia/Kolkata",
       },
       conferenceData: {
@@ -466,10 +486,11 @@ const addEventToGoogleCalendar = async (doctorId, appointment) => {
 
       // If token was refreshed, update it in the database
       if (calendarEvent.config && calendarEvent.config.headers) {
-        const newAccessToken = calendarEvent.config.headers.Authorization.split(' ')[1];
+        const newAccessToken =
+          calendarEvent.config.headers.Authorization.split(" ")[1];
         if (newAccessToken !== doctor.googleAccessToken) {
           await Doctor.findByIdAndUpdate(doctorId, {
-            googleAccessToken: newAccessToken
+            googleAccessToken: newAccessToken,
           });
         }
       }
@@ -478,36 +499,40 @@ const addEventToGoogleCalendar = async (doctorId, appointment) => {
         id: calendarEvent.data.id,
         meetLink: calendarEvent.data.hangoutLink,
         start: calendarEvent.data.start,
-        end: calendarEvent.data.end
+        end: calendarEvent.data.end,
       };
-
     } catch (error) {
-      if (error.message.includes('invalid_token') || error.message.includes('Invalid Credentials')) {
+      if (
+        error.message.includes("invalid_token") ||
+        error.message.includes("Invalid Credentials")
+      ) {
         // Token expired, try to refresh
-        const { tokens } = await oauth2Client.refreshToken(doctor.googleRefreshToken);
-        
+        const { tokens } = await oauth2Client.refreshToken(
+          doctor.googleRefreshToken
+        );
+
         // Update the doctor's access token
         await Doctor.findByIdAndUpdate(doctorId, {
-          googleAccessToken: tokens.access_token
+          googleAccessToken: tokens.access_token,
         });
-        
+
         // Retry with new token
         oauth2Client.setCredentials({
           access_token: tokens.access_token,
           refresh_token: doctor.googleRefreshToken,
         });
-        
+
         const calendarEvent = await calendar.events.insert({
           calendarId: "primary",
           resource: event,
           conferenceDataVersion: 1,
         });
-        
+
         return {
           id: calendarEvent.data.id,
           meetLink: calendarEvent.data.hangoutLink,
           start: calendarEvent.data.start,
-          end: calendarEvent.data.end
+          end: calendarEvent.data.end,
         };
       }
       throw error;
@@ -527,7 +552,9 @@ const refreshZoomToken = async (doctor) => {
         refresh_token: doctor.zoomRefreshToken,
       },
       headers: {
-        Authorization: `Basic ${Buffer.from(`${ZOOM_CLIENT_ID}:${ZOOM_CLIENT_SECRET}`).toString("base64")}`,
+        Authorization: `Basic ${Buffer.from(
+          `${ZOOM_CLIENT_ID}:${ZOOM_CLIENT_SECRET}`
+        ).toString("base64")}`,
       },
     });
 
@@ -551,11 +578,11 @@ const addAppointmentToCalendar = async (doctorId, appointment) => {
   try {
     const doctor = await Doctor.findById(doctorId);
     if (!doctor) throw new Error("Doctor not found");
-    
+
     if (!doctor.zoomAccessToken) {
       throw new Error("Doctor is missing Zoom access token");
     }
-    
+
     let accessToken = doctor.zoomAccessToken;
     try {
       await axios.get("https://api.zoom.us/v2/users/me", {
@@ -566,9 +593,11 @@ const addAppointmentToCalendar = async (doctorId, appointment) => {
       accessToken = await refreshZoomToken(doctor);
     }
 
-    const startTime = new Date(`${appointment.appointmentDate}T${appointment.timeSlot}:00`);
+    const startTime = new Date(
+      `${appointment.appointmentDate}T${appointment.timeSlot}:00`
+    );
     const isoStartTime = startTime.toISOString();
-    
+
     const meetingDetails = {
       topic: `Appointment with ${appointment.patientName}`,
       type: 2, // Scheduled meeting
@@ -579,8 +608,8 @@ const addAppointmentToCalendar = async (doctorId, appointment) => {
         host_video: true,
         participant_video: true,
         join_before_host: true,
-        waiting_room: true,  // Enable waiting room for better control
-        mute_upon_entry: true,  // Participants are muted when they join
+        waiting_room: true, // Enable waiting room for better control
+        mute_upon_entry: true, // Participants are muted when they join
         approval_type: 0, // No registration required
         registration_type: 1,
         audio: "both", // Allow both computer and phone audio
@@ -597,7 +626,7 @@ const addAppointmentToCalendar = async (doctorId, appointment) => {
         allow_live_streaming: false, // Disable live streaming
         allow_participants_unmute: false, // Prevent participants from unmuting themselves
         allow_participants_reactions: false, // Disable reactions
-      }
+      },
     };
     // Add more detailed error logging
     try {
@@ -606,10 +635,10 @@ const addAppointmentToCalendar = async (doctorId, appointment) => {
         meetingDetails,
         {
           headers: {
-            'Authorization': `Bearer ${doctor.zoomAccessToken}`,
-            'Content-Type': 'application/json',
-            'Accept': 'application/json'
-          }
+            Authorization: `Bearer ${doctor.zoomAccessToken}`,
+            "Content-Type": "application/json",
+            Accept: "application/json",
+          },
         }
       );
 
@@ -646,16 +675,18 @@ const addAppointmentToCalendar = async (doctorId, appointment) => {
         // googleEventId: calendarEvent.data.id,
         zoomLink,
       };
-
     } catch (zoomError) {
       console.error("Zoom API Error Details:", {
         status: zoomError.response?.status,
         statusText: zoomError.response?.statusText,
         data: zoomError.response?.data,
       });
-      throw new Error(`Zoom meeting creation failed: ${zoomError.response?.data?.message || zoomError.message}`);
+      throw new Error(
+        `Zoom meeting creation failed: ${
+          zoomError.response?.data?.message || zoomError.message
+        }`
+      );
     }
-
   } catch (error) {
     console.error("Failed to add appointment to calendar:", error.message);
     throw error; // Throw the actual error instead of a generic one
@@ -664,42 +695,53 @@ const addAppointmentToCalendar = async (doctorId, appointment) => {
 
 exports.finalizeAppointment = asyncHandler(async (req, res) => {
   const { appointmentId, paymentId } = req.body;
-  
+
   // Find the draft appointment
   const appointment = await Appointment.findById(appointmentId);
-  
-  if (!appointment || appointment.status !== 'draft') {
+
+  if (!appointment || appointment.status !== "draft") {
     return res.status(404).json({ message: "Draft appointment not found" });
   }
-  
+
   // Find the patient
   const phone = req.user.phone;
   const user = await Patient.findOne({ phone });
   if (!user) return res.status(404).json({ message: "Patient not found" });
-  
+
   const doctorId = "67bc3391654d85340a8ce713"; // Get from configuration
   const doctor = await Doctor.findById(doctorId);
   if (!doctor) {
     return res.status(404).json({ message: "Doctor not found" });
   }
-  
+
   // Ensure the appointment belongs to this user
   if (appointment.patient.toString() !== user._id.toString()) {
-    return res.status(403).json({ message: "Not authorized to finalize this appointment" });
+    return res
+      .status(403)
+      .json({ message: "Not authorized to finalize this appointment" });
   }
-  
+
   try {
     // Verify the appointment is still available (double check)
-    const timeSlots = ["10:00", "11:00", "12:00", "13:00", "14:00", "15:00", "16:00", "17:00"];
+    const timeSlots = [
+      "10:00",
+      "11:00",
+      "12:00",
+      "13:00",
+      "14:00",
+      "15:00",
+      "16:00",
+      "17:00",
+    ];
     const isMorningSlot = (slot) => timeSlots.indexOf(slot) < 4;
-    
+
     // Check for conflicting appointments again (in case something was booked between draft and finalize)
     const conflictingAppointments = await Appointment.find({
       appointmentDate: appointment.appointmentDate,
-      status: 'confirmed',
-      _id: { $ne: appointment._id } // Exclude current appointment
+      status: "confirmed",
+      _id: { $ne: appointment._id }, // Exclude current appointment
     });
-    
+
     if (appointment.isChronic) {
       const chronicBookingInMorning = conflictingAppointments.some(
         (appt) => appt.isChronic && isMorningSlot(appt.timeSlot)
@@ -707,31 +749,34 @@ exports.finalizeAppointment = asyncHandler(async (req, res) => {
       const chronicBookingInAfternoon = conflictingAppointments.some(
         (appt) => appt.isChronic && !isMorningSlot(appt.timeSlot)
       );
-      
+
       if (
         (isMorningSlot(appointment.timeSlot) && chronicBookingInMorning) ||
         (!isMorningSlot(appointment.timeSlot) && chronicBookingInAfternoon)
       ) {
         return res.status(400).json({
-          message: "The selected time slot is no longer available for chronic patients",
+          message:
+            "The selected time slot is no longer available for chronic patients",
         });
       }
     } else {
       const isSlotBooked = conflictingAppointments.some(
         (appt) => appt.timeSlot === appointment.timeSlot
       );
-      
+
       if (isSlotBooked) {
-        return res.status(400).json({ message: "Time slot is no longer available" });
+        return res
+          .status(400)
+          .json({ message: "Time slot is no longer available" });
       }
     }
-    
+
     // Apply referral logic
     const previousAppointments = await Appointment.find({
       patient: user._id,
-      status: 'confirmed'
+      status: "confirmed",
     });
-    
+
     const couponCode = user.coupon;
     if (previousAppointments.length === 0 && couponCode) {
       const referral = await Referral.findOne({
@@ -743,7 +788,7 @@ exports.finalizeAppointment = asyncHandler(async (req, res) => {
         await referral.save();
       }
     }
-    
+
     // Auto-apply coupon logic for referrer
     let appliedCoupon = null;
     const referrerCoupons = await Referral.find({
@@ -751,7 +796,7 @@ exports.finalizeAppointment = asyncHandler(async (req, res) => {
       isUsed: false,
       firstAppointmentDone: true,
     });
-    
+
     if (referrerCoupons.length > 0) {
       appliedCoupon = referrerCoupons[0];
       appliedCoupon.isUsed = true; // Mark the coupon as used
@@ -760,35 +805,35 @@ exports.finalizeAppointment = asyncHandler(async (req, res) => {
         `Coupon ${appliedCoupon.code} automatically applied for referrer ${user.name}.`
       );
     }
-    
+
     // Format the date to YYYY-MM-DD format
     const formatDateForCalendar = (dateString) => {
       const date = new Date(dateString);
       const year = date.getFullYear();
-      const month = String(date.getMonth() + 1).padStart(2, '0');
-      const day = String(date.getDate()).padStart(2, '0');
-      
+      const month = String(date.getMonth() + 1).padStart(2, "0");
+      const day = String(date.getDate()).padStart(2, "0");
+
       return `${year}-${month}-${day}`;
     };
-    
+
     // Generate meeting link
     let calendarEvent;
     const formattedDate = formatDateForCalendar(appointment.appointmentDate);
-    
-    if (doctor.videoPlatform === 'googleMeet') {
+
+    if (doctor.videoPlatform === "googleMeet") {
       calendarEvent = await addEventToGoogleCalendar(doctorId, {
         _id: appointment._id,
         patientName: user.name,
         patientEmail: user.email,
         appointmentDate: formattedDate,
         timeSlot: appointment.timeSlot,
-        reason: appointment.reason
+        reason: appointment.reason,
       });
-      
+
       if (calendarEvent && calendarEvent.meetLink) {
         appointment.meetLink = calendarEvent.meetLink;
       }
-    } else if (doctor.videoPlatform === 'zoom') {
+    } else if (doctor.videoPlatform === "zoom") {
       calendarEvent = await addAppointmentToCalendar(doctor, {
         patient: user._id,
         patientName: user.name,
@@ -796,25 +841,27 @@ exports.finalizeAppointment = asyncHandler(async (req, res) => {
         appointmentDate: formattedDate,
         timeSlot: appointment.timeSlot,
       });
-      
+
       if (calendarEvent && calendarEvent.zoomLink) {
         appointment.meetLink = calendarEvent.zoomLink;
       }
     } else {
-      return res.status(400).json({ message: "Invalid calendar type in doctor's preferences." });
+      return res
+        .status(400)
+        .json({ message: "Invalid calendar type in doctor's preferences." });
     }
-    
+
     // Update appointment status and add payment details
-    appointment.status = 'confirmed';
+    appointment.status = "confirmed";
     appointment.paymentId = paymentId;
-    
+
     // Update patient follow-up status
     user.follow = "Follow up-C";
     await user.save();
-    
+
     // Save the updated appointment
     await appointment.save();
-    
+
     res.status(200).json({
       success: true,
       message: "Appointment finalized successfully",
@@ -828,9 +875,13 @@ exports.finalizeAppointment = asyncHandler(async (req, res) => {
       appliedCoupon.isUsed = false;
       await appliedCoupon.save();
     }
-    
+
     // If referral was applied, revert it
-    if (previousAppointments && previousAppointments.length === 0 && couponCode) {
+    if (
+      previousAppointments &&
+      previousAppointments.length === 0 &&
+      couponCode
+    ) {
       const referral = await Referral.findOne({
         code: couponCode,
         isUsed: false,
@@ -840,7 +891,7 @@ exports.finalizeAppointment = asyncHandler(async (req, res) => {
         await referral.save();
       }
     }
-    
+
     console.error("Failed to finalize appointment:", error);
     res.status(500).json({
       message: "Failed to finalize appointment",
@@ -852,8 +903,15 @@ exports.finalizeAppointment = asyncHandler(async (req, res) => {
 // Book appointment
 exports.bookAppointment = asyncHandler(async (req, res) => {
   const phone = req.user.phone;
-  const { appointmentDate, timeSlot, consultingFor, fullName, consultingReason, symptom} = req.body; // Use familyMemberId
-  const doctorId = "67bc3391654d85340a8ce713";// should be changed
+  const {
+    appointmentDate,
+    timeSlot,
+    consultingFor,
+    fullName,
+    consultingReason,
+    symptom,
+  } = req.body; // Use familyMemberId
+  const doctorId = "67bc3391654d85340a8ce713"; // should be changed
   let patient;
 
   const user = await Patient.findOne({ phone });
@@ -1011,23 +1069,24 @@ exports.bookAppointment = asyncHandler(async (req, res) => {
       referral.firstAppointmentDone = true;
       await referral.save();
     } else {
-      console.log(`No referral found with code ${couponCode} that hasn't been used.`);
+      console.log(
+        `No referral found with code ${couponCode} that hasn't been used.`
+      );
     }
   }
-    //patient.coupon = "";
-  
+  //patient.coupon = "";
 
   //book appointment
   const newAppointment = new Appointment({
     patient: patient._id,
     patientEmail: patient.email,
     patientName: patient.name,
-    consultingFor:consultingFor,
-    consultingPersonName:fullName,
-    reason:consultingReason,
-    symptom:symptom,
+    consultingFor: consultingFor,
+    consultingPersonName: fullName,
+    reason: consultingReason,
+    symptom: symptom,
     doctor: doctor._id,
-    doctorName:doctor.name,
+    doctorName: doctor.name,
     appointmentDate,
     timeSlot,
     isChronic,
@@ -1040,25 +1099,25 @@ exports.bookAppointment = asyncHandler(async (req, res) => {
     // If everything goes well, update the patient's follow-up status
     patient.follow = "Follow up-C"; // Update follow status
     await patient.save(); // Save the updated patient
-      
+
     let calendarEvent;
-    if (doctor.videoPlatform === 'googleMeet') {
+    if (doctor.videoPlatform === "googleMeet") {
       calendarEvent = await addEventToGoogleCalendar(doctorId, {
         _id: newAppointment._id,
         patientName: patient.name,
         patientEmail: patient.email,
         appointmentDate,
         timeSlot,
-        reason: consultingReason
+        reason: consultingReason,
       });
-      
+
       // Save the Meet link to the appointment
       if (calendarEvent && calendarEvent.meetLink) {
         console.log("Meet link successfully saved:", calendarEvent.meetLink);
         newAppointment.meetLink = calendarEvent.meetLink;
         await newAppointment.save();
       }
-    } else if (doctor.videoPlatform === 'zoom') {
+    } else if (doctor.videoPlatform === "zoom") {
       // If Zoom is selected
       calendarEvent = await addAppointmentToCalendar(doctor, {
         patient: patient._id,
@@ -1073,15 +1132,16 @@ exports.bookAppointment = asyncHandler(async (req, res) => {
         await newAppointment.save();
       }
     } else {
-      return res.status(400).json({ message: "Invalid calendar type in doctor's preferences." });
+      return res
+        .status(400)
+        .json({ message: "Invalid calendar type in doctor's preferences." });
     }
 
-    
-   //scheduleMeetingActivation(appointments);
+    //scheduleMeetingActivation(appointments);
     // Return success response with applied coupon info
     res.status(201).json({
       message: "Appointment booked successfully",
-      calendarEvent, 
+      calendarEvent,
       appointment: newAppointment,
       // zoomMeetingLink: zoomCalendarEvent.zoomLink,
       // appliedCoupon: appliedCoupon ? appliedCoupon.code : null,
@@ -1189,7 +1249,7 @@ exports.updateFollowUpStatus = async (req, res) => {
     if (!appointment) {
       return res.status(404).json({ message: "appointment not found" });
     }
-    
+
     const exDtTm = new Date();
 
     // Update follow-up status
@@ -1915,19 +1975,148 @@ exports.filterFamilyMembers = async (req, res) => {
 
 exports.fetchProfile = async (req, res) => {
   try {
-    const patientId = req.user.id; // Assuming the patient ID is stored in the JWT token
-    const patient = await Patient.findById(patientId).select('-password'); // Exclude sensitive data
+    const patientId = req.user.id; // Adjust this based on your authentication method
+    console.log(patientId);
+    // const patient = await Patient.findById(patientId);
+    const patient = await Patient.findById(patientId).select("-password"); // Exclude sensitive data
 
     if (!patient) {
-      return res.status(404).json({ message: 'Patient not found' });
+      return res.status(404).json({ message: "Patient not found" });
     }
-    
+
     res.status(200).json(patient);
   } catch (error) {
-    console.error('Error fetching profile:', error);
-    res.status(500).json({ message: 'Failed to fetch profile' });
+    console.error("Error fetching profile:", error);
+    res.status(500).json({ message: "Failed to fetch profile" });
   }
 };
+
+exports.uploadProfilePicture = async (req, res) => {
+  try {
+    const patientId = req.user._id; // assuming authentication middleware sets this
+    const patient = await Patient.findById(patientId);
+
+    if (!patient) {
+      return res
+        .status(404)
+        .json({ success: false, message: "Patient not found" });
+    }
+
+    let profilePhotoUrl = "";
+
+    if (req.file) {
+      // 📤 Upload file to Cloudinary
+      const uploadResult = await cloudinary.uploader.upload(req.file.path, {
+        folder: "patient_profiles",
+        resource_type: "image",
+      });
+
+      profilePhotoUrl = uploadResult.secure_url;
+
+      // if (req.file) {
+      //   const uploadResult = await cloudinary.uploader.upload(req.file.path, {
+      //     folder: "patient_profile_photos",
+      //     public_id: `${patientId}_profile`,
+      //     overwrite: true,
+      //   });
+
+      //   profilePhotoUrl = uploadResult.secure_url;
+
+      // 🧹 Clean up local file
+      fs.unlink(req.file.path, (err) => {
+        if (err) console.error("Failed to delete local file:", err);
+      });
+    } else {
+      // 🖼️ Generate avatar using initials if no file uploaded
+      const initials = patient.name
+        ? patient.name
+            .split(" ")
+            .map((n) => n[0])
+            .join("")
+            .toUpperCase()
+        : "P";
+
+      profilePhotoUrl = `https://ui-avatars.com/api/?name=${initials}&background=random&color=fff&size=128`;
+    }
+
+    // ✅ Save to patient
+    patient.profilePhoto = profilePhotoUrl;
+    await patient.save();
+
+    res.status(200).json({
+      success: true,
+      message: "Profile picture updated successfully",
+      profilePhoto: profilePhotoUrl,
+    });
+  } catch (error) {
+    console.error("Upload error:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to upload profile picture",
+      error: error.message,
+    });
+  }
+};
+
+exports.updateProfile = async (req, res) => {
+  try {
+    const userId = req.user.id;
+
+    // Destructure the fields from the request body
+    const { name, age, phone, whatsappNumber, gender } = req.body;
+
+    // Find and update the patient document
+    const updatedPatient = await Patient.findByIdAndUpdate(
+      userId,
+      {
+        name,
+        age,
+        phone,
+        whatsappNumber,
+        gender,
+      },
+      { new: true, runValidators: true }
+    );
+
+    if (!updatedPatient) {
+      return res.status(404).json({ message: "Patient not found" });
+    }
+
+    res.status(200).json({
+      message: "Profile updated successfully",
+      data: updatedPatient,
+    });
+  } catch (error) {
+    console.error("Error updating profile:", error);
+    res.status(500).json({ message: "Internal server error" });
+  }
+};
+
+// exports.getProfile = async (req, res) => {
+//   try {
+//     const patientId = req.user._id;
+//     const patient = await Patient.findById(patientId).select(
+//       "name email profilePhoto"
+//     );
+
+//     if (!patient) {
+//       return res
+//         .status(404)
+//         .json({ success: false, message: "Patient not found" });
+//     }
+
+//     res.status(200).json({ success: true, data: patient });
+//   } catch (error) {
+//     console.error("Fetch error:", error);
+//     res
+//       .status(500)
+//       .json({
+//         success: false,
+//         message: "Failed to fetch profile",
+//         error: error.message,
+//       });
+//   }
+// };
 
 // // Update Appointment
 // exports.updateAppointment = asyncHandler(async (req, res) => {

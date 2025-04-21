@@ -11,10 +11,10 @@ router.put('/raw-materials/:id', rawMaterialController.updateRawMaterial);
 router.delete('/raw-materials/:id', rawMaterialController.deleteRawMaterial);
 
 router.get('/medicines', medicineController.getAllMedicines);
-router.get('/medicines/:id', medicineController.getMedicine);
 router.post('/medicines', medicineController.createMedicine);
+router.post('/medicines/calculate-price', medicineController.calculatePrice);
+router.get('/medicines/:id', medicineController.getMedicine);
 router.put('/medicines/:id', medicineController.updateMedicine);
 router.delete('/medicines/:id', medicineController.deleteMedicine);
-router.post('/medicines/calculate-price', medicineController.calculatePrice);
 
 module.exports = router;

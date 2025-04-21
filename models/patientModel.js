@@ -34,7 +34,10 @@ const patientSchema = new mongoose.Schema(
       type: String,
       required: false,
     },
-
+    profilePhoto: {
+      type: String,
+      default: "", // will be set either to Cloudinary URL or avatar URL
+    },
     medicalRecords: {
       // no need in frontend set default as No
       type: String,
