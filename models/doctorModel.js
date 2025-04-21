@@ -47,7 +47,7 @@ const doctorSchema = new mongoose.Schema({
 
   // System Access
   usernameSystemAccess: { type: String, required: true, unique: true },
-  temporaryPassword: { type: String, required: true },
+  password: { type: String, required: true },
   accessLevel: { type: String, required: true },
  // digitalSignature: { type: String },
 

@@ -136,6 +136,7 @@ exports.verifyOTP = asyncHandler(async (req, res) => {
       console.log("Sending successful response");
       console.log("refreshToken:", refreshToken);
       console.log("User role:", user.role);
+      console.log("User type:", userType);
       if(userType === "Doctor") {
         res.status(200).json({
           success: true,
@@ -241,6 +242,7 @@ exports.loginWithPassword = asyncHandler(async (req, res) => {
   }
 
   if (!user || !user.password) {
+    console.log("User not found");
     return res
       .status(404)
       .json({ success: false, message: "User not found or password not set" });
@@ -254,7 +256,7 @@ exports.loginWithPassword = asyncHandler(async (req, res) => {
   }
 
   const accessToken = jwt.sign(
-    { user: { phone: user.phone, role } },
+    { user: { phone: user.phone, userType: role } },
     process.env.ACCESS_TOKEN_SECRET,
     { expiresIn: "25m" }
   );
@@ -264,6 +266,22 @@ exports.loginWithPassword = asyncHandler(async (req, res) => {
     { expiresIn: "7d" }
   );
 
+  console.log("role", role);
+  if(role === "Doctor") {
+    res.status(200).json({
+      success: true,
+      accessToken,
+      refreshToken,
+      userId: user._id,
+      userType: role,
+      role: user.role
+    });  
+  }
+  console.log("Sending response");
+  console.log("accessToken:", accessToken);
+  console.log("refreshToken:", refreshToken);
+  console.log("id", user.id);
+  console.log("User role:", role);
   res.status(200).json({
     success: true,
     accessToken,

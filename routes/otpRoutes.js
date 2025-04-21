@@ -13,7 +13,6 @@ router.post("/send-otp", otpController.sendOTP);
 router.post("/updatePassword", validateToken, otpController.updatePassword);
 router.post(
   "/loginWithPassword",
-  validateToken,
   otpController.loginWithPassword
 );
 router.post("/forgotPassword", validateToken, otpController.forgotPassword);
