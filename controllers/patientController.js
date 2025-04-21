@@ -22,6 +22,7 @@ const UserGoogleTokens = require("../models/UserTokenSchema");
 const accountSid = process.env.TWILIO_ACCOUNT_SID;
 const authToken = process.env.TWILIO_AUTH_TOKEN;
 const client = new twilio(accountSid, authToken);
+const bcrypt = require("bcrypt");
 
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID;
 const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET;
@@ -96,6 +97,10 @@ exports.sendForm = asyncHandler(async (req, res) => {
     symptomNotKnown,
     password
   } = req.body;
+
+  const salt = await bcrypt.genSalt(10);
+  const hashedPassword = await bcrypt.hash(password, salt);
+
   const { referralCode, familyToken } = req.query; // Get the referral code from query params
   console.log("Received request body:", req.query);
   // Check if referral code is provided
@@ -167,7 +172,7 @@ exports.sendForm = asyncHandler(async (req, res) => {
     gender,
     patientEntry,
     currentLocation,
-    password
+    password: hashedPassword,
   });
 
   if (referralCode) {
