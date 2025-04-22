@@ -17,7 +17,7 @@ const validateToken = asyncHandler(async (req, res, next) => {
     
     try {
       const decoded = jwt.verify(token, process.env.ACCESS_TOKEN_SECRET);
-      // console.log("Decoded token:", decoded);
+      console.log("Decoded token:", decoded);
 
       // Check if decoded has a phone property directly
       let user;
@@ -33,6 +33,10 @@ const validateToken = asyncHandler(async (req, res, next) => {
       }
 
       // If not a patient, check for doctor
+      if (!user && decoded.user && decoded.user.phone) {
+        user = await Doctor.findOne({ phone: decoded.user.phone }); //Initially it was : user = await Doctor.findOne({ phone: decoded.phone });
+        // console.log("Doctor found:", user);
+      }
       if (!user) {
         user = await Doctor.findOne({ phone: decoded.phone }); //Initially it was : user = await Doctor.findOne({ phone: decoded.phone });
         // console.log("Doctor found:", user);
