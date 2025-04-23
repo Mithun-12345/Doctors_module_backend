@@ -95,7 +95,7 @@ exports.sendForm = asyncHandler(async (req, res) => {
     currentLocation,
     patientEntry,
     symptomNotKnown,
-    password
+    password,
   } = req.body;
 
   const salt = await bcrypt.genSalt(10);
