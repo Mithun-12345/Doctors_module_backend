@@ -9,7 +9,6 @@ dotenv.config();
 exports.createWorkshop = async (req, res) => {
   try {
     const phone = req.user.phone;
-    console.log("createWorkshop reached");
     const doctor = await Doctor.findOne({ phone });
     if (!doctor) {
       return res.status(404).json({ message: "Doctor not found" });
@@ -22,6 +21,7 @@ exports.createWorkshop = async (req, res) => {
       scheduledDateTime,
       limit,
     } = req.body;
+    console.log(allowedParticipants);
     const newWorkshop = new Workshop({
       title,
       description,
@@ -32,8 +32,19 @@ exports.createWorkshop = async (req, res) => {
       limit,
       meetLink: "https://us05web.zoom.us/j/86204841254?pwd=FkynmvbupbZllXbJEvysDTXKErAqJS.1"
     });
-    console.log("kk")
-    await newWorkshop.save();
+    try {
+      await newWorkshop.save();
+      console.log("saved");
+    } catch (saveError) {
+      console.error("Error saving workshop:", saveError);
+      return res.status(500).json({
+        message: "Error saving workshop",
+        error: saveError.message,
+        stack: saveError.stack
+      });
+    }
+    
+    console.log("saved")
     res.status(201).json({
       message: "Workshop started successfully",
       workshop: newWorkshop,
@@ -45,58 +56,6 @@ exports.createWorkshop = async (req, res) => {
   }
 };
 
-// exports.createWorkshop = async (req, res) => {
-//   try {
-//     console.log("createWorkshop reached");
-//     const phone = req.user.phone;
-//     const doctor = await Doctor.findOne({ phone });
-//     console.log("doctor",doctor);
-//     if (!doctor) {
-//       return res.status(404).json({ message: "Doctor not found" });
-//     }
-//     const {
-//       title,
-//       description,
-//       fee,
-//       allowedParticipants,
-//       scheduledDateTime,
-//       limit,
-//     } = req.body;
-
-//     let meetLink;
-
-//     console.log(doctor.videoPlatform);
-//     if (doctor.videoPlatform === 'zoom') {
-//       meetLink = await generateZoomMeetingLink(doctor);
-//     } else if (doctor.videoPlatform === 'googleMeet') {
-//       meetLink = await generateGoogleMeetLink(doctor);
-//     } else {
-//       return res.status(400).json({ message: "Unsupported video platform" });
-//     }
-
-//     const newWorkshop = new Workshop({
-//       title,
-//       description,
-//       fee,
-//       doctorId: doctor._id,
-//       allowedParticipants,
-//       scheduledDateTime,
-//       limit,
-//       meetLink
-//     });
-//     await newWorkshop.save();
-//     res.status(201).json({
-//       message: "Workshop started successfully",
-//       workshop: newWorkshop,
-//     });
-//   } catch (error) {
-//     res
-//       .status(500)
-//       .json({ message: "Internal Server Error", error: error.message });
-//   }
-// };
-
-//General page where upcoming workshops can be seen
 exports.viewPendingWorkshops = async (req, res) => {
   try {
     const phone = req.user.phone;
