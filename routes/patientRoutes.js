@@ -18,7 +18,8 @@ const {
   fetchProfile,
   finalizeAppointment,
   uploadProfilePicture,
-  updateProfile
+  updateProfile,
+  getPayments,
 } = require("../controllers/patientController");
 const validateToken = require("../middlewares/validateTokenHandler");
 const {
@@ -31,6 +32,7 @@ const router = express.Router();
 router.post("/sendRegForm", sendForm);
 router.post("/sendChronicForm", validateToken, sendChronicForm);
 router.get("/details", validateToken, patientDetails);
+router.get("/payments", validateToken, getPayments);
 router.post(
   "/uploadProfilePicture",
   validateToken,

@@ -4,6 +4,7 @@ const Patient = require("../models/patientModel");
 const MedicalDetails = require("../models/patientDetails");
 const PatientDetails = require("../models/patientDetails");
 const ChronicPatient = require("../models/chronicModel");
+const Payment = require("../models/Payment");
 const FamilyLink = require("../models/FamilyLink");
 const Appointment = require("../models/appointmentModel");
 const Referral = require("../models/referralModel");
@@ -2175,3 +2176,13 @@ exports.updateProfile = async (req, res) => {
 
 //   res.status(200).json({ message: "Appointment cancelled successfully" });
 // });
+
+exports.getPayments = async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const payments = await Payment.find().populate("userId", "name"); // Assuming user has 'name'
+    res.json(payments);
+  } catch (e) {
+    res.status(500).json({ message: "Internal server error" });
+  }
+};
