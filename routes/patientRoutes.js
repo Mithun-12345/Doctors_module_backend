@@ -20,6 +20,7 @@ const {
   uploadProfilePicture,
   updateProfile,
   getPayments,
+  validateCoupon,
 } = require("../controllers/patientController");
 const validateToken = require("../middlewares/validateTokenHandler");
 const {
@@ -52,6 +53,7 @@ router.get("/getUserAppointments", validateToken, getUserAppointments);
 router.put("/updateFollowUp/:patientId", updateFollowUpStatus);
 router.put("/updateFollowPatientCall/:patientId", updateFollowPatientCall);
 router.post("/referFriend", validateToken, referFriend);
+router.get("/validateCoupon", validateCoupon);
 router.post("/addFamily", validateToken, addFamily);
 router.get("/getFamilyMembers", validateToken, getFamilyMembers);
 

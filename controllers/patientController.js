@@ -1331,6 +1331,7 @@ exports.referFriend = asyncHandler(async (req, res) => {
   console.log("Received request body:", req.body);
   const referrerPhone = req.user.phone;
   console.log(referrerPhone);
+  
   const generateReferralCode = () => {
     const chars =
       "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"; // 62 characters
@@ -1392,7 +1393,7 @@ exports.referFriend = asyncHandler(async (req, res) => {
     }
     // Also pass the referee phone and name via query
     // Send an SMS to the friend with the registration link
-    const referralLink = `http://localhost:8000/api/patient/sendRegForm?referralCode=${coupon}`;
+    const referralLink = `https://localhost:5173/firstform?code=${coupon}`;
     console.log(referralLink);
     // await client.messages.create({
     //   body: `Hi ${friendName}, you've been referred by ${referrer.phone}. Click here to register: ${referralLink}`,
@@ -1410,6 +1411,27 @@ exports.referFriend = asyncHandler(async (req, res) => {
     res.status(500).json({ success: false, error: "Server error" });
   }
 });
+
+exports.validateCoupon=async(req,res)=>{
+  try{
+    const { code } = req.query;
+    const referral = await Referral.findOne({ code, isUsed: false });
+  
+    if (referral) {
+      res.status(200).json({
+        success: true,
+        data: {
+          referredFriendName: referral.referredFriendName || '',
+          referredFriendPhone: referral.referredFriendPhone,
+        }
+      });
+    } else {
+      res.status(404).json({ success: false, message: 'Invalid or already used referral code.' });
+    }
+  }catch(error){
+    res.status(500).json({message:"Internal server error"});
+  }
+}
 
 exports.addFamily = async (req, res) => {
   try {
