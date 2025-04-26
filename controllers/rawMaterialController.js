@@ -27,10 +27,40 @@ exports.getRawMaterial = async (req, res) => {
 // Create a new raw material
 exports.createRawMaterial = async (req, res) => {
   try {
-    const newRawMaterial = new RawMaterial(req.body);
+    const {
+      name,
+      type,
+      category,
+      packageSize,
+      uom,
+      quantity,
+      currentQuantity,
+      thresholdQuantity,
+      expiryDate,
+      barcode,
+      productImage,
+      costPerUnit
+    } = req.body;
+
+    const newRawMaterial = new RawMaterial({
+      name,
+      type,
+      category,
+      packageSize,
+      uom,
+      quantity: Number(quantity),
+      currentQuantity: Number(currentQuantity),
+      thresholdQuantity: Number(thresholdQuantity),
+      expiryDate: new Date(expiryDate),
+      barcode,
+      productImage,
+      costPerUnit: Number(costPerUnit)
+    });
+
     const savedRawMaterial = await newRawMaterial.save();
     res.status(201).json(savedRawMaterial);
   } catch (error) {
+    console.error("Validation Error:", error);
     res.status(400).json({ message: 'Error creating raw material', error: error.message });
   }
 };
