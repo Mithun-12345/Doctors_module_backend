@@ -24,7 +24,7 @@ const workshopSchema = new mongoose.Schema({
   },
   allowedParticipants: {
     type: String,
-    enum: ["Doctor", "Patient", "Everyone"],
+    enum: ["Doctors", "Patients", "Everyone"],
     required: true,
   },
   participants: [

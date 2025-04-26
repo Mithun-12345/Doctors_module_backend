@@ -246,8 +246,9 @@ exports.doctorDetails = async (req, res) => {
 };
 
 exports.getDoctorFollow = async (req, res) => {
+  console.log("GetDoctorFollow reached");
   const phone = req.user.phone; // Use the phone from the token
-  console.log("Phone:", phone);
+  console.log("doctor Phone:", phone);
   try {
     const doctor = await Doctor.findOne({ phone }); // Find by phone instead of ID
     if (!doctor) {
