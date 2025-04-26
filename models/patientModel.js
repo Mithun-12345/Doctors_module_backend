@@ -23,7 +23,7 @@ const patientSchema = new mongoose.Schema(
       unique: true,
     },
     whatsappNumber: {
-      type: Number,
+      type: String,
       required: false,
     },
     email: {

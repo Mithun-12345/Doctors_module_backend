@@ -18,7 +18,9 @@ const {
   fetchProfile,
   finalizeAppointment,
   uploadProfilePicture,
-  updateProfile
+  updateProfile,
+  getPayments,
+  validateCoupon,
 } = require("../controllers/patientController");
 const validateToken = require("../middlewares/validateTokenHandler");
 const {
@@ -31,6 +33,7 @@ const router = express.Router();
 router.post("/sendRegForm", sendForm);
 router.post("/sendChronicForm", validateToken, sendChronicForm);
 router.get("/details", validateToken, patientDetails);
+router.get("/payments", validateToken, getPayments);
 router.post(
   "/uploadProfilePicture",
   validateToken,
@@ -50,6 +53,7 @@ router.get("/getUserAppointments", validateToken, getUserAppointments);
 router.put("/updateFollowUp/:patientId", updateFollowUpStatus);
 router.put("/updateFollowPatientCall/:patientId", updateFollowPatientCall);
 router.post("/referFriend", validateToken, referFriend);
+router.get("/validateCoupon", validateCoupon);
 router.post("/addFamily", validateToken, addFamily);
 router.get("/getFamilyMembers", validateToken, getFamilyMembers);
 
