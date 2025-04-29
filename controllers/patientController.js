@@ -916,8 +916,9 @@ exports.bookAppointment = asyncHandler(async (req, res) => {
     fullName,
     consultingReason,
     symptom,
+    doctorId,
   } = req.body; // Use familyMemberId
-  const doctorId = "67bc3391654d85340a8ce713"; // should be changed
+  // const doctorId = "67bc3391654d85340a8ce713"; // should be changed
   let patient;
 
   const user = await Patient.findOne({ phone });
@@ -1331,7 +1332,7 @@ exports.referFriend = asyncHandler(async (req, res) => {
   console.log("Received request body:", req.body);
   const referrerPhone = req.user.phone;
   console.log(referrerPhone);
-  
+
   const generateReferralCode = () => {
     const chars =
       "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"; // 62 characters
@@ -1412,26 +1413,29 @@ exports.referFriend = asyncHandler(async (req, res) => {
   }
 });
 
-exports.validateCoupon=async(req,res)=>{
-  try{
+exports.validateCoupon = async (req, res) => {
+  try {
     const { code } = req.query;
     const referral = await Referral.findOne({ code, isUsed: false });
-  
+
     if (referral) {
       res.status(200).json({
         success: true,
         data: {
-          referredFriendName: referral.referredFriendName || '',
+          referredFriendName: referral.referredFriendName || "",
           referredFriendPhone: referral.referredFriendPhone,
-        }
+        },
       });
     } else {
-      res.status(404).json({ success: false, message: 'Invalid or already used referral code.' });
+      res.status(404).json({
+        success: false,
+        message: "Invalid or already used referral code.",
+      });
     }
-  }catch(error){
-    res.status(500).json({message:"Internal server error"});
+  } catch (error) {
+    res.status(500).json({ message: "Internal server error" });
   }
-}
+};
 
 exports.addFamily = async (req, res) => {
   try {
@@ -1536,7 +1540,7 @@ exports.addFamily = async (req, res) => {
         });
       }
 
-      const link = `http://localhost:8000/api/patient/sendRegForm?familyToken=${token}`;
+      const link = `https://localhost:5173/firstform?familyToken=${token}`;
 
       // await client.messages.create({
       //   body: `Hi ${familyMemberName}, you've been referred by ${User.phone}. Click here to register: ${link}`,
@@ -1544,6 +1548,7 @@ exports.addFamily = async (req, res) => {
       //   to: friendPhone,
       // });
 
+      console.log(link);
       res.status(200).json({
         success: true,
         message: "Link sent successfully",

@@ -42,7 +42,7 @@ router.post(
   uploadProfilePicture
 );
 router.post("/bookAppointment", validateToken, bookAppointment);
-router.put("/updateProfile", validateToken, updateProfile);
+router.put("/updateProfile", validateToken, updateProfile); 
 router.post("/finalizeAppointment", validateToken, finalizeAppointment);
 // router.patch("/updateAppointment/:id", validateToken, updateAppointment);
 // router.get("/appointments", validateToken, getAppointmentsByDate);

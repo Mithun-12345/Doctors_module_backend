@@ -276,6 +276,10 @@ app.post("/generateToken", (req, res) => {
   res.json({ token: token });
 });
 
+app.get("/Tarun", (req, res) => {
+  return res.status(200).json({ message: "Endpoint reached" });
+});
+
 const PORT = process.env.PORT || 8000;
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
