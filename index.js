@@ -36,6 +36,7 @@ const workshopRoutes = require("./routes/workshopRoutes.js");
 const prescriptionRoute = require("./routes/prescription.js");
 const medicineRoute = require("./routes/medicineRoute.js");
 const rawMaterialRoute = require("./routes/rawMaterialRoute.js");
+const vendorRoutes = require("./routes/VendorRoutes.js");
 dbConnection();
 
 dotenv.config();
@@ -71,6 +72,7 @@ app.use("/api/workshop", workshopRoutes);
 app.use("/api/prescription", prescriptionRoute);
 app.use("/api/medicines", medicineRoute);
 app.use("/api/inventory", rawMaterialRoute);
+app.use("/api/vendor", vendorRoutes);
 const options = {
   key: fs.readFileSync("server.key"),
   cert: fs.readFileSync("server.crt"),

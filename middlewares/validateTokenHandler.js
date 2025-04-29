@@ -44,7 +44,7 @@ const validateToken = asyncHandler(async (req, res, next) => {
 
       // If still not found, check for admin
       if (!user) {
-        user = await Admin.findOne({ phone: decoded.phone });
+        user = await Admin.findOne({ phone: decoded.user.phone });
         // console.log("Admin found:", user);
       }
 

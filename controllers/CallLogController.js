@@ -5,6 +5,9 @@ const Doctor = require('../models/doctorModel');
 const ChronicForm=require('../models/chronicModel');
 const FirstForm=require('../models/patientModel');
 const MedicalDetails = require('../models/patientDetails');
+const jwt = require('jsonwebtoken');
+const bcrypt = require('bcrypt');
+const Admin = require('../models/Admin'); // your Admin mongoose model
 
 const twilio = require('twilio');
 
@@ -203,45 +206,47 @@ exports.updateEnquiryStatus = async (req, res) => {
   }
 };
 
-const Admin = require('../models/Admin');
-const jwt = require('jsonwebtoken');
 exports.login = async (req, res) => {
-  const { phoneNumber, password, role } = req.body;
-  let user;
+  const { phoneNumber, password } = req.body;
+
+  if (!phoneNumber || !password) {
+    return res.status(400).json({ message: 'Phone number and password are required.' });
+  }
+
+  // Phone number format validation (server-side too)
+  const phoneRegex = /^[0-9]{10}$/;
+  if (!phoneRegex.test(phoneNumber)) {
+    return res.status(400).json({ message: 'Invalid phone number format.' });
+  }
 
   try {
-    console.log(`Role: ${role}`);
-    console.log(`Phone Number: ${phoneNumber}`);
+    const admin = await Admin.findOne({ phone: phoneNumber });
 
-    // Find user based on role
-    if (role === 'admin') {
-      user = await Admin.findOne({ phone: phoneNumber });
-    } else if (role === 'admin-doctor') {
-      user = await Doctor.findOne({ phone: phoneNumber });
-    } else {
-      user = await Doctor.findOne({ phone: phoneNumber });
-    } 
-
-    console.log(`User Found: ${user}`);
-
-    if (!user) {
-      return res.status(400).json({ message: 'User not found' });
+    if (!admin) {
+      return res.status(401).json({ message: 'Invalid phone number or password.' });
     }
 
-    // Validate password (you might want to hash and compare using bcrypt or another library)
-    // Assuming you have a valid user, generate a JWT token
-    const payload = { userId: user._id, phone: user.phone, role: user.role };
-    console.log('JWT Payload:', payload);
+    const passwordMatch = await bcrypt.compare(password, admin.password);
+
+    if (!passwordMatch) {
+      return res.status(401).json({ message: 'Invalid phone number or password.' });
+    }
 
     const accessToken = jwt.sign(
-      payload,
+      { 
+        user: { 
+          userId: admin._id,
+          phone: admin.phone,
+          userType: 'admin',
+        } 
+      },
       process.env.ACCESS_TOKEN_SECRET,
-      { expiresIn: '24h' }
+      { expiresIn: "50m" }
     );
-
+    
     res.json({ accessToken });
   } catch (err) {
-    console.error(err);
+    console.error('Login error:', err);
     res.status(500).json({ message: 'Server error' });
   }
 };
@@ -450,31 +455,67 @@ exports.updateDiseaseType = asyncHandler(async (req, res) => {
       res.status(500).json({ message: 'Internal server error' }); // Return a generic error response
     }
   };  
-  
 
+// Helper function for validating admin input
+const validateAdminInput = ({ fullName, email, phone, password }) => {
+  const errors = {};
 
-// // Generate TwiML Response
-// exports.getTwimlResponse = (req, res) => {
-//   const twiml = new twilio.twiml.VoiceResponse();
-//   twiml.dial().number(req.query.to); // Connects the call to the 'to' number
-//   res.type("text/xml");
-//   res.send(twiml.toString());
-// };
+  if (!fullName || fullName.length < 3) {
+    errors.fullName = 'Full name must be at least 3 characters.';
+  }
 
-// // Make a call
-// exports.makeCall = (req, res) => {
-//   const { to } = req.body; // The number to call from the request body
-//   const formattedPhone = `+91${to}`; // Format phone number
-//   const twimlUrl = `https://f844-121-200-55-162.ngrok-free.app/twiml?to=${encodeURIComponent(
-//     formattedPhone
-//   )}`;
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  if (!email || !emailRegex.test(email)) {
+    errors.email = 'Valid email address is required.';
+  }
 
-//   client.calls
-//     .create({
-//       url: twimlUrl, // Point to the TwiML endpoint
-//       to: "+916382786758", // Assistant doctor's number
-//       from: process.env.TWILIO_PHONE_NUMBER, // Your Twilio number
-//     })
-//     .then((call) => res.status(200).send(call.sid))
-//     .catch((error) => res.status(500).send(error));
-// };
+  const phoneRegex = /^[0-9]{10}$/;
+  if (!phone || !phoneRegex.test(phone)) {
+    errors.phone = 'Phone number must be exactly 10 digits.';
+  }
+
+  if (!password || password.length < 6) {
+    errors.password = 'Password must be at least 6 characters.';
+  }
+
+  return errors;
+};
+
+// @desc   Register a new admin
+// @route  POST /api/admin/register
+// @access Public (later you can restrict it)
+exports.registerAdmin = async (req, res) => {
+  const { fullName, email, phone, password } = req.body;
+
+  // 1. Validate input
+  const validationErrors = validateAdminInput({ fullName, email, phone, password });
+  if (Object.keys(validationErrors).length > 0) {
+    return res.status(400).json({ errors: validationErrors });
+  }
+
+  try {
+    // 2. Check if admin already exists (by email or phone)
+    const existingAdmin = await Admin.findOne({ $or: [{ email }, { phone }] });
+    if (existingAdmin) {
+      return res.status(409).json({ message: 'Admin with this email or phone already exists.' });
+    }
+
+    // 3. Hash the password
+    const hashedPassword = await bcrypt.hash(password, 10);
+
+    // 4. Save admin
+    const newAdmin = new Admin({
+      fullName,
+      email: email.toLowerCase(),
+      phone,
+      password: hashedPassword,
+    });
+
+    await newAdmin.save();
+
+    res.status(201).json({ message: 'Admin registered successfully!' });
+  } catch (error) {
+    console.error('Admin registration error:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+};
