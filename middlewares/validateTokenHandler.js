@@ -12,9 +12,14 @@ const validateToken = asyncHandler(async (req, res, next) => {
     token = authHeader.split(" ")[1];
     console.log("Token:", token);
     if (!token) {
-      return res.status(401).json({ success: false, error: "User is not authorized or token is missing" });
+      return res
+        .status(401)
+        .json({
+          success: false,
+          error: "User is not authorized or token is missing",
+        });
     }
-    
+
     try {
       const decoded = jwt.verify(token, process.env.ACCESS_TOKEN_SECRET);
       console.log("Decoded token:", decoded);
@@ -29,7 +34,9 @@ const validateToken = asyncHandler(async (req, res, next) => {
         user = await Patient.findOne({ phone: decoded.user.phone });
         // console.log("Patient found:", user);
       } else {
-        return res.status(401).json({ success: false, error: "Invalid token structure" });
+        return res
+          .status(401)
+          .json({ success: false, error: "Invalid token structure" });
       }
 
       // If not a patient, check for doctor
@@ -49,9 +56,11 @@ const validateToken = asyncHandler(async (req, res, next) => {
       }
 
       if (!user) {
-        return res.status(404).json({ success: false, error: "User not found" });
+        return res
+          .status(404)
+          .json({ success: false, error: "User not found" });
       }
-      
+
       // Attach the found user object to the request
       req.user = user;
       next();
@@ -63,7 +72,12 @@ const validateToken = asyncHandler(async (req, res, next) => {
       return res.status(500).json({ success: false, error: "Server error" });
     }
   } else {
-    return res.status(401).json({ success: false, error: "Authorization header is missing or invalid" });
+    return res
+      .status(401)
+      .json({
+        success: false,
+        error: "Authorization header is missing or invalid",
+      });
   }
 });
 
