@@ -1,5 +1,4 @@
 const asyncHandler = require("express-async-handler");
-const mongoose = require("mongoose");
 const axios = require("axios");
 const Patient = require("../models/patientModel");
 const MedicalDetails = require("../models/patientDetails");
@@ -25,6 +24,7 @@ const accountSid = process.env.TWILIO_ACCOUNT_SID;
 const authToken = process.env.TWILIO_AUTH_TOKEN;
 const client = new twilio(accountSid, authToken);
 const bcrypt = require("bcrypt");
+const mongoose = require("mongoose");
 
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID;
 const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET;
@@ -2266,5 +2266,107 @@ exports.getPayments = async (req, res) => {
     res.json(payments);
   } catch (e) {
     res.status(500).json({ message: "Internal server error" });
+  }
+};
+
+exports.getAppointment = async (req, res) => {
+  try {
+    console.log("GetAppointment is reaching");
+    const { appointmentId } = req.params;
+    console.log("Appointment ID: ", appointmentId);
+    if (!mongoose.Types.ObjectId.isValid(appointmentId)) {
+      return res.status(400).json({ message: "Invalid appointment ID format" });
+    }
+    console.log("1");
+    const appointment = await Appointment.findById(appointmentId)
+      .populate("doctor", "name specialty")
+      .populate("patient", "name");
+
+    console.log("appointment: ", appointment);
+    if (!appointment) {
+      return res
+        .status(404)
+        .json({ message: `Appointment not found with ID: ${appointmentId}` });
+    }
+    console.log("2");
+    // Check if the user is the patient or the doctor for this appointment
+    console.log(
+      "appointment.patient._id: ",
+      appointment.patient._id.toString()
+    );
+    console.log("req.user.id: ", req.user.id);
+    // console.log("req.user.role: ", req.user.role);
+    if (
+      appointment.patient._id.toString() !== req.user.id &&
+      appointment.doctor._id.toString() !== req.user.id &&
+      req.user.userType !== "admin"
+    ) {
+      return res
+        .status(403)
+        .json({ message: "Not authorized to access this appointment" });
+    }
+    console.log("3");
+
+    res.json(appointment);
+    console.log("4");
+  } catch (error) {
+    console.log("5");
+    res
+      .status(500)
+      .json({ message: "Error fetching appointment", error: error.message });
+  }
+};
+
+// Update appointment
+exports.updateAppointment = async (req, res) => {
+  try {
+    const { appointmentId } = req.params;
+
+    if (!mongoose.Types.ObjectId.isValid(appointmentId)) {
+      return res.status(400).json({ message: "Invalid appointment ID format" });
+    }
+
+    const appointment = await Appointment.findById(appointmentId);
+
+    if (!appointment) {
+      return res
+        .status(404)
+        .json({ message: `Appointment not found with ID: ${appointmentId}` });
+    }
+
+    // Check authorization - only allow updates by the patient, doctor, or admin
+    if (
+      appointment.patient.toString() !== req.user.id &&
+      appointment.doctor.toString() !== req.user.id &&
+      req.user.role !== "admin"
+    ) {
+      return res
+        .status(403)
+        .json({ message: "Not authorized to update this appointment" });
+    }
+
+    // Update only allowed fields
+    const allowedUpdates = ["status", "medicalPayment", "notes"];
+
+    // Filter out updates that are not allowed
+    const updates = Object.keys(req.body)
+      .filter((update) => allowedUpdates.includes(update))
+      .reduce((obj, key) => {
+        obj[key] = req.body[key];
+        return obj;
+      }, {});
+
+    // Apply updates
+    const updatedAppointment = await Appointment.findByIdAndUpdate(
+      appointmentId,
+      { $set: updates },
+      { new: true, runValidators: true }
+    ).populate("doctor", "name specialty");
+
+    res.json(updatedAppointment);
+  } catch (error) {
+    res
+      .status(500)
+      .json({ message: "Error updating appointment", error: error.message });
   }
 };

@@ -104,7 +104,7 @@ exports.verifyOTP = asyncHandler(async (req, res) => {
       );
 
       const refreshToken = jwt.sign(
-        { user: { phone: otpDocument.phone, userType } },
+        { user: { id: user._id, phone: otpDocument.phone, userType } },
         process.env.REFRESH_TOKEN_SECRET,
         { expiresIn: "7d" }
       );
@@ -256,9 +256,13 @@ exports.loginWithPassword = asyncHandler(async (req, res) => {
   }
 
   const accessToken = jwt.sign(
-    { user: { phone: user.phone, userType: role } },
+    { user: { 
+      id: user._id,
+      phone: user.phone, 
+      userType: role 
+    } },
     process.env.ACCESS_TOKEN_SECRET,
-    { expiresIn: "25m" }
+    { expiresIn: "1d" }
   );
   const refreshToken = jwt.sign(
     { user: { phone: user.phone, role } },

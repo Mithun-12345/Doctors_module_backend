@@ -9,6 +9,8 @@ const {
   // getAppointmentById,
   // cancelAppointment,
   checkAvailableSlots,
+  getAppointment,
+  updateAppointment,
   getUserAppointments,
   updateFollowUpStatus,
   updateFollowPatientCall,
@@ -50,7 +52,11 @@ router.post("/finalizeAppointment", validateToken, finalizeAppointment);
 // router.get("/appointment/:id", validateToken, getAppointmentById);
 // router.delete("/appointment/:id", validateToken, cancelAppointment);
 router.post("/checkSlots", validateToken, checkAvailableSlots);
+
 router.get("/getUserAppointments", validateToken, getUserAppointments);
+router.get("/appointment/:appointmentId", validateToken, getAppointment);
+router.patch("/appointment/:appointmentId", validateToken, updateAppointment);
+
 router.put("/updateFollowUp/:patientId", updateFollowUpStatus);
 router.put("/updateFollowPatientCall/:patientId", updateFollowPatientCall);
 router.post("/referFriend", validateToken, referFriend);
