@@ -2,33 +2,94 @@ const Prescription = require('../models/Prescription');
 const mongoose = require('mongoose');
 const { StatusCodes } = require('http-status-codes');
 const Appointment = require('../models/appointmentModel');
+const Doctor = require('../models/doctorModel');
+const Patient = require('../models/patientModel');
+
+// this function is to be removed in order to migrate to getPrescriptionByAppointmentId fn
+// const getPrescriptionByAppointmentId = async (req, res) => {
+//     console.log("Reached");
+//   try {
+//     const { appointmentId } = req.params;
+
+//     if (!mongoose.Types.ObjectId.isValid(appointmentId)) {
+//       return res.status(StatusCodes.BAD_REQUEST).json({ message: 'Invalid appointment ID format' });
+//     }
+
+//     const prescription = await Prescription.findOne({ 
+//       appointmentId: new mongoose.Types.ObjectId(appointmentId) 
+//     });
+
+//     if (!prescription) {
+//       return res.status(StatusCodes.NOT_FOUND).json({ message: `No prescription found for appointment ID: ${appointmentId}` });
+//     }
+
+//     if (prescription.doctorId.toString() !== req.user.userId && req.user.role !== 'admin') {
+//       return res.status(StatusCodes.UNAUTHORIZED).json({ message: 'Not authorized to access this prescription' });
+//     }
+
+//     res.status(StatusCodes.OK).json(prescription);
+//   } catch (err) {
+//     console.error('Error fetching prescription by appointment ID:', err);
+//     res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({ message: 'Server error', error: err.message });
+//   }
+// };
+
 const getPrescriptionByAppointmentId = async (req, res) => {
-    console.log("Reached");
   try {
+    console.log("getPrescriptionByAppointmentId is reaching");
     const { appointmentId } = req.params;
 
     if (!mongoose.Types.ObjectId.isValid(appointmentId)) {
       return res.status(StatusCodes.BAD_REQUEST).json({ message: 'Invalid appointment ID format' });
     }
 
-    const prescription = await Prescription.findOne({ 
-      appointmentId: new mongoose.Types.ObjectId(appointmentId) 
-    });
+    const appointment = await Appointment.findById(appointmentId);
+
+    if (!appointment) {
+      return res.status(StatusCodes.NOT_FOUND).json({ message: `Appointment not found with ID: ${appointmentId}` });
+    }
+
+    if (
+      appointment.patient.toString() !== req.user.id &&
+      appointment.doctor.toString() !== req.user.id &&
+      req.user.role !== 'admin'
+    ) {
+      return res.status(StatusCodes.UNAUTHORIZED).json({ message: 'Not authorized to access this prescription' });
+    }
+
+    const prescription = await Prescription.findOne({
+      appointmentId: new mongoose.Types.ObjectId(appointmentId)
+    })
+      .populate('doctorId', 'name specialty licenseNumber')
+      .populate('patientId', 'name');
 
     if (!prescription) {
       return res.status(StatusCodes.NOT_FOUND).json({ message: `No prescription found for appointment ID: ${appointmentId}` });
     }
 
-    if (prescription.doctorId.toString() !== req.user.userId && req.user.role !== 'admin') {
-      return res.status(StatusCodes.UNAUTHORIZED).json({ message: 'Not authorized to access this prescription' });
-    }
+    const formattedPrescription = {
+      _id: prescription._id,
+      appointmentId: prescription.appointmentId,
+      doctorId: prescription.doctorId._id,
+      doctorName: prescription.doctorId.name,
+      doctorSpecialty: prescription.doctorId.specialty,
+      doctorLicense: prescription.doctorId.licenseNumber,
+      patientId: prescription.patientId._id,
+      patientName: prescription.patientId.name,
+      diagnosis: prescription.diagnosis,
+      medications: prescription.medications,
+      instructions: prescription.instructions,
+      createdAt: prescription.createdAt,
+      updatedAt: prescription.updatedAt
+    };
 
-    res.status(StatusCodes.OK).json(prescription);
+    res.status(StatusCodes.OK).json(formattedPrescription);
   } catch (err) {
     console.error('Error fetching prescription by appointment ID:', err);
     res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({ message: 'Server error', error: err.message });
   }
 };
+
 
 const getMyPrescribedAppointments = async (req, res) => {
   try {
