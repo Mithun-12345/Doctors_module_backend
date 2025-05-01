@@ -45,12 +45,14 @@ const appointmentSchema = new mongoose.Schema(
       type: Boolean,
       default: false,
     },
-    expiresAt: { type: Date, index: { expires: '1m' } },
+    expiresAt: { type: Date, index: { expires: "1m" } },
     // including from patient model !!!!
     consultingFor: {
-      type: String,
-      required: false,
+      type: mongoose.Types.ObjectId,
+      ref: "Patient",
+      required: true, // We should enforce that we always store id
     },
+
     diseaseName: {
       //consultingReason
       type: String,
@@ -106,9 +108,9 @@ const appointmentSchema = new mongoose.Schema(
       //no need in frontend
       type: String,
     },
-    status:{
+    status: {
       type: String,
-      default: "pending"
+      default: "pending",
     },
     meetLink: {
       type: String,
@@ -117,7 +119,7 @@ const appointmentSchema = new mongoose.Schema(
     notes: {
       type: String,
       default: "",
-    }
+    },
   },
   { timestamps: true }
 );

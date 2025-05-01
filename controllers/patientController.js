@@ -1,4 +1,5 @@
 const asyncHandler = require("express-async-handler");
+const mongoose = require("mongoose");
 const axios = require("axios");
 const Patient = require("../models/patientModel");
 const MedicalDetails = require("../models/patientDetails");
@@ -372,21 +373,17 @@ exports.checkAvailableSlots = asyncHandler(async (req, res) => {
   const phone = req.user.phone;
 
   const patient = await Patient.findOne({ phone });
-  const patientDetails = await PatientDetails.findOne({
-    patientId: patient._id,
-  });
-  if (!patientDetails) {
-    return res.status(404).json({ message: "Patient details not found" });
+  if (!patient) {
+    return res.status(404).json({ message: "Patient not found" });
   }
 
-  // Fetch medical details
   const medicalDetails = await MedicalDetails.findOne({
     patientId: patient._id,
   });
   if (!medicalDetails) {
     return res.status(404).json({ message: "Medical details not found" });
   }
-  // console.log(medicalDetails);
+
   const diseaseType = medicalDetails.diseaseType.name.toLowerCase();
 
   const timeSlots = [
@@ -405,11 +402,9 @@ exports.checkAvailableSlots = asyncHandler(async (req, res) => {
 
   const availableSlots = timeSlots.filter((slot) => {
     const isBooked = appointments.some((appt) => appt.timeSlot === slot);
-
     if (isBooked) return false;
 
     if (diseaseType === "chronic") {
-      // If chronic patient, check if there is a chronic booking in the morning or afternoon session
       const chronicBookingInMorning = appointments.some(
         (appt) => appt.isChronic && isMorningSlot(appt.timeSlot)
       );
@@ -913,12 +908,13 @@ exports.bookAppointment = asyncHandler(async (req, res) => {
     appointmentDate,
     timeSlot,
     consultingFor,
-    fullName,
+    // fullName,
     consultingReason,
     symptom,
-    doctorId,
+    // doctorId,
   } = req.body; // Use familyMemberId
-  // const doctorId = "67bc3391654d85340a8ce713"; // should be changed
+  const doctorId = "68130f0e9519dbb4f705f6da"; // should be changed
+
   let patient;
 
   const user = await Patient.findOne({ phone });
@@ -948,6 +944,10 @@ exports.bookAppointment = asyncHandler(async (req, res) => {
 
   // Find the doctor by ID
   const doctor = await Doctor.findById(doctorId);
+  console.log("Doctor fetch result:", doctor);
+  console.log("Doctor role:", doctor?.role);
+  console.log("Connected to DB:", mongoose.connection.name);
+
   if (!doctor || doctor.role !== "admin-doctor") {
     return res.status(404).json({ message: "Doctor not found" });
   }
@@ -1089,7 +1089,7 @@ exports.bookAppointment = asyncHandler(async (req, res) => {
     patientEmail: patient.email,
     patientName: patient.name,
     consultingFor: consultingFor,
-    consultingPersonName: fullName,
+    // consultingPersonName: fullName,
     reason: consultingReason,
     symptom: symptom,
     doctor: doctor._id,
@@ -1660,6 +1660,61 @@ exports.addFamily = async (req, res) => {
     }
   } catch (e) {
     console.log(e);
+  }
+};
+
+exports.fetchFamilyDetails = async (req, res) => {
+  try {
+    const { familyToken } = req.query;
+
+    if (!familyToken) {
+      return res.status(400).json({
+        success: false,
+        message: "Family token is required",
+      });
+    }
+
+    const familyLink = await FamilyLink.findOne({ token: familyToken });
+
+    if (!familyLink) {
+      return res.status(404).json({
+        success: false,
+        message: "Invalid or expired family token",
+      });
+    }
+
+    // Derive gender
+    const getGenderFromRelationship = (relationship) => {
+      const maleRelationships = ["Father", "Son", "Father in law", "Husband"];
+      const femaleRelationships = [
+        "Mother",
+        "Daughter",
+        "Mother in law",
+        "Wife",
+      ];
+
+      if (maleRelationships.includes(relationship)) {
+        return "Male";
+      } else if (femaleRelationships.includes(relationship)) {
+        return "Female";
+      } else {
+        return "";
+      }
+    };
+
+    const gender = getGenderFromRelationship(familyLink.relationship);
+
+    return res.status(200).json({
+      success: true,
+      data: {
+        name: familyLink.name,
+        phone: familyLink.phone,
+        gender: gender,
+      },
+    });
+  } catch (error) {
+    console.error("Error fetching family details:", error);
+    res.status(500).json({ success: false, message: "Server error" });
   }
 };
 

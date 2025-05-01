@@ -21,6 +21,7 @@ const {
   updateProfile,
   getPayments,
   validateCoupon,
+  fetchFamilyDetails,
 } = require("../controllers/patientController");
 const validateToken = require("../middlewares/validateTokenHandler");
 const {
@@ -42,7 +43,7 @@ router.post(
   uploadProfilePicture
 );
 router.post("/bookAppointment", validateToken, bookAppointment);
-router.put("/updateProfile", validateToken, updateProfile); 
+router.put("/updateProfile", validateToken, updateProfile);
 router.post("/finalizeAppointment", validateToken, finalizeAppointment);
 // router.patch("/updateAppointment/:id", validateToken, updateAppointment);
 // router.get("/appointments", validateToken, getAppointmentsByDate);
@@ -55,6 +56,7 @@ router.put("/updateFollowPatientCall/:patientId", updateFollowPatientCall);
 router.post("/referFriend", validateToken, referFriend);
 router.get("/validateCoupon", validateCoupon);
 router.post("/addFamily", validateToken, addFamily);
+router.get("/fetchFamilyDetails", fetchFamilyDetails);
 router.get("/getFamilyMembers", validateToken, getFamilyMembers);
 
 const familyMemberController = require("../controllers/patientController");
