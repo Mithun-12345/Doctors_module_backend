@@ -38,7 +38,7 @@ const getPrescriptionByAppointmentId = async (req, res) => {
   try {
     console.log("getPrescriptionByAppointmentId is reaching");
     const { appointmentId } = req.params;
-
+    console.log("appointmentId", appointmentId);
     if (!mongoose.Types.ObjectId.isValid(appointmentId)) {
       return res.status(StatusCodes.BAD_REQUEST).json({ message: 'Invalid appointment ID format' });
     }
@@ -49,13 +49,13 @@ const getPrescriptionByAppointmentId = async (req, res) => {
       return res.status(StatusCodes.NOT_FOUND).json({ message: `Appointment not found with ID: ${appointmentId}` });
     }
 
-    if (
-      appointment.patient.toString() !== req.user.id &&
-      appointment.doctor.toString() !== req.user.id &&
-      req.user.role !== 'admin'
-    ) {
-      return res.status(StatusCodes.UNAUTHORIZED).json({ message: 'Not authorized to access this prescription' });
-    }
+    // if (
+    //   appointment.patient.toString() !== req.user.id &&
+    //   req.user.userRole != 'doctor' &&
+    //   req.user.role !== 'admin'
+    // ) {
+    //   return res.status(StatusCodes.UNAUTHORIZED).json({ message: 'Not authorized to access this prescription' });
+    // }
 
     const prescription = await Prescription.findOne({
       appointmentId: new mongoose.Types.ObjectId(appointmentId)

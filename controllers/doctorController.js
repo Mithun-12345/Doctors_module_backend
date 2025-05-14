@@ -438,6 +438,8 @@ exports.getAllAppointmentsWithPatientData = async (req, res) => {
             _id: appointment._id,
             patientId: appointment.patient,
             consultingFor: appointment.consultingFor,
+            appointmentDate: appointment.appointmentDate,
+            timeSlot: appointment.timeSlot,
             diseaseName: appointment.diseaseName,
             diseaseType: appointment.diseaseType,
             follow: appointment.follow,

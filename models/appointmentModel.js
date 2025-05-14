@@ -47,10 +47,14 @@ const appointmentSchema = new mongoose.Schema(
     },
     expiresAt: { type: Date, index: { expires: "1m" } },
     // including from patient model !!!!
+    // consultingFor: {
+    //   type: mongoose.Types.ObjectId,
+    //   ref: "Patient",
+    //   required: true, // We should enforce that we always store id
+    // },
     consultingFor: {
-      type: mongoose.Types.ObjectId,
-      ref: "Patient",
-      required: true, // We should enforce that we always store id
+      type: String,  // Changed from mongoose.Schema.Types.ObjectId
+      required: false
     },
 
     diseaseName: {

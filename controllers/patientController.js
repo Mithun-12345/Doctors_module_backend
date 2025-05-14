@@ -2296,15 +2296,16 @@ exports.getAppointment = async (req, res) => {
     );
     console.log("req.user.id: ", req.user.id);
     // console.log("req.user.role: ", req.user.role);
-    if (
-      appointment.patient._id.toString() !== req.user.id &&
-      appointment.doctor._id.toString() !== req.user.id &&
-      req.user.userType !== "admin"
-    ) {
-      return res
-        .status(403)
-        .json({ message: "Not authorized to access this appointment" });
-    }
+    // Must be implemented
+    // if (
+    //   appointment.patient._id.toString() !== req.user.id &&
+    //   appointment.doctor._id.toString() !== req.user.id &&
+    //   req.user.userType !== "admin"
+    // ) {
+    //   return res
+    //     .status(403)
+    //     .json({ message: "Not authorized to access this appointment" });
+    // }
     console.log("3");
 
     res.json(appointment);

@@ -15,10 +15,10 @@ const rawMaterialDetailSchema = new mongoose.Schema({
     required: true,
     min: 0.1
   },
-  unit: {
-    type: String,
-    required: true
-  },
+  // unit: {
+  //   type: String,
+  //   required: true
+  // },
   pricePerUnit: {
     type: Number,
     required: true,

@@ -104,7 +104,7 @@ exports.verifyOTP = asyncHandler(async (req, res) => {
       );
 
       const refreshToken = jwt.sign(
-        { user: { id: user._id, phone: otpDocument.phone, userType } },
+        { user: { phone: otpDocument.phone, userType } },
         process.env.REFRESH_TOKEN_SECRET,
         { expiresIn: "7d" }
       );
