@@ -129,7 +129,11 @@ exports.verifyOTP = asyncHandler(async (req, res) => {
           .status(404)
           .json({ success: false, message: "User not found" });
       }
-
+      // const refreshToken = jwt.sign(
+      //   { user: { id: user._id, phone: otpDocument.phone, userType } },
+      //   process.env.REFRESH_TOKEN_SECRET,
+      //   { expiresIn: "7d" }
+      // );
       await OTP.updateOne({ phone }, { $set: { refreshToken } });
 
       console.log("accessToken:", accessToken);
@@ -137,15 +141,15 @@ exports.verifyOTP = asyncHandler(async (req, res) => {
       console.log("refreshToken:", refreshToken);
       console.log("User role:", user.role);
       console.log("User type:", userType);
-      if(userType === "Doctor") {
+      if (userType === "Doctor") {
         res.status(200).json({
           success: true,
           accessToken,
           refreshToken,
           userId: user._id,
           userType: userType,
-          role: user.role
-        });  
+          role: user.role,
+        });
       }
       res.status(200).json({
         success: true,
@@ -256,11 +260,13 @@ exports.loginWithPassword = asyncHandler(async (req, res) => {
   }
 
   const accessToken = jwt.sign(
-    { user: { 
-      id: user._id,
-      phone: user.phone, 
-      userType: role 
-    } },
+    {
+      user: {
+        id: user._id,
+        phone: user.phone,
+        userType: role,
+      },
+    },
     process.env.ACCESS_TOKEN_SECRET,
     { expiresIn: "1d" }
   );
@@ -271,15 +277,15 @@ exports.loginWithPassword = asyncHandler(async (req, res) => {
   );
 
   console.log("role", role);
-  if(role === "Doctor") {
+  if (role === "Doctor") {
     res.status(200).json({
       success: true,
       accessToken,
       refreshToken,
       userId: user._id,
       userType: role,
-      role: user.role
-    });  
+      role: user.role,
+    });
   }
   console.log("Sending response");
   console.log("accessToken:", accessToken);
