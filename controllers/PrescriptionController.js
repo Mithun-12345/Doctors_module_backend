@@ -76,9 +76,10 @@ const getPrescriptionByAppointmentId = async (req, res) => {
       doctorLicense: prescription.doctorId.licenseNumber,
       patientId: prescription.patientId._id,
       patientName: prescription.patientId.name,
-      diagnosis: prescription.diagnosis,
-      medications: prescription.medications,
-      instructions: prescription.instructions,
+      // diagnosis: prescription.diagnosis,
+      // medications: prescription.medications,
+      // instructions: prescription.instructions,
+      prescriptionItems: prescription.prescriptionItems,
       createdAt: prescription.createdAt,
       updatedAt: prescription.updatedAt
     };

@@ -96,3 +96,31 @@ exports.deleteRawMaterial = async (req, res) => {
   }
 };
 
+exports.reduceQuantity = async (req, res) => {
+  const { id } = req.params;
+  const { quantity } = req.body;
+  
+  if (!quantity || quantity <= 0) {
+    throw new ApiError(400, 'Valid quantity required');
+  }
+  
+  const rawMaterial = await RawMaterial.findById(id);
+  
+  if (!rawMaterial) {
+    throw new ApiError(404, 'Raw material not found');
+  }
+  
+  if (rawMaterial.currentQuantity < quantity) {
+    throw new ApiError(400, 'Insufficient quantity available');
+  }
+  
+  rawMaterial.currentQuantity -= parseFloat(quantity);
+  rawMaterial.updatedAt = Date.now();
+  
+  await rawMaterial.save();
+  
+  res.status(200).json({
+    success: true,
+    data: rawMaterial
+  });
+};

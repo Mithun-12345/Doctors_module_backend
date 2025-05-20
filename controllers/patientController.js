@@ -913,8 +913,8 @@ exports.bookAppointment = asyncHandler(async (req, res) => {
     symptom,
     // doctorId,
   } = req.body; // Use familyMemberId
-  const doctorId = "68130f0e9519dbb4f705f6da"; // should be changed
-
+  const doctorId = "67bc3391654d85340a8ce713"; // should be changed
+  console.log(req.body);
   let patient;
 
   const user = await Patient.findOne({ phone });
@@ -1088,7 +1088,7 @@ exports.bookAppointment = asyncHandler(async (req, res) => {
     patient: patient._id,
     patientEmail: patient.email,
     patientName: patient.name,
-    consultingFor: consultingFor,
+    consultingFor: consultingFor.label,
     // consultingPersonName: fullName,
     reason: consultingReason,
     symptom: symptom,
