@@ -5,7 +5,8 @@ const doctorSchema = new mongoose.Schema(
     // Personal Details
     name: { type: String, required: true },
     dateOfBirth: { type: Date, required: true },
-    gender: { type: String, enum: ["Male", "Female"], required: true },
+    gender: { type: String, required: true },
+    age: { type: Number, required: true },
     maritalStatus: {
       type: String,
       enum: ["Single", "Married"],
@@ -89,6 +90,10 @@ const doctorSchema = new mongoose.Schema(
       type: String,
       enum: ["googleMeet", "zoom"],
       default: "googleMeet",
+    },
+    profilePhoto: {
+      type: String,
+      default: "", // will be set either to Cloudinary URL or avatar URL
     },
     googleAccessToken: { type: String }, // Field for Google access token
     googleRefreshToken: { type: String }, // Field for Google refresh token

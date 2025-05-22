@@ -1,8 +1,10 @@
 const mongoose = require("mongoose");
 const Doctor = require("../models/doctorModel");
 const Appointment = require("../models/appointmentModel.js");
-const Patient = require("../models/patientModel.js")
+const Patient = require("../models/patientModel.js");
 const moment = require("moment");
+const cloudinary = require("cloudinary").v2;
+const fs = require("fs");
 
 exports.addDoctor = async (req, res) => {
   const { name, age, gender, photo, specialization, bio, phone, role } =
@@ -235,7 +237,7 @@ exports.doctorDetails = async (req, res) => {
         phone: doctor.phone,
         specialization: doctor.specialization,
         experience: doctor.experience,
-        role: doctor.role
+        role: doctor.role,
         // Add any other relevant fields
       },
     });
@@ -281,7 +283,7 @@ exports.getDoctorById = async (req, res) => {
   try {
     const doctor = await Doctor.findById(req.params.id);
     if (!doctor) {
-      return res.status(404).json({ message: 'Doctor not found' });
+      return res.status(404).json({ message: "Doctor not found" });
     }
     res.json(doctor);
   } catch (err) {
@@ -317,16 +319,16 @@ exports.getSettings = async (req, res) => {
 exports.updateSettings = async (req, res) => {
   try {
     const { videoPlatform } = req.body;
-    
+
     if (!videoPlatform) {
       return res.status(400).json({ error: "Video platform is required" });
     }
-    
+
     console.log("Doctor ID from request:", req.doctorId);
 
     // Use req.doctorId, which was added by the middleware, to update the doctor’s settings
     const doctor = await Doctor.findByIdAndUpdate(
-      req.doctorId,  // Use the doctorId from the request
+      req.doctorId, // Use the doctorId from the request
       { videoPlatform },
       { new: true }
     );
@@ -334,8 +336,11 @@ exports.updateSettings = async (req, res) => {
     if (!doctor) {
       return res.status(404).json({ error: "Doctor not found" });
     }
-    console.log("Platform:",doctor.videoPlatform);
-    res.json({ message: "Settings updated successfully", videoPlatform: doctor.videoPlatform });
+    console.log("Platform:", doctor.videoPlatform);
+    res.json({
+      message: "Settings updated successfully",
+      videoPlatform: doctor.videoPlatform,
+    });
   } catch (error) {
     console.error("Error updating settings:", error);
     res.status(500).json({ error: "Failed to update settings" });
@@ -364,7 +369,7 @@ exports.getAllAppointments = async (req, res) => {
         followUpTimestamp: 1,
         familyMembers: 1,
         createdAt: 1,
-        updatedAt: 1
+        updatedAt: 1,
       })
       .lean(); // Fetch as plain objects for easier formatting
 
@@ -385,8 +390,8 @@ exports.getAllAppointments = async (req, res) => {
           medicalPayment: appointment.medicalPayment,
           callCount: appointment.callCount,
           comments: appointment.comments,
-          __v: appointment.__v
-        }
+          __v: appointment.__v,
+        },
       };
     });
     console.log("data:", formattedData);
@@ -402,7 +407,11 @@ exports.getAllAppointmentsWithPatientData = async (req, res) => {
   try {
     // Fetch all unique patient IDs from the appointments
     const appointments = await Appointment.find({});
-    const patientIds = [...new Set(appointments.map(appointment => appointment.patient.toString()))];
+    const patientIds = [
+      ...new Set(
+        appointments.map((appointment) => appointment.patient.toString())
+      ),
+    ];
 
     // Fetch patient data for the corresponding IDs
     const patients = await Patient.find({ _id: { $in: patientIds } });
@@ -410,10 +419,13 @@ exports.getAllAppointmentsWithPatientData = async (req, res) => {
     // Format response as required
     const response = [];
 
-    patients.forEach(patient => {
-      const patientAppointments = appointments.filter(appointment => appointment.patient.toString() === patient._id.toString());
+    patients.forEach((patient) => {
+      const patientAppointments = appointments.filter(
+        (appointment) =>
+          appointment.patient.toString() === patient._id.toString()
+      );
 
-      patientAppointments.forEach(appointment => {
+      patientAppointments.forEach((appointment) => {
         response.push({
           _id: patient._id,
           name: patient.name,
@@ -450,7 +462,7 @@ exports.getAllAppointmentsWithPatientData = async (req, res) => {
             comments: appointment.comments,
             meetLink: appointment.meetLink,
             drafts: appointment.notes,
-            prescriptionCreated: appointment.prescriptionCreated
+            prescriptionCreated: appointment.prescriptionCreated,
           },
         });
       });
@@ -470,15 +482,138 @@ exports.submitNotes = async (req, res) => {
   try {
     const appointment = await Appointment.findById(appointmentID);
     if (!appointment) {
-      return res.status(404).json({ success: false, message: "Appointment not found" });
+      return res
+        .status(404)
+        .json({ success: false, message: "Appointment not found" });
     }
 
     appointment.notes = notes;
     await appointment.save();
 
-    res.status(200).json({ success: true, message: "Notes submitted successfully" });
+    res
+      .status(200)
+      .json({ success: true, message: "Notes submitted successfully" });
   } catch (error) {
     console.error("Error submitting notes:", error);
     res.status(500).json({ success: false, message: "Internal server error" });
+  }
+};
+
+exports.fetchProfile = async (req, res) => {
+  try {
+    const doctorId = req.user.id; // Adjust this based on your authentication method
+    console.log(doctorId);
+    // const patient = await Patient.findById(doctorId);
+    const patient = await Doctor.findById(doctorId).select("-password"); // Exclude sensitive data
+
+    if (!patient) {
+      return res.status(404).json({ message: "Patient not found" });
+    }
+
+    res.status(200).json(patient);
+  } catch (error) {
+    console.error("Error fetching profile:", error);
+    res.status(500).json({ message: "Failed to fetch profile" });
+  }
+};
+
+exports.updateProfile = async (req, res) => {
+  try {
+    const userId = req.user.id;
+
+    // Destructure the fields from the request body
+    const { name, age, phone, whatsappNumber, gender } = req.body;
+
+    // Find and update the patient document
+    const updatedDoctor = await Doctor.findByIdAndUpdate(
+      userId,
+      {
+        name,
+        age,
+        phone,
+        whatsappNumber,
+        gender,
+      },
+      { new: true, runValidators: true }
+    );
+
+    if (!updatedDoctor) {
+      return res.status(404).json({ message: "Doctor not found" });
+    }
+
+    res.status(200).json({
+      message: "Profile updated successfully",
+      data: updatedDoctor,
+    });
+  } catch (error) {
+    console.error("Error updating profile:", error);
+    res.status(500).json({ message: "Internal server error" });
+  }
+};
+
+exports.uploadProfilePicture = async (req, res) => {
+  try {
+    const doctorId = req.user._id; // assuming authentication middleware sets this
+    const doctor = await Doctor.findById(doctorId);
+
+    if (!doctor) {
+      return res
+        .status(404)
+        .json({ success: false, message: "Doctor not found" });
+    }
+
+    let profilePhotoUrl = "";
+
+    if (req.file) {
+      // 📤 Upload file to Cloudinary
+      const uploadResult = await cloudinary.uploader.upload(req.file.path, {
+        folder: "doctor_profiles",
+        resource_type: "image",
+      });
+
+      profilePhotoUrl = uploadResult.secure_url;
+
+      // if (req.file) {
+      //   const uploadResult = await cloudinary.uploader.upload(req.file.path, {
+      //     folder: "doctor_profile_photos",
+      //     public_id: `${doctorId}_profile`,
+      //     overwrite: true,
+      //   });
+
+      //   profilePhotoUrl = uploadResult.secure_url;
+
+      // 🧹 Clean up local file
+      fs.unlink(req.file.path, (err) => {
+        if (err) console.error("Failed to delete local file:", err);
+      });
+    } else {
+      // 🖼️ Generate avatar using initials if no file uploaded
+      const initials = doctor.name
+        ? doctor.name
+            .split(" ")
+            .map((n) => n[0])
+            .join("")
+            .toUpperCase()
+        : "P";
+
+      profilePhotoUrl = `https://ui-avatars.com/api/?name=${initials}&background=random&color=fff&size=128`;
+    }
+
+    // ✅ Save to doctor
+    doctor.profilePhoto = profilePhotoUrl;
+    await doctor.save();
+
+    res.status(200).json({
+      success: true,
+      message: "Profile picture updated successfully",
+      profilePhoto: profilePhotoUrl,
+    });
+  } catch (error) {
+    console.error("Upload error:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to upload profile picture",
+      error: error.message,
+    });
   }
 };
