@@ -380,3 +380,22 @@ exports.login = asyncHandler(async (req, res) => {
     res.status(400).json({ success: false, message: "Invalid login method" });
   }
 });
+
+exports.changePassword = async (req, res) => {
+  try {
+    const userId = req.user.id; // Adjust this based on your authentication method
+    console.log(userId);
+    let user;
+    user = await Doctor.findById(userId); // Exclude sensitive data
+    if (!user) {
+      user = await regForm.findById(userId);
+    }
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+    const { newPassword, retypedNewPassword } = req.body;
+    
+  } catch (error) {
+    res.status(500).json({ message: "Internal Server Error" });
+  }
+};
