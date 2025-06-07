@@ -37,7 +37,7 @@ exports.createRawMaterial = async (req, res) => {
       currentQuantity,
       thresholdQuantity,
       expiryDate,
-      barcode,
+      // barcode,
       productImage,
       costPerUnit
     } = req.body;
@@ -52,12 +52,17 @@ exports.createRawMaterial = async (req, res) => {
       currentQuantity: Number(currentQuantity),
       thresholdQuantity: Number(thresholdQuantity),
       expiryDate: new Date(expiryDate),
-      barcode,
+      // barcode,
       productImage,
       costPerUnit: Number(costPerUnit)
     });
 
     const savedRawMaterial = await newRawMaterial.save();
+
+    const barcode = `RM-${savedRawMaterial._id.toString()}`;
+    savedRawMaterial.barcode = barcode;
+    await savedRawMaterial.save();
+
     res.status(201).json(savedRawMaterial);
   } catch (error) {
     console.error("Validation Error:", error);
