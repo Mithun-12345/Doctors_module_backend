@@ -34,7 +34,7 @@ const appointmentSchema = new mongoose.Schema(
     },
     status: {
       type: String,
-      enum: ["pending", "finished", "cancelled", "redirected"],
+      enum: ["pending", "finished", "cancelled"],
       default: "pending",
     },
     payment: {
@@ -53,8 +53,8 @@ const appointmentSchema = new mongoose.Schema(
     //   required: true, // We should enforce that we always store id
     // },
     consultingFor: {
-      type: String,  // Changed from mongoose.Schema.Types.ObjectId
-      required: false
+      type: String, // Changed from mongoose.Schema.Types.ObjectId
+      required: false,
     },
 
     diseaseName: {

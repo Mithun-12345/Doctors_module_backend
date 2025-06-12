@@ -913,7 +913,7 @@ exports.bookAppointment = asyncHandler(async (req, res) => {
     symptom,
     // doctorId,
   } = req.body; // Use familyMemberId
-  const doctorId = "67bc3391654d85340a8ce713"; // should be changed
+  const doctorId = "66c8312667b91b0b7730e725"; // should be changed
   console.log(req.body);
   let patient;
 

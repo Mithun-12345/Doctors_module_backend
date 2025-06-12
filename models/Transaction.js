@@ -10,7 +10,14 @@ const transactionSchema = new mongoose.Schema(
     appointmentId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Appointment",
-      required: true,
+    },
+    medicineId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Medicine",
+    },
+    workshopId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Workshop",
     },
     patientId: {
       type: mongoose.Schema.Types.ObjectId,
@@ -39,6 +46,9 @@ const transactionSchema = new mongoose.Schema(
     razorpayOrderId: {
       type: String,
       required: true,
+    },
+    service: {
+      enum: ["Workshop", "Appointment", "Medicine"],
     },
     razorpayPaymentId: {
       type: String,
