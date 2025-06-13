@@ -1390,6 +1390,7 @@ exports.referFriend = asyncHandler(async (req, res) => {
         referrerId: referrer._id, // The referrer's ID
         referredFriendPhone: friendPhone, // The phone of the friend being referred
         referredFriendName: friendName,
+        expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), // 30 days from now
       });
     }
     // Also pass the referee phone and name via query
@@ -1416,7 +1417,11 @@ exports.referFriend = asyncHandler(async (req, res) => {
 exports.validateCoupon = async (req, res) => {
   try {
     const { code } = req.query;
-    const referral = await Referral.findOne({ code, isUsed: false });
+    const referral = await Referral.findOne({
+      code,
+      isUsed: false,
+      expiresAt: { $gt: new Date() },
+    });
 
     if (referral) {
       res.status(200).json({

@@ -132,3 +132,40 @@ exports.pendingTransactions = async (req, res) => {
     return res.status(500).json({ message: "Internal Server Error" });
   }
 };
+
+exports.referFriendUI = async (req, res) => {
+  try {
+    const referrals = await Referral.find({ referrerId: req.user._id });
+
+    const now = new Date();
+
+    const referralData = referrals.map((ref) => {
+      let status;
+
+      if (ref.expiresAt && ref.expiresAt < now) {
+        status = "Outdated";
+      } else if (ref.firstAppointmentDone && !ref.isUsed) {
+        status = "Accepted";
+      } else {
+        status = "Pending";
+      }
+
+      return {
+        friendName: ref.referredFriendName || "N/A",
+        date: ref.createdAt
+          ? new Date(ref.createdAt).toLocaleDateString()
+          : "N/A",
+        referralCode: ref.code,
+        validity: ref.expiresAt
+          ? new Date(ref.expiresAt).toLocaleDateString()
+          : "N/A",
+        status,
+      };
+    });
+
+    return res.status(200).json({ referrals: referralData });
+  } catch (error) {
+    console.error("Referral fetch error:", error);
+    res.status(500).json({ message: "Internal server error" });
+  }
+};

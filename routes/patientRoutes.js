@@ -32,6 +32,7 @@ const {
   upComingAppointment,
   transactionHistory,
   pendingTransactions,
+  referFriendUI,
 } = require("../controllers/UIController");
 
 const validateToken = require("../middlewares/validateTokenHandler");
@@ -100,5 +101,6 @@ router.get("/pendingCoupons", validateToken, pendingCoupons);
 router.get("/upComingAppointment", validateToken, upComingAppointment);
 router.get("/transactionHistory", validateToken, transactionHistory);
 router.get("/pendingTransactions", validateToken, pendingTransactions);
+router.get("/referrals", validateToken, referFriendUI);
 
 module.exports = router;

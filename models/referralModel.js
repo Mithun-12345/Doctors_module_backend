@@ -12,6 +12,8 @@ const referralSchema = new mongoose.Schema({
   isUsed: { type: Boolean, default: false }, // If the code has been used for a benefit
   // New field to track coupon association with a first appointment
   firstAppointmentDone: { type: Boolean, default: false }, // If referred friend has completed first appointment
+  createdAt: { type: Date, default: Date.now }, // NEW FIELD
+  expiresAt: { type: Date, required: true },
 });
 
 const Referral = mongoose.model("Referral", referralSchema);
