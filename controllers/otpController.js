@@ -8,7 +8,7 @@ require("dotenv").config({ path: "./config/.env" });
 const OTP = require("../models/otpModel");
 const regForm = require("../models/patientModel");
 const Doctor = require("../models/doctorModel");
-
+const Patient = require("../models/patientModel");
 const accountSid = process.env.TWILIO_ACCOUNT_SID;
 const authToken = process.env.TWILIO_AUTH_TOKEN;
 const client = new twilio(accountSid, authToken);
@@ -97,8 +97,14 @@ exports.verifyOTP = asyncHandler(async (req, res) => {
         { $set: { otp: "", expiresAt: Date.now() } }
       );
 
+      const userId = await Patient.findOne({phone: phone});
+console.log("userIduserId: ",userId._id);
       const accessToken = jwt.sign(
-        { user: { phone: otpDocument.phone, userType } },
+        { user: { 
+          phone: otpDocument.phone, 
+          userType,
+          userId: userId._id
+        } },
         process.env.ACCESS_TOKEN_SECRET,
         { expiresIn: "1d" }
       );

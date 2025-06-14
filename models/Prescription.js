@@ -1,116 +1,194 @@
-const mongoose = require('mongoose');
+const mongoose = require("mongoose");
 
 const rawMaterialDetailSchema = new mongoose.Schema({
   _id: {
     type: mongoose.Schema.Types.ObjectId,
-    ref: 'RawMaterial',
-    required: true
+    ref: "RawMaterial",
+    required: true,
   },
   name: {
     type: String,
-    required: true
+    required: true,
   },
   quantity: {
     type: Number,
     required: true,
-    min: 0.1
+    min: 0.1,
   },
-  // unit: {
-  //   type: String,
-  //   required: true
-  // },
   pricePerUnit: {
     type: Number,
     required: true,
-    min: 0
+    min: 0,
   },
   totalPrice: {
     type: Number,
     required: true,
-    min: 0
-  }
+    min: 0,
+  },
 });
 
+const standardScheduleSchema = new mongoose.Schema({
+  day: { type: Number, required: true },
+  timing: {
+    morning: {
+      food: { type: String, enum: ["E/S", "L/S"], required: false },
+      time: { type: String },
+    },
+    afternoon: {
+      food: { type: String, enum: ["E/S", "L/S"], required: false },
+      time: { type: String },
+    },
+    evening: {
+      food: { type: String, enum: ["E/S", "L/S"], required: false },
+      time: { type: String },
+    },
+    night: {
+      food: { type: String, enum: ["E/S", "L/S"], required: false },
+      time: { type: String },
+    },
+  },
+});
+
+const frequentScheduleSchema = new mongoose.Schema({
+  day: { type: Number, required: true },
+  frequency: { type: String, required: true }, // e.g. "50 mins once", "1hr 20 mins once"
+});
 
 const prescriptionItemSchema = new mongoose.Schema({
   medicineName: {
     type: String,
-    required: true
+    required: false,
   },
   rawMaterialDetails: [rawMaterialDetailSchema],
-  preparationSteps: {
-    type: String,
-    required: false
-  },
   form: {
     type: String,
-    enum: ['Tablets', 'Pills', 'Liquid form'],
-    required: true
+    enum: ["Tablets", "Pills", "Liquid form", "Individual Medicine"],
+    required: false,
   },
   uom: {
     type: String,
-    enum: ['Graam', 'Dram', 'ML'],
-    required: true
+    enum: ["Graam", "Dram", "ML", "Pieces"],
+    required: false,
   },
-  // quantity: {
-  //   type: Number,
-  //   required: true,
-  //   min: 0
-  // },
-  frequency: {
+  dispenseQuantity: {
     type: String,
-    required: true
+    required: false,
+    min: 0.1,
   },
-  Duration: {
+  duration: {
     type: String,
-    required: true
-  }
+    required: false,
+  },
+  frequencyType: {
+    type: String,
+    enum: ["Standard", "Frequent"],
+    required: false,
+  },
+  standardSchedule: [standardScheduleSchema],
+  frequentSchedule: [frequentScheduleSchema],
 });
 
 const prescriptionSchema = new mongoose.Schema({
   patientId: {
     type: mongoose.Schema.Types.ObjectId,
-    ref: 'Patient',
-    required: true
+    ref: "Patient",
+    required: true,
   },
   doctorId: {
     type: mongoose.Schema.Types.ObjectId,
-    ref: 'Doctor',
-    required: true
+    ref: "Doctor",
+    required: true,
   },
   appointmentId: {
     type: mongoose.Schema.Types.ObjectId,
-    ref: 'Appointment',
-    required: false
+    ref: "Appointment",
   },
   prescriptionItems: [prescriptionItemSchema],
   followUpDays: {
     type: Number,
-    default: 10
+    default: 10,
   },
   medicineCharges: {
     type: Number,
-    default: 0
+    default: 0,
   },
-  isPayementDone : {
+  isPayementDone: {
     type: Boolean,
-    default: false
+    default: false,
   },
   shippingCharges: {
     type: Number,
-    default: 0
+    default: 0,
   },
   notes: {
-    type: String
+    type: String,
   },
   createdAt: {
     type: Date,
-    default: Date.now
+    default: Date.now,
   },
   updatedAt: {
     type: Date,
-    default: Date.now
-  }
+    default: Date.now,
+  },
+  medicineCourse: {
+    type: Number, // in days
+    required: true,
+  },
+  // action: {
+  //   type: String,
+  //   enum: ["In Progress", "Close"],
+  //   default: "In Progress",
+  // },
+  action: {
+    status: {
+      type: String,
+      enum: ['In Progress', 'Close'],
+      default: 'In Progress',
+      required: true
+    },
+    closeComment: {
+      type: String,
+      default: ''
+    }
+  },
+  closeComment: {
+    type: String,
+    default: null,
+  },
+  subPrescriptionID: [
+    {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Prescription",
+    },
+  ],
+  prescriptionType: {
+    type: String,
+    enum: [
+      "Only Prescription",
+      "Prescription + Medicine",
+      "Medicine + Kit",
+      "Only Medicine",
+      "Prescription + Medicine kit",
+      "SOS Medicine",
+    ],
+    required: true,
+  },
+  consumptionType: {
+    type: String,
+    enum: ["Sequential", "Sequential + Gap", "Parallel"],
+    required: true,
+  },
+  medicineConsumption: {
+    type: String,
+  },
+  label: {
+    type: String,
+    enum: ["A", "B", "C", "1", "2", "3", "4"],
+  },
+  additionalComments: {
+    type: String,
+  },
 });
 
-module.exports = mongoose.model('Prescription', prescriptionSchema);
+module.exports = mongoose.model("Prescription", prescriptionSchema);

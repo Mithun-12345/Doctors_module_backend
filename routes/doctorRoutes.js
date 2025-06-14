@@ -18,6 +18,7 @@ const {
   fetchProfile,
   updateProfile,
   uploadProfilePicture,
+  getDoctorByFollow
 } = require("../controllers/doctorController");
 const {
   upload,
@@ -77,5 +78,6 @@ router.post(
   uploadProfilePicture
 );
 router.put("/updateProfile", validateToken, updateProfile);
+router.get('/doctor/me', validateToken, getDoctorByFollow);
 
 module.exports = router;
