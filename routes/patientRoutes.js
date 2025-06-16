@@ -25,7 +25,16 @@ const {
   validateCoupon,
   fetchFamilyDetails,
 } = require("../controllers/patientController");
-const { pendingAppointment } = require("../controllers/UIController");
+
+const {
+  pendingAppointment,
+  pendingCoupons,
+  upComingAppointment,
+  transactionHistory,
+  pendingTransactions,
+  referFriendUI,
+} = require("../controllers/UIController");
+
 const validateToken = require("../middlewares/validateTokenHandler");
 const {
   upload,
@@ -88,5 +97,10 @@ router.delete(
 router.get("/profile", validateToken, fetchProfile);
 
 router.get("/pendingAppointments", validateToken, pendingAppointment);
+router.get("/pendingCoupons", validateToken, pendingCoupons);
+router.get("/upComingAppointment", validateToken, upComingAppointment);
+router.get("/transactionHistory", validateToken, transactionHistory);
+router.get("/pendingTransactions", validateToken, pendingTransactions);
+router.get("/referrals", validateToken, referFriendUI);
 
 module.exports = router;

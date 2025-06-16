@@ -2,15 +2,15 @@
 const mongoose = require("mongoose");
 
 const medicineSchema = new mongoose.Schema({
-  name: { type: String, required: true, trim: true },
-  description: { type: String, trim: true },
-  category: { type: String, required: true },
-  stock: { type: Number, required: true, min: 0 },
-  batchNumber: { type: String, required: true },
-  expiryDate: { type: Date, required: true },
-  manufacturer: { type: String, required: true },
-  pricePerUnit: { type: Number, required: true, min: 0 },
-  dosage: { type: String, required: true },
+  name: { type: String, required: false, trim: false },
+  description: { type: String, trim: false },
+  category: { type: String, required: false },
+  stock: { type: Number, required: false, min: 0 },
+  batchNumber: { type: String, required: false },
+  expiryDate: { type: Date, required: false },
+  manufacturer: { type: String, required: false },
+  pricePerUnit: { type: Number, required: false, min: 0 },
+  dosage: { type: String, required: false },
   composition: [
     {
       rawMaterial: { type: mongoose.Schema.Types.ObjectId, ref: "RawMaterial" },
