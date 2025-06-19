@@ -50,8 +50,8 @@ const standardScheduleSchema = new mongoose.Schema({
 });
 
 const frequentScheduleSchema = new mongoose.Schema({
-  day: { type: Number, required: true },
-  frequency: { type: String, required: true }, // e.g. "50 mins once", "1hr 20 mins once"
+  day: { type: Number, required: false },
+  frequency: { type: String, required: false }, // e.g. "50 mins once", "1hr 20 mins once"
 });
 
 const prescriptionItemSchema = new mongoose.Schema({
@@ -81,11 +81,42 @@ const prescriptionItemSchema = new mongoose.Schema({
   },
   frequencyType: {
     type: String,
-    enum: ["Standard", "Frequent"],
+    enum: ["Standard", "Frequent", "standard", "frequent"],
     required: false,
   },
   standardSchedule: [standardScheduleSchema],
   frequentSchedule: [frequentScheduleSchema],
+  price: {
+    type: Number,
+    default: 0,
+  },
+  additionalComments: {
+    type: String,
+    default: '',
+  },
+  // ADD THESE FIELDS TO INDIVIDUAL ITEMS
+  prescriptionType: {
+    type: String,
+    enum: [
+      "Only Prescription",
+      "Prescription + Medicine", 
+      "Medicine + Kit",
+      "Only Medicine",
+      "Prescription + Medicine kit",
+      "SOS Medicine",
+    ],
+    required: true,
+  },
+  consumptionType: {
+    type: String,
+    enum: ["Sequential", "Sequential + Gap", "Parallel"],
+    required: true,
+  },
+  label: {
+    type: String,
+    enum: ["A", "B", "C", "1", "2", "3", "4"],
+    required: false,
+  },
 });
 
 const prescriptionSchema = new mongoose.Schema({
@@ -135,11 +166,6 @@ const prescriptionSchema = new mongoose.Schema({
     type: Number, // in days
     required: true,
   },
-  // action: {
-  //   type: String,
-  //   enum: ["In Progress", "Close"],
-  //   default: "In Progress",
-  // },
   action: {
     status: {
       type: String,
@@ -162,33 +188,14 @@ const prescriptionSchema = new mongoose.Schema({
       ref: "Prescription",
     },
   ],
-  prescriptionType: {
-    type: String,
-    enum: [
-      "Only Prescription",
-      "Prescription + Medicine",
-      "Medicine + Kit",
-      "Only Medicine",
-      "Prescription + Medicine kit",
-      "SOS Medicine",
-    ],
-    required: true,
-  },
-  consumptionType: {
-    type: String,
-    enum: ["Sequential", "Sequential + Gap", "Parallel"],
-    required: true,
-  },
-  medicineConsumption: {
+  consultingType: {
     type: String,
   },
-  label: {
-    type: String,
-    enum: ["A", "B", "C", "1", "2", "3", "4"],
-  },
-  additionalComments: {
+  consultingFor: {
     type: String,
   },
+  // REMOVE THESE FIELDS FROM MAIN SCHEMA:
+  // prescriptionType, consumptionType, label
 });
 
 module.exports = mongoose.model("Prescription", prescriptionSchema);

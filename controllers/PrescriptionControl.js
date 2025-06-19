@@ -17,11 +17,6 @@ const createPrescription = async (req, res) => {
       shippingCharges,
       notes,
       medicineCourse,
-      prescriptionType,
-      duration,
-      frequencyType,
-      consumptionType,
-      label,
       action,
       parentPrescriptionId,
       consultingType,
@@ -31,9 +26,10 @@ const createPrescription = async (req, res) => {
     // Get doctor ID from auth token
     const doctorId = req.user._id;
     console.log("doctorId: ", req.user._id);
+    
     // Validate required fields
     if (!patientId || !prescriptionItems || !prescriptionItems.length || !medicineCourse) {
-        console.log("inside 1");
+      console.log("inside 1");
       return res.status(400).json({
         success: false,
         message: 'Missing required fields'
@@ -60,13 +56,15 @@ const createPrescription = async (req, res) => {
 
     // Validate raw materials exist
     for (const item of prescriptionItems) {
-      for (const rmDetail of item.rawMaterialDetails) {
-        const rawMaterial = await RawMaterial.findById(rmDetail._id);
-        if (!rawMaterial) {
-          return res.status(404).json({
-            success: false,
-            message: `Raw material ${rmDetail.name} not found`
-          });
+      if (item.rawMaterialDetails && item.rawMaterialDetails.length > 0) {
+        for (const rmDetail of item.rawMaterialDetails) {
+          const rawMaterial = await RawMaterial.findById(rmDetail._id);
+          if (!rawMaterial) {
+            return res.status(404).json({
+              success: false,
+              message: `Raw material ${rmDetail.name} not found`
+            });
+          }
         }
       }
     }
@@ -80,43 +78,47 @@ const createPrescription = async (req, res) => {
       }
     }
 
-    // Create prescription
+    // Create prescription with proper item mapping
     const prescription = new Prescription({
       patientId,
       doctorId,
       appointmentId,
       prescriptionItems: prescriptionItems.map(item => ({
-        medicineName: item.medicineName,
-        rawMaterialDetails: item.rawMaterialDetails.map(rm => ({
+        medicineName: item.medicineName || '',
+        rawMaterialDetails: (item.rawMaterialDetails || []).map(rm => ({
           _id: rm._id,
           name: rm.name,
-          quantity: rm.quantity,
-          pricePerUnit: rm.pricePerUnit,
-          totalPrice: rm.totalPrice
+          quantity: rm.quantity || 0,
+          pricePerUnit: rm.pricePerUnit || 0,
+          totalPrice: rm.totalPrice || 0
         })),
-        form: item.form,
-        dispenseQuantity: item.dispenseQuantity,
-        duration: item.dispenseQuantity,
-        uom: item.uom,
-        packaging: item.packaging,
-        frequencies: item.frequencies,
-        durationRanges: item.durationRanges || [],
-        price: item.price,
-        additionalComments: item.additionalComments || '',
+        form: item.form || 'Tablets',
+        dispenseQuantity: item.dispenseQuantity || '',
         duration: item.duration || '',
+        uom: item.uom || 'Pieces',
+        price: item.price || 0,
+        additionalComments: item.additionalComments || '',
         frequencyType: item.frequencyType || 'Standard',
+        // Map frequency data based on type
+        standardSchedule: item.frequencyType === 'Standard' || item.frequencyType === 'standard' 
+          ? (item.standardSchedule || []) 
+          : [],
+        frequentSchedule: item.frequencyType === 'Frequent' || item.frequencyType === 'frequent'
+          ? (item.frequentSchedule || [])
+          : [],
+        // ADD INDIVIDUAL ITEM FIELDS
+        prescriptionType: item.prescriptionType || 'Only Prescription',
+        consumptionType: item.consumptionType || 'Sequential',
+        label: item.label || 'A',
       })),
       followUpDays: followUpDays || 10,
       medicineCharges: medicineCharges || 0,
       shippingCharges: shippingCharges || 0,
       notes: notes || '',
       medicineCourse,
-      prescriptionType,
-      consumptionType,
-      label,
-      action: action || { status: 'In Progress' },
-      consultingType,
-      consultingFor
+      action: action || { status: 'In Progress', closeComment: '' },
+      consultingType: consultingType || '',
+      consultingFor: consultingFor || ''
     });
 
     // Save prescription
@@ -348,7 +350,7 @@ const getMedicines = async (req, res) => {
 const getRawMaterials = async (req, res) => {
   try {
     const rawMaterials = await RawMaterial.find({})
-      .select('name unit costPerUnit description')
+      .select('name uom currentQuantity costPerUnit description')
       .sort({ name: 1 });
 
       console.log("rawMaterials:",rawMaterials);
@@ -461,6 +463,20 @@ const getPrescriptionStats = async (req, res) => {
   }
 };
 
+const postMedicine = async (req, res) => {
+  const { name } = req.body;
+  if (!name) return res.status(400).json({ error: "Medicine name is required" });
+
+  try {
+    const newMedicine = new Medicine({ name });
+    await newMedicine.save();
+    res.status(201).json(newMedicine);
+  } catch (error) {
+    console.error("Error creating medicine:", error);
+    res.status(500).json({ error: "Server error" });
+  }
+};
+
 module.exports = {
   createPrescription,
   getPatientPrescriptions,
@@ -470,5 +486,6 @@ module.exports = {
   getMedicines,
   getRawMaterials,
   getDoctorPrescriptions,
-  getPrescriptionStats
+  getPrescriptionStats,
+  postMedicine
 };

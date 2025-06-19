@@ -9,7 +9,8 @@ const {
   getMedicines,
   getRawMaterials,
   getDoctorPrescriptions,
-  getPrescriptionStats
+  getPrescriptionStats,
+  postMedicine
 } = require('../controllers/PrescriptionControl');
 const authMiddleware = require('../middlewares/validateTokenHandler');
 
@@ -31,4 +32,5 @@ router.get('/doctor/stats', getPrescriptionStats);
 router.get('/medicines', getMedicines);
 router.get('/rawMaterials', getRawMaterials);
 
+router.post("/medicines", postMedicine);
 module.exports = router;

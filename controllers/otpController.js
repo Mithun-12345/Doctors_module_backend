@@ -97,24 +97,6 @@ exports.verifyOTP = asyncHandler(async (req, res) => {
         { $set: { otp: "", expiresAt: Date.now() } }
       );
 
-      const userId = await Patient.findOne({phone: phone});
-console.log("userIduserId: ",userId._id);
-      const accessToken = jwt.sign(
-        { user: { 
-          phone: otpDocument.phone, 
-          userType,
-          userId: userId._id
-        } },
-        process.env.ACCESS_TOKEN_SECRET,
-        { expiresIn: "1d" }
-      );
-
-      const refreshToken = jwt.sign(
-        { user: { phone: otpDocument.phone, userType } },
-        process.env.REFRESH_TOKEN_SECRET,
-        { expiresIn: "7d" }
-      );
-
       let user;
       console.log("Searching for user with userType:", userType);
 
@@ -135,6 +117,23 @@ console.log("userIduserId: ",userId._id);
           .status(404)
           .json({ success: false, message: "User not found" });
       }
+
+      const accessToken = jwt.sign(
+        { user: { 
+          phone: otpDocument.phone, 
+          userType,
+          userId: user._id
+        } },
+        process.env.ACCESS_TOKEN_SECRET,
+        { expiresIn: "1d" }
+      );
+
+      const refreshToken = jwt.sign(
+        { user: { phone: otpDocument.phone, userType } }, 
+        process.env.REFRESH_TOKEN_SECRET,
+        { expiresIn: "7d" }
+      );
+
       // const refreshToken = jwt.sign(
       //   { user: { id: user._id, phone: otpDocument.phone, userType } },
       //   process.env.REFRESH_TOKEN_SECRET,
