@@ -240,6 +240,8 @@ exports.loginWithPassword = asyncHandler(async (req, res) => {
   const { phone, password, role } = req.body;
 
   let user;
+
+  // Fetch user based on role
   if (role === "Doctor") {
     user = await Doctor.findOne({ phone });
   } else if (role === "Patient") {
@@ -250,6 +252,7 @@ exports.loginWithPassword = asyncHandler(async (req, res) => {
       .json({ success: false, message: "Invalid role specified" });
   }
 
+  // User not found or password field missing
   if (!user || !user.password) {
     console.log("User not found");
     return res
@@ -257,6 +260,7 @@ exports.loginWithPassword = asyncHandler(async (req, res) => {
       .json({ success: false, message: "User not found or password not set" });
   }
 
+  // Compare password
   const isMatch = await bcrypt.compare(password, user.password);
   if (!isMatch) {
     return res
@@ -264,45 +268,60 @@ exports.loginWithPassword = asyncHandler(async (req, res) => {
       .json({ success: false, message: "Invalid password" });
   }
 
+  // Extract user fields
+  const name = user.name || "";
+  const email = user.email || "";
+  const roleFromDB = user.role || ""; // for Doctor
+
+  // Create JWT tokens
   const accessToken = jwt.sign(
     {
       user: {
-        id: user._id,
-        phone: user.phone,
+        userId: user._id,
+        name,
+        email,
+        phone,
         userType: role,
+        role: roleFromDB,
       },
     },
     process.env.ACCESS_TOKEN_SECRET,
     { expiresIn: "1d" }
   );
+
   const refreshToken = jwt.sign(
-    { user: { phone: user.phone, role } },
+    {
+      user: {
+        userId: user._id,
+        name,
+        email,
+        phone,
+        userType: role,
+        role: roleFromDB,
+      },
+    },
     process.env.REFRESH_TOKEN_SECRET,
     { expiresIn: "7d" }
   );
 
-  console.log("role", role);
-  if (role === "Doctor") {
-    res.status(200).json({
-      success: true,
-      accessToken,
-      refreshToken,
-      userId: user._id,
-      userType: role,
-      role: user.role,
-    });
-  }
-  console.log("Sending response");
+  console.log("Sending response:");
   console.log("accessToken:", accessToken);
   console.log("refreshToken:", refreshToken);
-  console.log("id", user.id);
-  console.log("User role:", role);
-  res.status(200).json({
+  console.log("userId:", user._id);
+  console.log("userType:", role);
+  console.log("role:", roleFromDB);
+
+  // Send user data to frontend
+  return res.status(200).json({
     success: true,
     accessToken,
     refreshToken,
     userId: user._id,
+    name,
+    email,
+    phone,
     userType: role,
+    role: roleFromDB,
   });
 });
 
@@ -399,7 +418,6 @@ exports.changePassword = async (req, res) => {
       return res.status(404).json({ message: "User not found" });
     }
     const { newPassword, retypedNewPassword } = req.body;
-    
   } catch (error) {
     res.status(500).json({ message: "Internal Server Error" });
   }

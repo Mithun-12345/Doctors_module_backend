@@ -908,271 +908,220 @@ exports.bookAppointment = asyncHandler(async (req, res) => {
     appointmentDate,
     timeSlot,
     consultingFor,
-    // fullName,
     consultingReason,
     symptom,
-    // doctorId,
-  } = req.body; // Use familyMemberId
+  } = req.body;
+
   const doctorId = "66c8312667b91b0b7730e725"; // should be changed
-  console.log(req.body);
-  let patient;
-
-  const user = await Patient.findOne({ phone });
-  if (!user) return res.status(404).json({ message: "Patient not found" });
-  patient = user;
-  const medicalDetails = await MedicalDetails.findOne({ patientId: user._id });
-
-  if (!medicalDetails) {
-    console.log("Medical details not found");
-    return res.status(404).json({ message: "Medical details not found" });
-  }
-
-  // if (familyMemberId) {
-  //   const familyMember = user.familyMembers.find(
-  //     (member) => member.memberId.toString() === familyMemberId
-  //   );
-  //   if (!familyMember || familyMember.IndividulAccess) {
-  //     return res.status(400).json({
-  //       message: "Cannot book appointment for this family member.",
-  //     });
-  //   }
-  //   patient = await Patient.findOne({ _id: familyMember.memberId });
-  //   console.log(patient);
-  // } else {
-  //   patient = user;
-  // }
-
-  // Find the doctor by ID
-  const doctor = await Doctor.findById(doctorId);
-  console.log("Doctor fetch result:", doctor);
-  console.log("Doctor role:", doctor?.role);
-  console.log("Connected to DB:", mongoose.connection.name);
-
-  if (!doctor || doctor.role !== "admin-doctor") {
-    return res.status(404).json({ message: "Doctor not found" });
-  }
-
-  // Check if the patient has a chronic condition
-  // patient.diseaseType.name = "acute"; //comment it later
-  const isChronic = medicalDetails.diseaseType.name.toLowerCase() === "chronic";
-
-  // Validate the requested time slot
-  const timeSlots = [
-    "10:00",
-    "11:00",
-    "12:00",
-    "13:00",
-    "14:00",
-    "15:00",
-    "16:00",
-    "17:00",
-  ];
-  const requestedSlotIndex = timeSlots.indexOf(timeSlot);
-
-  if (requestedSlotIndex === -1) {
-    return res.status(400).json({ message: "Invalid time slot" });
-  }
-
-  const currentDate = new Date();
-  const appointmentDateObj = new Date(appointmentDate);
-  const oneMonthLater = new Date();
-  oneMonthLater.setMonth(currentDate.getMonth() + 1);
-
-  if (appointmentDateObj < currentDate) {
-    return res
-      .status(400)
-      .json({ message: "Cannot book appointments in the past" });
-  }
-
-  if (appointmentDateObj > oneMonthLater) {
-    return res
-      .status(400)
-      .json({ message: "Appointments can only be booked within a month" });
-  }
-
-  // Fetch existing appointments for that date
-  const appointments = await Appointment.find({ appointmentDate });
-  const isMorningSlot = (slot) => timeSlots.indexOf(slot) < 4;
-
-  if (isChronic) {
-    const chronicBookingInMorning = appointments.some(
-      (appt) => appt.isChronic && isMorningSlot(appt.timeSlot)
-    );
-    const chronicBookingInAfternoon = appointments.some(
-      (appt) => appt.isChronic && !isMorningSlot(appt.timeSlot)
-    );
-
-    // For chronic patients, block entire morning or afternoon session
-    if (
-      (isMorningSlot(timeSlot) && chronicBookingInMorning) ||
-      (!isMorningSlot(timeSlot) && chronicBookingInAfternoon)
-    ) {
-      return res.status(400).json({
-        message: "The selected time slot is not available for chronic patients",
-      });
-    }
-  } else {
-    const isSlotBooked = appointments.some(
-      (appt) => appt.timeSlot === timeSlot
-    );
-
-    // For acute patients, only check if the specific slot is booked
-    if (isSlotBooked) {
-      return res.status(400).json({ message: "Time slot is not available" });
-    }
-  }
-
-  // ------------------------------
-  // Auto-apply coupon logic starts here
-  // ------------------------------
-
-  // Find available coupons for the referrer
-  const referrerCoupons = await Referral.find({
-    referrerId: patient._id,
-    isUsed: false,
-    firstAppointmentDone: true,
-  });
-
-  let appliedCoupon = null;
-
-  // Check if there are any available coupons
-  if (referrerCoupons.length > 0) {
-    // Automatically apply the first available coupon
-    appliedCoupon = referrerCoupons[0];
-    appliedCoupon.isUsed = true; // Mark the coupon as used
-    await appliedCoupon.save();
-
-    // Notify user that the coupon has been applied
-    console.log(
-      `Coupon ${appliedCoupon.code} automatically applied for referrer ${patient.name}.`
-    );
-  }
-
-  // ------------------------------
-  // Appointment booking logic
-  // ------------------------------
-
-  //referee
-  const previousAppointments = await Appointment.findOne({
-    patient: patient._id,
-  });
-
-  console.log("Previous Appointments:", previousAppointments);
-
-  const couponCode = patient.coupon;
-
-  if (!previousAppointments && couponCode) {
-    const referral = await Referral.findOne({
-      code: couponCode,
-      isUsed: false,
-    });
-    // const senderId = referral.referrerId;
-    // console.log("Sender ID", senderId);
-    // const sender = await Patient.findById({ _id: senderId });
-    // sender.coupon = couponCode;
-    // await sender.save();
-    // console.log("Coupon:", sender.coupon);
-    if (referral) {
-      referral.firstAppointmentDone = true;
-      await referral.save();
-    } else {
-      console.log(
-        `No referral found with code ${couponCode} that hasn't been used.`
-      );
-    }
-  }
-  //patient.coupon = "";
-
-  //book appointment
-  const newAppointment = new Appointment({
-    patient: patient._id,
-    patientEmail: patient.email,
-    patientName: patient.name,
-    consultingFor: consultingFor.label,
-    // consultingPersonName: fullName,
-    reason: consultingReason,
-    symptom: symptom,
-    doctor: doctor._id,
-    doctorName: doctor.name,
-    appointmentDate,
-    timeSlot,
-    isChronic,
-  });
 
   try {
-    // Save the appointment
-    await newAppointment.save();
-
-    // If everything goes well, update the patient's follow-up status
-    patient.follow = "Follow up-C"; // Update follow status
-    await patient.save(); // Save the updated patient
-
-    let calendarEvent;
-    if (doctor.videoPlatform === "googleMeet") {
-      calendarEvent = await addEventToGoogleCalendar(doctorId, {
-        _id: newAppointment._id,
-        patientName: patient.name,
-        patientEmail: patient.email,
-        appointmentDate,
-        timeSlot,
-        reason: consultingReason,
+    // Find user and validate
+    const user = await Patient.findOne({ phone });
+    if (!user) {
+      return res.status(400).json({
+        success: false,
+        message: "Patient not found",
       });
+    }
 
-      // Save the Meet link to the appointment
-      if (calendarEvent && calendarEvent.meetLink) {
-        console.log("Meet link successfully saved:", calendarEvent.meetLink);
-        newAppointment.meetLink = calendarEvent.meetLink;
-        await newAppointment.save();
-      }
-    } else if (doctor.videoPlatform === "zoom") {
-      // If Zoom is selected
-      calendarEvent = await addAppointmentToCalendar(doctor, {
-        patient: patient._id,
-        patientName: patient.name,
-        patientEmail: patient.email,
-        appointmentDate,
-        timeSlot,
+    const medicalDetails = await MedicalDetails.findOne({
+      patientId: user._id,
+    });
+
+    if (!medicalDetails) {
+      return res.status(400).json({
+        success: false,
+        message: "Medical details not found",
       });
-      if (calendarEvent && calendarEvent.zoomLink) {
-        console.log("Meet link successfully saved:", calendarEvent.zoomLink);
-        newAppointment.meetLink = calendarEvent.zoomLink;
-        await newAppointment.save();
+    }
+
+    // Find doctor
+    const doctor = await Doctor.findById(doctorId);
+    if (!doctor || doctor.role !== "admin-doctor") {
+      return res.status(400).json({
+        success: false,
+        message: "Doctor not found",
+      });
+    }
+
+    // Validate time slot
+    const timeSlots = [
+      "10:00",
+      "11:00",
+      "12:00",
+      "13:00",
+      "14:00",
+      "15:00",
+      "16:00",
+      "17:00",
+    ];
+
+    if (!timeSlots.includes(timeSlot)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid time slot",
+      });
+    }
+
+    // Validate date
+    const currentDate = new Date();
+    const appointmentDateObj = new Date(appointmentDate);
+    const oneMonthLater = new Date();
+    oneMonthLater.setMonth(currentDate.getMonth() + 1);
+
+    if (
+      appointmentDateObj < currentDate ||
+      appointmentDateObj > oneMonthLater
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid appointment date",
+      });
+    }
+
+    // Check slot availability with concurrency protection
+    const isChronic =
+      medicalDetails.diseaseType.name.toLowerCase() === "chronic";
+    const isMorningSlot = (slot) => timeSlots.indexOf(slot) < 4;
+
+    // Check for existing confirmed or reserved appointments
+    const existingAppointments = await Appointment.find({
+      appointmentDate,
+      status: { $in: ["reserved", "confirmed"] },
+      expiresAt: { $gt: new Date() }, // Only consider non-expired reservations
+    });
+
+    // Slot availability logic
+    if (isChronic) {
+      const chronicBookingInMorning = existingAppointments.some(
+        (appt) => appt.isChronic && isMorningSlot(appt.timeSlot)
+      );
+      const chronicBookingInAfternoon = existingAppointments.some(
+        (appt) => appt.isChronic && !isMorningSlot(appt.timeSlot)
+      );
+
+      if (
+        (isMorningSlot(timeSlot) && chronicBookingInMorning) ||
+        (!isMorningSlot(timeSlot) && chronicBookingInAfternoon)
+      ) {
+        return res.status(400).json({
+          success: false,
+          message:
+            "The selected time slot is not available for chronic patients",
+        });
       }
     } else {
-      return res
-        .status(400)
-        .json({ message: "Invalid calendar type in doctor's preferences." });
+      const isSlotBooked = existingAppointments.some(
+        (appt) => appt.timeSlot === timeSlot
+      );
+
+      if (isSlotBooked) {
+        return res.status(400).json({
+          success: false,
+          message: "Time slot is not available",
+        });
+      }
     }
 
-    //scheduleMeetingActivation(appointments);
-    // Return success response with applied coupon info
-    res.status(201).json({
-      message: "Appointment booked successfully",
-      calendarEvent,
-      appointment: newAppointment,
-      // zoomMeetingLink: zoomCalendarEvent.zoomLink,
-      // appliedCoupon: appliedCoupon ? appliedCoupon.code : null,
+    // Handle referral logic (existing code)
+    const referrerCoupons = await Referral.find({
+      referrerId: user._id,
+      isUsed: false,
+      firstAppointmentDone: true,
     });
-  } catch (error) {
-    // If an error occurs, revert coupon status
-    if (appliedCoupon) {
-      appliedCoupon.isUsed = false; // Revert coupon usage
+
+    let appliedCoupon = null;
+    if (referrerCoupons.length > 0) {
+      appliedCoupon = referrerCoupons[0];
+      appliedCoupon.isUsed = true;
       await appliedCoupon.save();
-      return res.status(500).json({
-        message: "Failed to book appointment, coupon reverted.",
-        error: error.message,
-      });
     }
+
+    // Handle referee logic
+    const previousAppointments = await Appointment.findOne({
+      patient: user._id,
+      status: "confirmed",
+    });
+
+    const couponCode = user.coupon;
+    let referralToUpdate = null;
     if (!previousAppointments && couponCode) {
       const referral = await Referral.findOne({
         code: couponCode,
         isUsed: false,
       });
-      referral.firstAppointmentDone = false;
-      referral.save();
+
+      if (referral) {
+        referral.firstAppointmentDone = true;
+        await referral.save();
+        referralToUpdate = referral;
+      }
     }
 
-    console.error("Failed to book appointment:", error);
+    // Create RESERVED appointment (not confirmed yet)
+    const newAppointment = new Appointment({
+      patient: user._id,
+      patientEmail: user.email,
+      patientName: user.name,
+      consultingFor: consultingFor, // Fixed: remove .label since consultingFor is now just the ID
+      reason: consultingReason,
+      symptom: symptom,
+      doctor: doctor._id,
+      doctorName: doctor.name,
+      appointmentDate,
+      timeSlot,
+      isChronic,
+      status: "reserved", // Key change: only reserved, not confirmed
+      isPaid: false,
+      payment: 500, // Amount in paise
+      reservedAt: new Date(),
+      expiresAt: new Date(Date.now() + 7 * 60 * 1000), // 7 minutes expiry
+    });
+
+    const savedAppointment = await newAppointment.save();
+
+    res.status(201).json({
+      success: true,
+      message:
+        "Slot reserved temporarily. Please complete payment within 7 minutes.",
+      appointmentId: savedAppointment._id,
+      amount: 50000, // Amount in paise
+      expiresAt: new Date(Date.now() + 7 * 60 * 1000),
+    });
+  } catch (error) {
+    console.error("Failed to reserve appointment:", error);
+
+    res.status(400).json({
+      success: false,
+      message: error.message || "Failed to reserve appointment",
+    });
+  }
+});
+
+// Optional: Add a cleanup job to remove expired reservations
+exports.cleanupExpiredReservations = asyncHandler(async (req, res) => {
+  try {
+    const result = await Appointment.deleteMany({
+      status: "reserved",
+      expiresAt: { $lt: new Date() },
+    });
+
+    console.log(`Cleaned up ${result.deletedCount} expired reservations`);
+
+    if (res) {
+      res.status(200).json({
+        success: true,
+        message: `Cleaned up ${result.deletedCount} expired reservations`,
+      });
+    }
+  } catch (error) {
+    console.error("Error cleaning up expired reservations:", error);
+    if (res) {
+      res.status(500).json({
+        success: false,
+        message: "Failed to cleanup expired reservations",
+      });
+    }
   }
 });
 

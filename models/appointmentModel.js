@@ -114,7 +114,20 @@ const appointmentSchema = new mongoose.Schema(
     },
     status: {
       type: String,
-      default: "pending",
+      enum: ["reserved", "confirmed", "cancelled", "completed"],
+      default: "reserved",
+    },
+    reservedAt: {
+      type: Date,
+      default: Date.now,
+    },
+    expiresAt: {
+      type: Date,
+      default: () => new Date(Date.now() + 15 * 60 * 1000), // 15 minutes from now
+    },
+    isPaid: {
+      type: Boolean,
+      default: false,
     },
     meetLink: {
       type: String,
@@ -124,8 +137,12 @@ const appointmentSchema = new mongoose.Schema(
       type: String,
       default: "",
     },
+    isPaid: { type: Boolean, default: false },
+    paymentId: { type: mongoose.Schema.Types.ObjectId, ref: "Payment" },
+    expiresAt: { type: Date, index: { expires: "1m" } }, // MongoDB TTL to auto-delete unpaid appointments
   },
   { timestamps: true }
 );
 
+appointmentSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 0 });
 module.exports = mongoose.model("Appointment", appointmentSchema);
