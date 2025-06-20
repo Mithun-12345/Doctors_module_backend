@@ -541,6 +541,45 @@ const postMedicine = async (req, res) => {
   }
 };
 
+const updateCloseComment = async (req, res) => {
+  const { status, closeComment } = req.body;
+  const { prescriptionId } = req.params;
+
+  console.log("updateCloseComment reached");
+  console.log("Request body:", req.body);
+  console.log("Request params:", req.params);
+
+  if (!status) {
+    return res.status(400).json({ success: false, message: "Status is required" });
+  }
+
+  if (!['In Progress', 'Close'].includes(status)) {
+    return res.status(400).json({ success: false, message: "Invalid status value" });
+  }
+
+  try {
+    const updatedPrescription = await Prescription.findByIdAndUpdate(
+      prescriptionId,
+      {
+        $set: {
+          "action.status": status,
+          "action.closeComment": closeComment || "",
+          updatedAt: Date.now(),
+        },
+      },
+      { new: true }
+    );
+
+    if (!updatedPrescription) {
+      return res.status(404).json({ success: false, message: "Prescription not found" });
+    }
+
+    res.status(200).json({ success: true, data: updatedPrescription });
+  } catch (error) {
+    console.error("Error updating prescription action:", error);
+    res.status(500).json({ success: false, message: "Server error" });
+  }
+};
 
 module.exports = {
   createPrescription,
@@ -552,5 +591,6 @@ module.exports = {
   getRawMaterials,
   getDoctorPrescriptions,
   getPrescriptionStats,
-  postMedicine
+  postMedicine,
+  updateCloseComment
 };

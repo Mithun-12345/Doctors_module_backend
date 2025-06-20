@@ -194,8 +194,6 @@ const prescriptionSchema = new mongoose.Schema({
   consultingFor: {
     type: String,
   },
-  // REMOVE THESE FIELDS FROM MAIN SCHEMA:
-  // prescriptionType, consumptionType, label
 });
 
 module.exports = mongoose.model("Prescription", prescriptionSchema);

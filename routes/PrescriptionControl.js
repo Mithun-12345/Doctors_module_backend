@@ -10,7 +10,8 @@ const {
   getRawMaterials,
   getDoctorPrescriptions,
   getPrescriptionStats,
-  postMedicine
+  postMedicine,
+  updateCloseComment
 } = require('../controllers/PrescriptionControl');
 const authMiddleware = require('../middlewares/validateTokenHandler');
 
@@ -33,4 +34,6 @@ router.get('/medicines', getMedicines);
 router.get('/rawMaterials', getRawMaterials);
 
 router.post("/medicines", postMedicine);
+// Update close comment
+router.patch('/:prescriptionId/closeComment', updateCloseComment);
 module.exports = router;
