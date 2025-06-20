@@ -29,7 +29,7 @@ const createPrescription = async (req, res) => {
     
     // Validate required fields
     if (!patientId || !prescriptionItems || !prescriptionItems.length || !medicineCourse) {
-      console.log("inside 1");
+      console.log("Missing required fields");
       return res.status(400).json({
         success: false,
         message: 'Missing required fields'
@@ -83,34 +83,82 @@ const createPrescription = async (req, res) => {
       patientId,
       doctorId,
       appointmentId,
-      prescriptionItems: prescriptionItems.map(item => ({
-        medicineName: item.medicineName || '',
-        rawMaterialDetails: (item.rawMaterialDetails || []).map(rm => ({
-          _id: rm._id,
-          name: rm.name,
-          quantity: rm.quantity || 0,
-          pricePerUnit: rm.pricePerUnit || 0,
-          totalPrice: rm.totalPrice || 0
-        })),
-        form: item.form || 'Tablets',
-        dispenseQuantity: item.dispenseQuantity || '',
-        duration: item.duration || '',
-        uom: item.uom || 'Pieces',
-        price: item.price || 0,
-        additionalComments: item.additionalComments || '',
-        frequencyType: item.frequencyType || 'Standard',
-        // Map frequency data based on type
-        standardSchedule: item.frequencyType === 'Standard' || item.frequencyType === 'standard' 
-          ? (item.standardSchedule || []) 
-          : [],
-        frequentSchedule: item.frequencyType === 'Frequent' || item.frequencyType === 'frequent'
-          ? (item.frequentSchedule || [])
-          : [],
-        // ADD INDIVIDUAL ITEM FIELDS
-        prescriptionType: item.prescriptionType || 'Only Prescription',
-        consumptionType: item.consumptionType || 'Sequential',
-        label: item.label || 'A',
-      })),
+      prescriptionItems: prescriptionItems.map(item => {
+        console.log("Processing item:", item.medicineName);
+        console.log("Item frequencyType:", item.frequencyType);
+        console.log("Item standardSchedule:", item.standardSchedule);
+        console.log("Item frequentSchedule:", item.frequentSchedule);
+
+        // Normalize frequency type
+        let normalizedFrequencyType = 'Standard';
+        if (item.frequencyType) {
+          normalizedFrequencyType = item.frequencyType.toLowerCase() === 'frequent' ? 'Frequent' : 'Standard';
+        }
+
+        // Prepare schedule arrays
+        let standardSchedule = [];
+        let frequentSchedule = [];
+
+        if (normalizedFrequencyType === 'Standard') {
+          standardSchedule = item.standardSchedule || [];
+          // Ensure each schedule item has proper structure
+          standardSchedule = standardSchedule.map(schedule => ({
+            day: schedule.day,
+            timing: {
+              morning: {
+                food: schedule.timing?.morning?.food || "",
+                time: schedule.timing?.morning?.time || "",
+              },
+              afternoon: {
+                food: schedule.timing?.afternoon?.food || "",
+                time: schedule.timing?.afternoon?.time || "",
+              },
+              evening: {
+                food: schedule.timing?.evening?.food || "",
+                time: schedule.timing?.evening?.time || "",
+              },
+              night: {
+                food: schedule.timing?.night?.food || "",
+                time: schedule.timing?.night?.time || "",
+              },
+            }
+          }));
+        } else {
+          frequentSchedule = item.frequentSchedule || [];
+          // Ensure each schedule item has proper structure
+          frequentSchedule = frequentSchedule.map(schedule => ({
+            day: schedule.day,
+            frequency: schedule.frequency || "",
+          }));
+        }
+
+        console.log("Processed standardSchedule:", standardSchedule);
+        console.log("Processed frequentSchedule:", frequentSchedule);
+
+        return {
+          medicineName: item.medicineName || '',
+          rawMaterialDetails: (item.rawMaterialDetails || []).map(rm => ({
+            _id: rm._id,
+            name: rm.name,
+            quantity: rm.quantity || 0,
+            pricePerUnit: rm.pricePerUnit || 0,
+            totalPrice: rm.totalPrice || 0
+          })),
+          form: item.form || 'Tablets',
+          dispenseQuantity: item.dispenseQuantity || '',
+          duration: item.duration || '',
+          uom: item.uom || 'Pieces',
+          price: item.price || 0,
+          additionalComments: item.additionalComments || '',
+          frequencyType: normalizedFrequencyType,
+          standardSchedule: standardSchedule,
+          frequentSchedule: frequentSchedule,
+          // Individual item fields
+          prescriptionType: item.prescriptionType || 'Only Prescription',
+          consumptionType: item.consumptionType || 'Sequential',
+          label: item.label || 'A',
+        };
+      }),
       followUpDays: followUpDays || 10,
       medicineCharges: medicineCharges || 0,
       shippingCharges: shippingCharges || 0,
@@ -123,6 +171,17 @@ const createPrescription = async (req, res) => {
 
     // Save prescription
     const savedPrescription = await prescription.save();
+
+    console.log("Prescription saved successfully:");
+    console.log("Prescription ID:", savedPrescription._id);
+    
+    // Log each item's schedule data for debugging
+    savedPrescription.prescriptionItems.forEach((item, index) => {
+      console.log(`Item ${index + 1} (${item.medicineName}):`);
+      console.log("  FrequencyType:", item.frequencyType);
+      console.log("  StandardSchedule:", item.standardSchedule);
+      console.log("  FrequentSchedule:", item.frequentSchedule);
+    });
 
     // If this is a sub-prescription, update parent prescription
     if (parentPrescriptionId) {
@@ -468,6 +527,11 @@ const postMedicine = async (req, res) => {
   if (!name) return res.status(400).json({ error: "Medicine name is required" });
 
   try {
+    const existing = await Medicine.findOne({ name: { $regex: new RegExp(`^${name}$`, 'i') } });
+    if (existing) {
+      return res.status(409).json({ error: "Medicine name already exists" });
+    }
+
     const newMedicine = new Medicine({ name });
     await newMedicine.save();
     res.status(201).json(newMedicine);
@@ -476,6 +540,7 @@ const postMedicine = async (req, res) => {
     res.status(500).json({ error: "Server error" });
   }
 };
+
 
 module.exports = {
   createPrescription,

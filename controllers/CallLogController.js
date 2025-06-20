@@ -29,7 +29,7 @@ exports.sendMessage = async (req, res) => {
       return res.status(404).json({ message: 'Patient details not found' });
     }
 
-    console.log(patientDetails.phone); // Log the phone number for debugging
+    // console.log(patientDetails.phone); // Log the phone number for debugging
 
     // Send a message via Twilio
     // await client.messages.create({
@@ -258,8 +258,8 @@ try {
     const startOfDay = new Date(today.setHours(0, 0, 0, 0));
     const endOfDay = new Date(today.setHours(23, 59, 59, 999));
   
-    console.log('Start of day:', startOfDay);
-    console.log('End of day:', endOfDay);
+    // console.log('Start of day:', startOfDay);
+    // console.log('End of day:', endOfDay);
   
       // Counting total, chronic, acute, and today's new patients
     const totalPatients = await Patient.countDocuments();
@@ -322,7 +322,7 @@ exports.listPatients = async (req, res) => {
       ...patient,
       medicalDetails: patient.medicalDetails.length > 0 ? patient.medicalDetails[0] : null,
     }));
-    console.log(formattedPatients);
+    // console.log(formattedPatients);
     res.json(formattedPatients);
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -335,7 +335,7 @@ exports.updateDiseaseType = asyncHandler(async (req, res) => {
   const { diseaseType } = req.body; // Get the disease type from request body
   const user = req.user; // Assuming `req.user` contains authenticated user data
 
-  console.log("Received request body:", patientId, diseaseType, user);
+  // console.log("Received request body:", patientId, diseaseType, user);
 
   try {
     // Find the patient's medical details by patientId
@@ -353,7 +353,7 @@ exports.updateDiseaseType = asyncHandler(async (req, res) => {
 
     // Save the updated patient details
     const updatedPatientDetails = await patientDetails.save();
-    console.log("Updated patient details:", updatedPatientDetails);
+    // console.log("Updated patient details:", updatedPatientDetails);
     res.status(200).json({
       success: true,
       medicalDetails: updatedPatientDetails,
@@ -421,7 +421,7 @@ exports.updateDiseaseType = asyncHandler(async (req, res) => {
       const { patientId } = req.params; // Extract the patient ID from the request parameters
       const { text } = req.body; // Extract the comment text from the request body
   
-      console.log(patientId, text);
+      // console.log(patientId, text);
   
       if (!text) {
         return res.status(400).json({ message: 'Comment text is required' });
