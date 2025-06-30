@@ -41,6 +41,8 @@ const orderRoutes = require("./routes/OrderRoute.js")
 const medPrepSummary = require("./routes/medPrepSummary.js")
 const prescriptionControl = require("./routes/PrescriptionControl.js");
 const labelRoutes = require("./routes/labelRoutes.js");
+const consumptionRoutes = require("./routes/consumptionRoutes");
+
 dbConnection();
 
 dotenv.config();
@@ -81,6 +83,7 @@ app.use("/api/vendor", vendorRoutes);
 app.use("/api/order", orderRoutes);
 app.use("/api/medicine-summary", medPrepSummary);
 app.use("/api", labelRoutes);
+app.use("/api/consumptions", consumptionRoutes);
 
 const options = {
   key: fs.readFileSync("server.key"),
