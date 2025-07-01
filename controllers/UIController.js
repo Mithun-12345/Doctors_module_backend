@@ -2,6 +2,7 @@ const Appointment = require("../models/appointmentModel");
 const Patient = require("../models/patientModel");
 const Referral = require("../models/referralModel");
 const Transaction = require("../models/Transaction");
+const Payment = require("../models/Payment");
 
 const moment = require("moment");
 
@@ -167,5 +168,66 @@ exports.referFriendUI = async (req, res) => {
   } catch (error) {
     console.error("Referral fetch error:", error);
     res.status(500).json({ message: "Internal server error" });
+  }
+};
+
+exports.appointments = async (req, res) => {
+  try {
+    const phone = req.user.phone;
+
+    const user = await Patient.findOne({ phone });
+    if (!user) {
+      return res.status(404).json({ message: "Patient not found" });
+    }
+
+    const page = parseInt(req.query.page) || 1;
+    const limit = 10;
+    const skip = (page - 1) * limit;
+
+    const totalAppointments = await Appointment.countDocuments({
+      patient: user._id,
+    });
+
+    const appointments = await Appointment.find({ patient: user._id })
+      .sort({ appointmentDate: -1 }) // newest first
+      .skip(skip)
+      .limit(limit)
+      .populate("doctor") // populate doctor info if needed
+      .populate("patient");
+
+    res.json({
+      data: appointments,
+      currentPage: page,
+      totalPages: Math.ceil(totalAppointments / limit),
+    });
+  } catch (error) {
+    res.status(500).json({ message: "Internal server error" });
+  }
+};
+
+exports.getPatientPayments = async (req, res) => {
+  try {
+    const patientId = req.user._id;
+
+    // Find appointments for this patient
+    const appointments = await Appointment.find({ patient: patientId }).select(
+      "_id"
+    );
+    const appointmentIds = appointments.map((a) => a._id);
+
+    // Find payments linked to those appointments
+    const payments = await Payment.find({
+      appointmentId: { $in: appointmentIds },
+    })
+      .populate({
+        path: "appointmentId",
+        populate: { path: "doctor", select: "name" },
+      })
+      .sort({ createdAt: -1 });
+
+    res.json({ data: payments });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Failed to fetch payments" });
   }
 };

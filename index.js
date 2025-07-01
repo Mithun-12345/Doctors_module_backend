@@ -39,8 +39,7 @@ const rawMaterialRoute = require("./routes/rawMaterialRoute.js");
 const vendorRoutes = require("./routes/VendorRoutes.js");
 const orderRoutes = require("./routes/OrderRoute.js")
 const medPrepSummary = require("./routes/medPrepSummary.js")
-const prescriptionControl = require("./routes/PrescriptionControl.js");
-const labelRoutes = require("./routes/labelRoutes.js");
+
 dbConnection();
 
 dotenv.config();
@@ -74,13 +73,11 @@ app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 app.use("/api/video-call", videoCallRoutes);
 app.use("/api/workshop", workshopRoutes);
 app.use("/api/prescription", prescriptionRoute);
-app.use("/api/prescriptionControl", prescriptionControl);
 app.use("/api/medicines", medicineRoute);
 app.use("/api/inventory", rawMaterialRoute);
 app.use("/api/vendor", vendorRoutes);
 app.use("/api/order", orderRoutes);
 app.use("/api/medicine-summary", medPrepSummary);
-app.use("/api", labelRoutes);
 
 const options = {
   key: fs.readFileSync("server.key"),
