@@ -76,7 +76,6 @@ app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 app.use("/api/video-call", videoCallRoutes);
 app.use("/api/workshop", workshopRoutes);
 app.use("/api/prescription", prescriptionRoute);
-app.use("/api/prescriptionControl", prescriptionControl);
 app.use("/api/medicines", medicineRoute);
 app.use("/api/inventory", rawMaterialRoute);
 app.use("/api/vendor", vendorRoutes);

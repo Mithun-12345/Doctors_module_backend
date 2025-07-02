@@ -33,6 +33,8 @@ const {
   transactionHistory,
   pendingTransactions,
   referFriendUI,
+  appointments,
+  getPatientPayments,
 } = require("../controllers/UIController");
 
 const validateToken = require("../middlewares/validateTokenHandler");
@@ -102,5 +104,7 @@ router.get("/upComingAppointment", validateToken, upComingAppointment);
 router.get("/transactionHistory", validateToken, transactionHistory);
 router.get("/pendingTransactions", validateToken, pendingTransactions);
 router.get("/referrals", validateToken, referFriendUI);
+router.get("/", validateToken, appointments);
+router.get("/patientPayments", validateToken, getPatientPayments);
 
 module.exports = router;
