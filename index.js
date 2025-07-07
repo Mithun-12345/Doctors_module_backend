@@ -83,6 +83,7 @@ app.use("/api/order", orderRoutes);
 app.use("/api/medicine-summary", medPrepSummary);
 app.use("/api", labelRoutes);
 app.use("/api/consumptions", consumptionRoutes);
+app.use("/api/prescriptionControl", prescriptionControl);
 
 const options = {
   key: fs.readFileSync("server.key"),

@@ -5,7 +5,6 @@ const Appointment = require('../models/appointmentModel');
 const RawMaterial = require('../models/RawMaterial');
 const Medicine = require('../models/Medicine');
 
-// Create a new prescription
 const createPrescription = async (req, res) => {
   try {
     console.log("createPrescription reached");
@@ -22,10 +21,9 @@ const createPrescription = async (req, res) => {
       consultingType,
       consultingFor
     } = req.body;
-
-    // Get doctor ID from auth token
+    console.log(req.body);
+    
     const doctorId = req.user._id;
-    console.log("doctorId: ", req.user._id);
     
     // Validate required fields
     if (!patientId || !prescriptionItems || !prescriptionItems.length || !medicineCourse) {
@@ -85,55 +83,127 @@ const createPrescription = async (req, res) => {
       appointmentId,
       prescriptionItems: prescriptionItems.map(item => {
         console.log("Processing item:", item.medicineName);
-        console.log("Item frequencyType:", item.frequencyType);
-        console.log("Item standardSchedule:", item.standardSchedule);
-        console.log("Item frequentSchedule:", item.frequentSchedule);
+        console.log("Item frequencies:", item.frequencies);
 
-        // Normalize frequency type
-        let normalizedFrequencyType = 'Standard';
-        if (item.frequencyType) {
-          normalizedFrequencyType = item.frequencyType.toLowerCase() === 'frequent' ? 'Frequent' : 'Standard';
-        }
+        // Process frequencies - keep the exact structure
+        const frequencies = (item.frequencies || []).map(freq => {
+          const processedFreq = {
+            consumptionPattern: freq.consumptionPattern || "single",
+            day: freq.day,
+            duration: freq.duration,
+            frequency: freq.frequency,
+            frequencyType: freq.frequencyType,
+            isOverlapping: freq.isOverlapping || false,
+          };
 
-        // Prepare schedule arrays
-        let standardSchedule = [];
-        let frequentSchedule = [];
-
-        if (normalizedFrequencyType === 'Standard') {
-          standardSchedule = item.standardSchedule || [];
-          // Ensure each schedule item has proper structure
-          standardSchedule = standardSchedule.map(schedule => ({
-            day: schedule.day,
-            timing: {
+          // Add frequency-specific data
+          if (freq.frequencyType === "frequent" && freq.frequentFrequency) {
+            processedFreq.frequentFrequency = {
+              doses: freq.frequentFrequency.doses || 1,
+              hours: freq.frequentFrequency.hours || 0,
+              minutes: freq.frequentFrequency.minutes || 0,
+            };
+            
+            // Include timings if present
+            if (freq.timings) {
+              processedFreq.timings = freq.timings;
+            }
+          } else if (freq.frequencyType === "standard" && freq.standardFrequency) {
+            processedFreq.standardFrequency = {
               morning: {
-                food: schedule.timing?.morning?.food || "",
-                time: schedule.timing?.morning?.time || "",
+                foodType: freq.standardFrequency.morning?.foodType || "",
+                from: freq.standardFrequency.morning?.from || "",
               },
               afternoon: {
-                food: schedule.timing?.afternoon?.food || "",
-                time: schedule.timing?.afternoon?.time || "",
+                foodType: freq.standardFrequency.afternoon?.foodType || "",
+                from: freq.standardFrequency.afternoon?.from || "",
               },
               evening: {
-                food: schedule.timing?.evening?.food || "",
-                time: schedule.timing?.evening?.time || "",
+                foodType: freq.standardFrequency.evening?.foodType || "",
+                from: freq.standardFrequency.evening?.from || "",
               },
               night: {
-                food: schedule.timing?.night?.food || "",
-                time: schedule.timing?.night?.time || "",
+                foodType: freq.standardFrequency.night?.foodType || "",
+                from: freq.standardFrequency.night?.from || "",
               },
-            }
-          }));
-        } else {
-          frequentSchedule = item.frequentSchedule || [];
-          // Ensure each schedule item has proper structure
-          frequentSchedule = frequentSchedule.map(schedule => ({
-            day: schedule.day,
-            frequency: schedule.frequency || "",
-          }));
-        }
+            };
+          }
 
-        console.log("Processed standardSchedule:", standardSchedule);
-        console.log("Processed frequentSchedule:", frequentSchedule);
+          // Add parallel consumption data if present
+          if (freq.parallelConsumption) {
+            processedFreq.parallelConsumption = {
+              type: freq.parallelConsumption.type || "sequential",
+              schedule: (freq.parallelConsumption.schedule || []).map(scheduleItem => ({
+                day: scheduleItem.day,
+                doseNumber: scheduleItem.doseNumber || 1,
+                time: scheduleItem.time || "08:00",
+                medicineIndex: scheduleItem.medicineIndex || 0,
+                medicineName: scheduleItem.medicineName || item.medicineName || "",
+                type: scheduleItem.type || "sequential",
+                sequentialOrder: scheduleItem.sequentialOrder,
+                parallelGroup: scheduleItem.parallelGroup,
+                isOverlapping: scheduleItem.isOverlapping || false,
+              })),
+              autoGenerated: freq.parallelConsumption.autoGenerated || false,
+            };
+          }
+
+          return processedFreq;
+        });
+
+        // Generate legacy format for backward compatibility
+        const legacyStandardSchedule = [];
+        const legacyFrequentSchedule = [];
+        let legacyParallelConsumption = null;
+
+        frequencies.forEach(freq => {
+          if (freq.frequencyType === "standard" && freq.standardFrequency) {
+            legacyStandardSchedule.push({
+              day: freq.day,
+              timing: {
+                morning: {
+                  food: freq.standardFrequency.morning?.foodType || "",
+                  time: freq.standardFrequency.morning?.from || "",
+                },
+                afternoon: {
+                  food: freq.standardFrequency.afternoon?.foodType || "",
+                  time: freq.standardFrequency.afternoon?.from || "",
+                },
+                evening: {
+                  food: freq.standardFrequency.evening?.foodType || "",
+                  time: freq.standardFrequency.evening?.from || "",
+                },
+                night: {
+                  food: freq.standardFrequency.night?.foodType || "",
+                  time: freq.standardFrequency.night?.from || "",
+                },
+              }
+            });
+          } else if (freq.frequencyType === "frequent") {
+            legacyFrequentSchedule.push({
+              day: freq.day,
+              frequency: freq.frequency,
+              frequentFrequency: freq.frequentFrequency,
+            });
+          }
+
+          // Set parallel consumption from first occurrence
+          if (freq.parallelConsumption && !legacyParallelConsumption) {
+            legacyParallelConsumption = {
+              type: freq.parallelConsumption.type,
+              schedule: freq.parallelConsumption.schedule,
+              autoGenerated: freq.parallelConsumption.autoGenerated,
+              medicineIndex: 0,
+              medicineName: item.medicineName || "",
+              intervalHours: freq.frequentFrequency?.hours || 0,
+              intervalMinutes: freq.frequentFrequency?.minutes || 0,
+              totalDoses: freq.frequentFrequency?.doses || 1,
+              startTime: freq.parallelConsumption.schedule?.[0]?.time || "08:00",
+            };
+          }
+        });
+
+        console.log("Processed frequencies:", frequencies);
 
         return {
           medicineName: item.medicineName || '',
@@ -150,9 +220,16 @@ const createPrescription = async (req, res) => {
           uom: item.uom || 'Pieces',
           price: item.price || 0,
           additionalComments: item.additionalComments || '',
-          frequencyType: normalizedFrequencyType,
-          standardSchedule: standardSchedule,
-          frequentSchedule: frequentSchedule,
+          
+          // New frequency structure
+          frequencies: frequencies,
+          frequencyType: frequencies.length > 0 ? frequencies[0].frequencyType : "standard",
+          
+          // Legacy fields for backward compatibility
+          standardSchedule: legacyStandardSchedule,
+          frequentSchedule: legacyFrequentSchedule,
+          parallelConsumption: legacyParallelConsumption,
+          
           // Individual item fields
           prescriptionType: item.prescriptionType || 'Only Prescription',
           consumptionType: item.consumptionType || 'Sequential',
@@ -175,12 +252,11 @@ const createPrescription = async (req, res) => {
     console.log("Prescription saved successfully:");
     console.log("Prescription ID:", savedPrescription._id);
     
-    // Log each item's schedule data for debugging
+    // Log each item's frequency data for debugging
     savedPrescription.prescriptionItems.forEach((item, index) => {
       console.log(`Item ${index + 1} (${item.medicineName}):`);
+      console.log("  Frequencies:", item.frequencies);
       console.log("  FrequencyType:", item.frequencyType);
-      console.log("  StandardSchedule:", item.standardSchedule);
-      console.log("  FrequentSchedule:", item.frequentSchedule);
     });
 
     // If this is a sub-prescription, update parent prescription
