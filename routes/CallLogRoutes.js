@@ -15,7 +15,8 @@ const {
     patientProfile,
     updateComment,
     updateDiseaseType,
-    commentController
+    commentController,
+    registerAdmin
 } = require('../controllers/CallLogController');
 
 router.post('/send-message/:id', sendMessage);
@@ -34,5 +35,6 @@ router.put("/update-disease-type/:patientId", validateToken, updateDiseaseType);
 router.post('/comments/:patientId', commentController);
 // router.post("/twiml", getTwimlResponse);
 // router.post("/make-call", makeCall);
+router.post('/register', registerAdmin);
 
 module.exports = router;

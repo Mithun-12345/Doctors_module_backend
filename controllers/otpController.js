@@ -8,7 +8,7 @@ require("dotenv").config({ path: "./config/.env" });
 const OTP = require("../models/otpModel");
 const regForm = require("../models/patientModel");
 const Doctor = require("../models/doctorModel");
-
+const Patient = require("../models/patientModel");
 const accountSid = process.env.TWILIO_ACCOUNT_SID;
 const authToken = process.env.TWILIO_AUTH_TOKEN;
 const client = new twilio(accountSid, authToken);
@@ -97,18 +97,6 @@ exports.verifyOTP = asyncHandler(async (req, res) => {
         { $set: { otp: "", expiresAt: Date.now() } }
       );
 
-      const accessToken = jwt.sign(
-        { user: { phone: otpDocument.phone, userType } },
-        process.env.ACCESS_TOKEN_SECRET,
-        { expiresIn: "1d" }
-      );
-
-      const refreshToken = jwt.sign(
-        { user: { phone: otpDocument.phone, userType } },
-        process.env.REFRESH_TOKEN_SECRET,
-        { expiresIn: "7d" }
-      );
-
       let user;
       console.log("Searching for user with userType:", userType);
 
@@ -130,11 +118,44 @@ exports.verifyOTP = asyncHandler(async (req, res) => {
           .json({ success: false, message: "User not found" });
       }
 
+      const accessToken = jwt.sign(
+        { user: { 
+          phone: otpDocument.phone, 
+          userType,
+          userId: user._id
+        } },
+        process.env.ACCESS_TOKEN_SECRET,
+        { expiresIn: "1d" }
+      );
+
+      const refreshToken = jwt.sign(
+        { user: { phone: otpDocument.phone, userType } }, 
+        process.env.REFRESH_TOKEN_SECRET,
+        { expiresIn: "7d" }
+      );
+
+      // const refreshToken = jwt.sign(
+      //   { user: { id: user._id, phone: otpDocument.phone, userType } },
+      //   process.env.REFRESH_TOKEN_SECRET,
+      //   { expiresIn: "7d" }
+      // );
       await OTP.updateOne({ phone }, { $set: { refreshToken } });
 
       console.log("accessToken:", accessToken);
       console.log("Sending successful response");
       console.log("refreshToken:", refreshToken);
+      console.log("User role:", user.role);
+      console.log("User type:", userType);
+      if (userType === "Doctor") {
+        res.status(200).json({
+          success: true,
+          accessToken,
+          refreshToken,
+          userId: user._id,
+          userType: userType,
+          role: user.role,
+        });
+      }
       res.status(200).json({
         success: true,
         accessToken,
@@ -219,6 +240,8 @@ exports.loginWithPassword = asyncHandler(async (req, res) => {
   const { phone, password, role } = req.body;
 
   let user;
+
+  // Fetch user based on role
   if (role === "Doctor") {
     user = await Doctor.findOne({ phone });
   } else if (role === "Patient") {
@@ -229,12 +252,15 @@ exports.loginWithPassword = asyncHandler(async (req, res) => {
       .json({ success: false, message: "Invalid role specified" });
   }
 
+  // User not found or password field missing
   if (!user || !user.password) {
+    console.log("User not found");
     return res
       .status(404)
       .json({ success: false, message: "User not found or password not set" });
   }
 
+  // Compare password
   const isMatch = await bcrypt.compare(password, user.password);
   if (!isMatch) {
     return res
@@ -242,23 +268,60 @@ exports.loginWithPassword = asyncHandler(async (req, res) => {
       .json({ success: false, message: "Invalid password" });
   }
 
+  // Extract user fields
+  const name = user.name || "";
+  const email = user.email || "";
+  const roleFromDB = user.role || ""; // for Doctor
+
+  // Create JWT tokens
   const accessToken = jwt.sign(
-    { user: { phone: user.phone, role } },
+    {
+      user: {
+        userId: user._id,
+        name,
+        email,
+        phone,
+        userType: role,
+        role: roleFromDB,
+      },
+    },
     process.env.ACCESS_TOKEN_SECRET,
-    { expiresIn: "25m" }
+    { expiresIn: "1d" }
   );
+
   const refreshToken = jwt.sign(
-    { user: { phone: user.phone, role } },
+    {
+      user: {
+        userId: user._id,
+        name,
+        email,
+        phone,
+        userType: role,
+        role: roleFromDB,
+      },
+    },
     process.env.REFRESH_TOKEN_SECRET,
     { expiresIn: "7d" }
   );
 
-  res.status(200).json({
+  console.log("Sending response:");
+  console.log("accessToken:", accessToken);
+  console.log("refreshToken:", refreshToken);
+  console.log("userId:", user._id);
+  console.log("userType:", role);
+  console.log("role:", roleFromDB);
+
+  // Send user data to frontend
+  return res.status(200).json({
     success: true,
     accessToken,
     refreshToken,
     userId: user._id,
+    name,
+    email,
+    phone,
     userType: role,
+    role: roleFromDB,
   });
 });
 
@@ -341,3 +404,21 @@ exports.login = asyncHandler(async (req, res) => {
     res.status(400).json({ success: false, message: "Invalid login method" });
   }
 });
+
+exports.changePassword = async (req, res) => {
+  try {
+    const userId = req.user.id; // Adjust this based on your authentication method
+    console.log(userId);
+    let user;
+    user = await Doctor.findById(userId); // Exclude sensitive data
+    if (!user) {
+      user = await regForm.findById(userId);
+    }
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+    const { newPassword, retypedNewPassword } = req.body;
+  } catch (error) {
+    res.status(500).json({ message: "Internal Server Error" });
+  }
+};

@@ -1,5 +1,7 @@
 const express = require("express");
+const helmet = require("helmet");
 const fs = require("fs");
+const path = require("path");
 const https = require("https");
 const axios = require("axios");
 const jwt = require("jsonwebtoken");
@@ -11,41 +13,48 @@ const { Server } = require("socket.io");
 require("dotenv").config();
 const Message = require("./models/messageModel");
 const patientModel = require("./models/patientModel");
-const dbConnection = require("./config/dbConnection");
+const dbConnection = require("./configs/dbConnection");
 const otpRoute = require("./routes/otpRoutes");
 const patientRoute = require("./routes/patientRoutes");
 const doctorRoute = require("./routes/doctorRoutes");
 const validateToken = require("./middlewares/validateTokenHandler");
 const assignTasks = require("./routes/AssignTasksRoute");
+const chatRoutes = require("./routes/chatRoutes");
 const callLog = require("./routes/CallLogRoutes");
 const formRoutes = require("./routes/formRoute");
-const postRoute = require("./routes/postRoutes");
-const leaveRoutes = require('./routes/leaveRoutes');
+const postRoute = require("./routes/postRoutes.js");
+const leaveRoutes = require("./routes/leaveRoutes");
 const { initSocket } = require("./controllers/socketController");
-const employeeRoutes = require('./routes/employeeRoutes');
-const workHoursRoutes = require('./routes/workHoursRoute.js');
+const employeeRoutes = require("./routes/employeeRoutes");
+const workHoursRoutes = require("./routes/workHoursRoute.js");
 const salaryRoutes = require("./routes/payrollRoutes.js");
-const salaryStructure = require("./routes/SalaryStructureRoutes.js")
+const salaryStructure = require("./routes/SalaryStructureRoutes.js");
+const shiftRoutes = require("./routes/shiftRoutes.js");
+const attendance = require("./routes/attendanceRoute.js");
+const videoCallRoutes = require("./routes/VideoCallRoutes"); // Import the new router
+const workshopRoutes = require("./routes/workshopRoutes.js");
+const prescriptionRoute = require("./routes/prescription.js");
+const medicineRoute = require("./routes/medicineRoute.js");
+const rawMaterialRoute = require("./routes/rawMaterialRoute.js");
+const vendorRoutes = require("./routes/VendorRoutes.js");
+const orderRoutes = require("./routes/OrderRoute.js")
+const medPrepSummary = require("./routes/medPrepSummary.js")
+const prescriptionControl = require("./routes/PrescriptionControl.js");
+const labelRoutes = require("./routes/labelRoutes.js");
+const consumptionRoutes = require("./routes/consumptionRoutes");
 
 dbConnection();
 
 dotenv.config();
 
 const app = express();
+app.set("trust proxy", 1);
 const server = createServer(app);
 
 initSocket(server);
 
 app.use(express.json());
 app.use(cors());
-
-const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID;
-const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET;
-const GOOGLE_REDIRECT_URI = process.env.GOOGLE_REDIRECT_URI;
-
-const ZOOM_CLIENT_ID = process.env.ZOOM_CLIENT_ID;
-const ZOOM_CLIENT_SECRET = process.env.ZOOM_CLIENT_SECRET;
-const ZOOM_REDIRECT_URI = process.env.ZOOM_REDIRECT_URI;
 
 // Routes
 app.use("/api/otp", otpRoute);
@@ -55,92 +64,77 @@ app.use("/api/post", postRoute);
 app.use("/api/log", callLog);
 app.use("/api/forms", formRoutes);
 app.use("/api/assign", assignTasks);
-const chatRoutes = require("./routes/chatRoutes");
 app.use("/api", chatRoutes);
 app.use("/api/leaves", leaveRoutes);
-app.use('/api/employees', employeeRoutes);
-app.use('/api/work-hours', workHoursRoutes);
+app.use("/api/employees", employeeRoutes);
+app.use("/api/work-hours", workHoursRoutes);
 app.use("/api/payslip", salaryRoutes);
-app.use("/api", salaryStructure);
+app.use("/api/salary", salaryStructure);
+app.use("/api/shift", shiftRoutes);
+app.use("/api/attendance", attendance);
+app.use("/uploads", express.static(path.join(__dirname, "uploads")));
+app.use("/api/video-call", videoCallRoutes);
+app.use("/api/workshop", workshopRoutes);
+app.use("/api/prescription", prescriptionRoute);
+app.use("/api/medicines", medicineRoute);
+app.use("/api/inventory", rawMaterialRoute);
+app.use("/api/vendor", vendorRoutes);
+app.use("/api/order", orderRoutes);
+app.use("/api/medicine-summary", medPrepSummary);
+app.use("/api", labelRoutes);
+app.use("/api/consumptions", consumptionRoutes);
+app.use("/api/prescriptionControl", prescriptionControl);
+app.use("/api/posts", require("./routes/postRoutes"));
 
 
 const options = {
-  key: fs.readFileSync('server.key'),
-  cert: fs.readFileSync('server.crt')
+  key: fs.readFileSync("server.key"),
+  cert: fs.readFileSync("server.crt"),
 };
 
-app.get("/google/authorize", (req, res) => {
-  const url = `https://accounts.google.com/o/oauth2/v2/auth?scope=https://www.googleapis.com/auth/calendar&access_type=offline&response_type=code&redirect_uri=${GOOGLE_REDIRECT_URI}&client_id=${GOOGLE_CLIENT_ID}`;
-  res.redirect(url);
+// Middleware: Set Content Security Policy for security
+app.use(
+  helmet.contentSecurityPolicy({
+    directives: {
+      defaultSrc: ["'self'"],
+      scriptSrc: [
+        "'self'",
+        "https://apis.google.com",
+        "https://www.gstatic.com",
+        "'unsafe-inline'",
+      ],
+      frameSrc: [
+        "'self'",
+        "https://accounts.google.com",
+        "https://calendar.google.com",
+      ],
+      connectSrc: ["'self'", "https://www.googleapis.com"],
+    },
+  })
+);
+app.use((req, res, next) => {
+  res.setHeader("Cross-Origin-Embedder-Policy", "require-corp");
+  res.setHeader("Cross-Origin-Opener-Policy", "same-origin");
+  next();
+});
+app.use((req, res, next) => {
+  res.removeHeader("Cross-Origin-Embedder-Policy");
+  res.removeHeader("Cross-Origin-Opener-Policy");
+  next();
 });
 
-app.get("/google/callback", async (req, res) => {
-  const code = req.query.code;
-
-  try {
-    const response = await axios.post("https://oauth2.googleapis.com/token", {
-      code,
-      client_id: GOOGLE_CLIENT_ID,
-      client_secret: GOOGLE_CLIENT_SECRET,
-      redirect_uri: GOOGLE_REDIRECT_URI,
-      grant_type: "authorization_code",
-    });
-
-    const { access_token, refresh_token } = response.data;
-
-    // Save tokens securely in your DB (for simplicity, just logging here)
-    console.log("Google Access Token:", access_token);
-    console.log("Google Refresh Token:", refresh_token);
-
-    // Return success or continue with the flow
-    res.send("Google OAuth Flow Completed Successfully!");
-  } catch (error) {
-    console.error("Google OAuth Error:", error);
-    res.status(500).send("Error in Google OAuth flow");
-  }
+let currentId = 0; // To simulate incremental IDs
+// Generate a custom Employee ID
+app.get("http://localhost:5000/api/generate-employee-id", (req, res) => {
+  currentId += 1;
+  const customId = `EMP-${String(currentId).padStart(5, "0")}`;
+  res.json({ success: true, employeeID: customId });
 });
 
-app.get("/zoom/authorize", (req, res) => {
-  const url = `https://zoom.us/oauth/authorize?response_type=code&client_id=${ZOOM_CLIENT_ID}&redirect_uri=${ZOOM_REDIRECT_URI}`;
-  res.redirect(url);
+// Example API route
+app.get("/api/example", (req, res) => {
+  res.json({ message: "Hello jijijihui the API!" });
 });
-
-// Step 2: Exchange Zoom Authorization Code for Tokens
-app.get("/zoom/callback", async (req, res) => {
-  const code = req.query.code;
-
-  try {
-    const response = await axios.post("https://zoom.us/oauth/token", null, {
-      params: {
-        code,
-        client_id: ZOOM_CLIENT_ID,
-        client_secret: ZOOM_CLIENT_SECRET,
-        redirect_uri: ZOOM_REDIRECT_URI,
-        grant_type: "authorization_code",
-      },
-      headers: {
-        Authorization: `Basic ${Buffer.from(`${ZOOM_CLIENT_ID}:${ZOOM_CLIENT_SECRET}`).toString("base64")}`,
-      },
-    });
-
-    const { access_token, refresh_token } = response.data;
-
-    // Save tokens securely in your DB (for simplicity, just logging here)
-    console.log("Zoom Access Token:", access_token);
-    console.log("Zoom Refresh Token:", refresh_token);
-
-    // Return success or continue with the flow
-    res.send("Zoom OAuth Flow Completed Successfully!");
-  } catch (error) {
-    console.error("Zoom OAuth Error:", error);
-    res.status(500).send("Error in Zoom OAuth flow");
-  }
-});
-
-mongoose
-  .connect(process.env.MONGODB_LOCAL_URI)
-  .then(() => console.log("MongoDB connected"))
-  .catch((err) => console.log(err));
 
 app.get("/api/chat/:senderId/:receiverId", async (req, res) => {
   try {
@@ -159,15 +153,6 @@ app.get("/api/chat/:senderId/:receiverId", async (req, res) => {
   }
 });
 
-app.get("/test", async (req, res) => {
-  try {
-    const patients = await patientModel.find();
-    res.json(patients);
-  } catch (error) {
-    res.status(500).json({ message: "Server error", error });
-  }
-});
-
 const twilio = require("twilio");
 const accountSid = process.env.TWILIO_ACCOUNT_SID; // Your Twilio Account SID
 const authToken = process.env.TWILIO_AUTH_TOKEN; // Your Twilio Auth Token
@@ -176,7 +161,10 @@ const client = twilio(accountSid, authToken);
 // Endpoint to handle the TwiML response
 app.post("/twiml", (req, res) => {
   const twiml = new twilio.twiml.VoiceResponse();
-  twiml.record({ action: '/recording-status', recordingStatusCallback: '/recording-status' });
+  twiml.record({
+    action: "/recording-status",
+    recordingStatusCallback: "/recording-status",
+  });
   twiml.dial().number(req.query.to);
   res.type("text/xml");
   res.send(twiml.toString());
@@ -185,52 +173,52 @@ app.post("/twiml", (req, res) => {
 app.post("/recording-status", (req, res) => {
   const recordingUrl = req.body.RecordingUrl;
   const recordingSid = req.body.RecordingSid;
-  
+
   // Here you would typically save the recordingUrl and recordingSid to your database
   console.log(`New recording available: ${recordingUrl}`);
-  
+
   res.sendStatus(200);
 });
 
 app.get("/api/recordings/:phone", async (req, res) => {
   try {
     const { phone } = req.params;
-    
+
     // Get all calls made to this phone number
     const calls = await client.calls.list({
       to: phone,
-      limit: 20
+      limit: 20,
     });
 
     // Get recordings for each call
-    const recordingsPromises = calls.map(call => 
+    const recordingsPromises = calls.map((call) =>
       client.recordings.list({ callSid: call.sid })
     );
-    
+
     const recordingsArrays = await Promise.all(recordingsPromises);
-    
+
     // Flatten and format the recordings
-    const recordings = recordingsArrays
-      .flat()
-      .map(recording => ({
-        sid: recording.sid,
-        duration: recording.duration,
-        dateCreated: recording.dateCreated,
-        url: `https://api.twilio.com/2010-04-01/Accounts/${process.env.TWILIO_ACCOUNT_SID}/Recordings/${recording.sid}`,
-        callSid: recording.callSid
-      }));
+    const recordings = recordingsArrays.flat().map((recording) => ({
+      sid: recording.sid,
+      duration: recording.duration,
+      dateCreated: recording.dateCreated,
+      url: `https://api.twilio.com/2010-04-01/Accounts/${process.env.TWILIO_ACCOUNT_SID}/Recordings/${recording.sid}`,
+      callSid: recording.callSid,
+    }));
 
     res.json(recordings);
   } catch (error) {
-    console.error('Error fetching recordings:', error);
-    res.status(500).json({ error: 'Failed to fetch recordings' });
+    console.error("Error fetching recordings:", error);
+    res.status(500).json({ error: "Failed to fetch recordings" });
   }
 });
 
 // Update your existing make-call endpoint to include the patient's phone
 app.post("/make-call", (req, res) => {
   const { to } = req.body;
-  const twimlUrl = `${process.env.NGROK_URL}/twiml?to=${encodeURIComponent(to)}`;
+  const twimlUrl = `${process.env.NGROK_URL}/twiml?to=${encodeURIComponent(
+    to
+  )}`;
 
   client.calls
     .create({
@@ -238,7 +226,7 @@ app.post("/make-call", (req, res) => {
       to: "+916382786758", // current assistant doc number
       from: process.env.TWILIO_PHONE_NUMBER,
       record: true,
-      recordingStatusCallback: '/recording-status'
+      recordingStatusCallback: "/recording-status",
     })
     .then((call) => res.status(200).send(call.sid))
     .catch((error) => res.status(500).send(error));
@@ -255,6 +243,57 @@ app.post("/api/validate-token", validateToken, (req, res) => {
     message: "Token is valid",
     user: req.user, // The user information is attached by the middleware
   });
+});
+
+const morgan = require("morgan");
+const rateLimit = require("express-rate-limit");
+app.use(helmet());
+const limiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 100, // limit each IP to 100 requests per windowMs
+});
+app.use("/api/", limiter);
+
+const paymentRoutes = require("./routes/paymentRoutes");
+app.use("/api/payments", paymentRoutes);
+
+const cron = require("node-cron");
+const Appointment = require("./models/appointmentModel");
+
+// Runs every 1 minute to check for expired drafts
+cron.schedule("* * * * *", async () => {
+  console.log("Checking for drafts");
+  const expiredDrafts = await Appointment.find({
+    status: "draft",
+    expiresAt: { $lt: new Date() },
+  });
+
+  if (expiredDrafts.length > 0) {
+    console.log(
+      `Deleting ${expiredDrafts.length} expired draft appointments...`
+    );
+    await Appointment.deleteMany({
+      _id: { $in: expiredDrafts.map((appt) => appt._id) },
+    });
+  }
+});
+
+app.post("/generateToken", (req, res) => {
+  const { sdkKey, sdkSecret, meetingNumber, role } = req.body;
+  const payload = {
+    sdkKey,
+    mn: meetingNumber,
+    role,
+    exp: Math.floor(Date.now() / 1000) + 60 * 60, // Token expires in 1 hour
+  };
+
+  const token = jwt.sign(payload, sdkSecret, { algorithm: "HS256" });
+  console.log(token);
+  res.json({ token: token });
+});
+
+app.get("/Tarun", (req, res) => {
+  return res.status(200).json({ message: "Endpoint reached" });
 });
 
 const PORT = process.env.PORT || 8000;

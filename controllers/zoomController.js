@@ -62,7 +62,7 @@ exports.zoomCallback = async (req, res) => {
 //           refresh_token: doctor.zoomRefreshToken,
 //         },
 //         headers: {
-//           Authorization: `Basic ${Buffer.from(`${clientId}:${clientSecret}`).toString("base64")}`,
+//           Authorization: Basic ${Buffer.from(${clientId}:${clientSecret}).toString("base64")},
 //         },
 //       });
 
@@ -88,12 +88,12 @@ exports.zoomCallback = async (req, res) => {
 
 //     const zoomAPIUrl = "https://api.zoom.us/v2/users/me/meetings";
 //     const meetingData = {
-//       topic: `Appointment with ${appointment.patient}`,
+//       topic: Appointment with ${appointment.patient},
 //       type: 2,
-//       start_time: `${appointment.appointmentDate}T${appointment.timeSlot}:00`,
+//       start_time: ${appointment.appointmentDate}T${appointment.timeSlot}:00,
 //       duration: 60,
 //       timezone: "Asia/Kolkata",
-//       agenda: `Consultation for ${appointment.reason || "General Consultation"}`,
+//       agenda: Consultation for ${appointment.reason || "General Consultation"},
 //       settings: {
 //         host_video: true,
 //         participant_video: true,
@@ -105,7 +105,7 @@ exports.zoomCallback = async (req, res) => {
 
 //     const zoomResponse = await axios.post(zoomAPIUrl, meetingData, {
 //       headers: {
-//         Authorization: `Bearer ${zoomAccessToken}`,
+//         Authorization: Bearer ${zoomAccessToken},
 //         "Content-Type": "application/json",
 //       },
 //     });

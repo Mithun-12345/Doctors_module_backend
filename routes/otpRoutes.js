@@ -9,11 +9,10 @@ const router = express.Router();
 router.post("/verifyOTP", otpController.verifyOTP);
 router.post("/refreshToken", validateToken, otpController.refreshToken);
 router.post("/logout", validateToken, otpController.logout);
-router.post("/send-otp", apiLimiter, otpController.sendOTP);
+router.post("/send-otp", otpController.sendOTP);
 router.post("/updatePassword", validateToken, otpController.updatePassword);
 router.post(
   "/loginWithPassword",
-  validateToken,
   otpController.loginWithPassword
 );
 router.post("/forgotPassword", validateToken, otpController.forgotPassword);

@@ -1,7 +1,10 @@
 const mongoose = require("mongoose");
 const Doctor = require("../models/doctorModel");
 const Appointment = require("../models/appointmentModel.js");
+const Patient = require("../models/patientModel.js");
 const moment = require("moment");
+const cloudinary = require("cloudinary").v2;
+const fs = require("fs");
 
 exports.addDoctor = async (req, res) => {
   const { name, age, gender, photo, specialization, bio, phone, role } =
@@ -234,6 +237,7 @@ exports.doctorDetails = async (req, res) => {
         phone: doctor.phone,
         specialization: doctor.specialization,
         experience: doctor.experience,
+        role: doctor.role,
         // Add any other relevant fields
       },
     });
@@ -244,8 +248,9 @@ exports.doctorDetails = async (req, res) => {
 };
 
 exports.getDoctorFollow = async (req, res) => {
+  console.log("GetDoctorFollow reached");
   const phone = req.user.phone; // Use the phone from the token
-  console.log("Phone:", phone);
+  console.log("doctor Phone:", phone);
   try {
     const doctor = await Doctor.findOne({ phone }); // Find by phone instead of ID
     if (!doctor) {
@@ -278,7 +283,7 @@ exports.getDoctorById = async (req, res) => {
   try {
     const doctor = await Doctor.findById(req.params.id);
     if (!doctor) {
-      return res.status(404).json({ message: 'Doctor not found' });
+      return res.status(404).json({ message: "Doctor not found" });
     }
     res.json(doctor);
   } catch (err) {
@@ -314,16 +319,16 @@ exports.getSettings = async (req, res) => {
 exports.updateSettings = async (req, res) => {
   try {
     const { videoPlatform } = req.body;
-    
+
     if (!videoPlatform) {
       return res.status(400).json({ error: "Video platform is required" });
     }
-    
+
     console.log("Doctor ID from request:", req.doctorId);
 
     // Use req.doctorId, which was added by the middleware, to update the doctor’s settings
     const doctor = await Doctor.findByIdAndUpdate(
-      req.doctorId,  // Use the doctorId from the request
+      req.doctorId, // Use the doctorId from the request
       { videoPlatform },
       { new: true }
     );
@@ -331,10 +336,301 @@ exports.updateSettings = async (req, res) => {
     if (!doctor) {
       return res.status(404).json({ error: "Doctor not found" });
     }
-    console.log("Platform:",doctor.videoPlatform);
-    res.json({ message: "Settings updated successfully", videoPlatform: doctor.videoPlatform });
+    console.log("Platform:", doctor.videoPlatform);
+    res.json({
+      message: "Settings updated successfully",
+      videoPlatform: doctor.videoPlatform,
+    });
   } catch (error) {
     console.error("Error updating settings:", error);
     res.status(500).json({ error: "Failed to update settings" });
+  }
+};
+
+exports.getAllAppointments = async (req, res) => {
+  try {
+    // Fetch all appointments and populate patient details
+    const appointments = await Appointment.find()
+      .populate("patient", {
+        name: 1,
+        age: 1,
+        newExisting: 1,
+        phone: 1,
+        whatsappNumber: 1,
+        email: 1,
+        gender: 1,
+        medicalRecords: 1,
+        patientEntry: 1,
+        currentLocation: 1,
+        appointmentFixed: 1,
+        appDownload: 1,
+        follow: 1,
+        followComment: 1,
+        followUpTimestamp: 1,
+        familyMembers: 1,
+        createdAt: 1,
+        updatedAt: 1,
+      })
+      .lean(); // Fetch as plain objects for easier formatting
+
+    // Transform data into the desired format
+    const formattedData = appointments.map((appointment) => {
+      const patientDetails = appointment.patient || {};
+      return {
+        ...patientDetails,
+        medicalDetails: {
+          _id: appointment._id,
+          patientId: appointment.patient?._id,
+          consultingFor: appointment.consultingFor,
+          diseaseName: appointment.diseaseName,
+          diseaseType: appointment.diseaseType,
+          follow: appointment.follow,
+          followComment: appointment.followComment,
+          followUpTimestamp: appointment.followUpTimestamp,
+          medicalPayment: appointment.medicalPayment,
+          callCount: appointment.callCount,
+          comments: appointment.comments,
+          __v: appointment.__v,
+        },
+      };
+    });
+    console.log("data:", formattedData);
+    res.status(200).json(formattedData);
+  } catch (error) {
+    console.error("Error fetching appointments:", error);
+    res.status(500).json({ message: "Internal server error" });
+  }
+};
+
+// API endpoint to fetch patient and appointment data
+exports.getAllAppointmentsWithPatientData = async (req, res) => {
+  try {
+    // Fetch all unique patient IDs from the appointments
+    const appointments = await Appointment.find({});
+    const patientIds = [
+      ...new Set(
+        appointments.map((appointment) => appointment.patient.toString())
+      ),
+    ];
+
+    // Fetch patient data for the corresponding IDs
+    const patients = await Patient.find({ _id: { $in: patientIds } });
+
+    // Format response as required
+    const response = [];
+
+    patients.forEach((patient) => {
+      const patientAppointments = appointments.filter(
+        (appointment) =>
+          appointment.patient.toString() === patient._id.toString()
+      );
+
+      patientAppointments.forEach((appointment) => {
+        response.push({
+          _id: patient._id,
+          name: patient.name,
+          age: patient.age,
+          newExisting: patient.newExisting,
+          phone: patient.phone,
+          whatsappNumber: patient.whatsappNumber,
+          email: patient.email,
+          gender: patient.gender,
+          medicalRecords: patient.medicalRecords,
+          patientEntry: patient.patientEntry,
+          currentLocation: patient.currentLocation,
+          appointmentFixed: patient.appointmentFixed,
+          appDownload: patient.appDownload,
+          follow: patient.follow,
+          followComment: patient.followComment,
+          followUpTimestamp: patient.followUpTimestamp,
+          familyMembers: patient.familyMembers,
+          createdAt: patient.createdAt,
+          updatedAt: patient.updatedAt,
+          medicalDetails: {
+            _id: appointment._id,
+            patientId: appointment.patient,
+            consultingFor: appointment.consultingFor,
+            appointmentDate: appointment.appointmentDate,
+            timeSlot: appointment.timeSlot,
+            diseaseName: appointment.diseaseName,
+            diseaseType: appointment.diseaseType,
+            follow: appointment.follow,
+            followComment: appointment.followComment,
+            followUpTimestamp: appointment.followUpTimestamp,
+            medicalPayment: appointment.medicalPayment,
+            callCount: appointment.callCount,
+            comments: appointment.comments,
+            meetLink: appointment.meetLink,
+            drafts: appointment.notes,
+            prescriptionCreated: appointment.prescriptionCreated,
+          },
+        });
+      });
+    });
+
+    res.status(200).json(response);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: "Internal server error" });
+  }
+};
+
+exports.submitNotes = async (req, res) => {
+  console.log("Reached");
+  const { appointmentID, notes } = req.body;
+
+  try {
+    const appointment = await Appointment.findById(appointmentID);
+    if (!appointment) {
+      return res
+        .status(404)
+        .json({ success: false, message: "Appointment not found" });
+    }
+
+    appointment.notes = notes;
+    await appointment.save();
+
+    res
+      .status(200)
+      .json({ success: true, message: "Notes submitted successfully" });
+  } catch (error) {
+    console.error("Error submitting notes:", error);
+    res.status(500).json({ success: false, message: "Internal server error" });
+  }
+};
+
+exports.fetchProfile = async (req, res) => {
+  try {
+    const doctorId = req.user.id; // Adjust this based on your authentication method
+    console.log(doctorId);
+    // const patient = await Patient.findById(doctorId);
+    const doctor = await Doctor.findById(doctorId).select("-password"); // Exclude sensitive data
+
+    if (!doctor) {
+      return res.status(404).json({ message: "Doctor not found" });
+    }
+
+    res.status(200).json(doctor);
+  } catch (error) {
+    console.error("Error fetching profile:", error);
+    res.status(500).json({ message: "Failed to fetch profile" });
+  }
+};
+
+exports.updateProfile = async (req, res) => {
+  try {
+    const userId = req.user.id;
+
+    // Destructure the fields from the request body
+    const { name, age, phone, whatsappNumber, gender } = req.body;
+
+    // Find and update the patient document
+    const updatedDoctor = await Doctor.findByIdAndUpdate(
+      userId,
+      {
+        name,
+        age,
+        phone,
+        whatsappNumber,
+        gender,
+      },
+      { new: true, runValidators: true }
+    );
+
+    if (!updatedDoctor) {
+      return res.status(404).json({ message: "Doctor not found" });
+    }
+
+    res.status(200).json({
+      message: "Profile updated successfully",
+      data: updatedDoctor,
+    });
+  } catch (error) {
+    console.error("Error updating profile:", error);
+    res.status(500).json({ message: "Internal server error" });
+  }
+};
+
+exports.uploadProfilePicture = async (req, res) => {
+  try {
+    const doctorId = req.user._id; // assuming authentication middleware sets this
+    const doctor = await Doctor.findById(doctorId);
+
+    if (!doctor) {
+      return res
+        .status(404)
+        .json({ success: false, message: "Doctor not found" });
+    }
+
+    let profilePhotoUrl = "";
+
+    if (req.file) {
+      // 📤 Upload file to Cloudinary
+      const uploadResult = await cloudinary.uploader.upload(req.file.path, {
+        folder: "doctor_profiles",
+        resource_type: "image",
+      });
+
+      profilePhotoUrl = uploadResult.secure_url;
+
+      // if (req.file) {
+      //   const uploadResult = await cloudinary.uploader.upload(req.file.path, {
+      //     folder: "doctor_profile_photos",
+      //     public_id: `${doctorId}_profile`,
+      //     overwrite: true,
+      //   });
+
+      //   profilePhotoUrl = uploadResult.secure_url;
+
+      // 🧹 Clean up local file
+      fs.unlink(req.file.path, (err) => {
+        if (err) console.error("Failed to delete local file:", err);
+      });
+    } else {
+      // 🖼️ Generate avatar using initials if no file uploaded
+      const initials = doctor.name
+        ? doctor.name
+            .split(" ")
+            .map((n) => n[0])
+            .join("")
+            .toUpperCase()
+        : "P";
+
+      profilePhotoUrl = `https://ui-avatars.com/api/?name=${initials}&background=random&color=fff&size=128`;
+    }
+
+    // ✅ Save to doctor
+    doctor.profilePhoto = profilePhotoUrl;
+    await doctor.save();
+
+    res.status(200).json({
+      success: true,
+      message: "Profile picture updated successfully",
+      profilePhoto: profilePhotoUrl,
+    });
+  } catch (error) {
+    console.error("Upload error:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to upload profile picture",
+      error: error.message,
+    });
+  }
+};
+
+//To check he is appointed with consultation or not
+exports.getDoctorByFollow = async (req, res) => {
+  try {
+    const doctorId = req.user.id; // You should extract from token
+    const doctor = await Doctor.findById(doctorId).select("role follow");
+
+    if (!doctor) {
+      return res.status(404).json({ message: "Doctor not found" });
+    }
+
+    res.status(200).json(doctor);
+  } catch (err) {
+    console.error("Error fetching doctor details:", err);
+    res.status(500).json({ message: "Server Error" });
   }
 };

@@ -9,6 +9,8 @@ const {
   setLeaveSettings,
   getLeaveBalance,
   getLeaveSettings,
+  addLeave,
+  getLeaves,
 } = require('../controllers/leaveController');
 const validateToken = require("../middlewares/validateTokenHandler");
 const router = express.Router();
@@ -35,6 +37,8 @@ router.get('/get-leave-settings', validateToken, getLeaveSettings);
 
 // Assistant-Doctor route to fetch leave balance
 router.get('/leave-balance', validateToken, getLeaveBalance);
+router.post("/add", addLeave);
 
+router.get("/all",getLeaves);
 
 module.exports = router;

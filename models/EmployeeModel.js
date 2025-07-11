@@ -2,12 +2,12 @@ const mongoose = require('mongoose');
 
 const employeeSchema = new mongoose.Schema({
   // Personal Details
-  fullName: { type: String, required: true },
+  name: { type: String, required: true },
   dateOfBirth: { type: Date, required: true },
   gender: { type: String, enum: ['Male', 'Female'], required: true },
   maritalStatus: { type: String, enum: ['Single', 'Married'], required: true },
   nationality: { type: String, required: true },
-  primaryContact: { type: String, required: true },
+  phone: { type: String, required: true, unique: true },
   secondaryContact: { type: String },
   personalEmail: { type: String, required: true, unique: true },
   currentAddress: { type: String, required: true },
@@ -18,13 +18,20 @@ const employeeSchema = new mongoose.Schema({
 
   // Job Details
   employeeID: { type: String, required: true, unique: true },
-  jobTitle: { type: String, required: true },
+  role: {
+    type: String,
+    enum: ["admin-doctor", "assistant-doctor", "Executive"],
+    default: "assistant-doctor",
+    required: true,
+  },
   department: { type: String, required: true },
   dateOfJoining: { type: Date, required: true },
   employmentType: { type: String, required: true },
   workLocation: { type: String, required: true },
   reportingManager: { type: String, required: true },
-  workShift: { type: String, required: true },
+  // workShift: { type: String, required: true },
+  workShift: { type: mongoose.Schema.Types.ObjectId, ref: "Shift", required: true },
+
 
   // Compensation Details
   basicSalary: { type: Number, required: true },

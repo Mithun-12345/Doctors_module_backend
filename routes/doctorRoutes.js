@@ -11,10 +11,24 @@ const {
   getDoctorFollow,
   getDoctorById,
   getSettings,
-  updateSettings
+  updateSettings,
+  getAllAppointments,
+  getAllAppointmentsWithPatientData,
+  submitNotes,
+  fetchProfile,
+  updateProfile,
+  uploadProfilePicture,
+  getDoctorByFollow
 } = require("../controllers/doctorController");
+const {
+  upload,
+  handleMulterError,
+} = require("../middlewares/uploadMiddleware");
 
-const { googleAuth, googleCallback } = require("../controllers/googleController");
+const {
+  googleAuth,
+  googleCallback,
+} = require("../controllers/googleController");
 const { zoomAuth, zoomCallback } = require("../controllers/zoomController");
 
 const router = express.Router();
@@ -41,13 +55,29 @@ router.get("/getAppointments", validateToken, getAppointments);
 // router.get('/availableSlots', getAvailableSlots);
 
 router.post("/redirectAppointment", validateToken, redirectAppointment);
-router.get('/getAssistantDoctors', validateToken, getAssistantDoctors);
-router.get('/getUserRole', validateToken, getUserRole);
-router.get('/details', validateToken, doctorDetails);
-router.get('/getDoctorFollow', validateToken, getDoctorFollow);
-router.get('/byId/:id',validateToken, getDoctorById);
-router.get('/getsettings',  validateToken,getSettings);
-router.put('/updatesettings',  validateToken,updateSettings);
+router.get("/getAssistantDoctors", validateToken, getAssistantDoctors);
+router.get("/getUserRole", validateToken, getUserRole);
+router.get("/details", validateToken, doctorDetails);
+router.get("/getDoctorFollow", validateToken, getDoctorFollow);
+router.get("/byId/:id", validateToken, getDoctorById);
+router.get("/getsettings", validateToken, getSettings);
+router.put("/updatesettings", validateToken, updateSettings);
+router.get("/getAllAppointments", validateToken, getAllAppointments);
+router.get(
+  "/getAllAppointmentsWithPatientData",
+  getAllAppointmentsWithPatientData
+);
+router.post("/notes", validateToken, submitNotes);
 
+router.get("/profile", validateToken, fetchProfile);
+router.post(
+  "/uploadProfilePicture",
+  validateToken,
+  upload.single("profilePhoto"),
+  handleMulterError,
+  uploadProfilePicture
+);
+router.put("/updateProfile", validateToken, updateProfile);
+router.get('/doctor/me', validateToken, getDoctorByFollow);
 
 module.exports = router;
