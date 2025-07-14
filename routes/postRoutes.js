@@ -23,6 +23,11 @@ router.post(
   handleMulterError,
   createPost
 );//The root for Instagram post is defined in POost controller and that is "/api/posts" don't worry about it
+router.get("/exchangeToken", async (req, res) => {
+  const result = await exchangeForLongLivedToken();
+  res.json(result);
+});
+
 
 
 router.get("/", validateToken, getPosts);
