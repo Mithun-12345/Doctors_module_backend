@@ -56,6 +56,7 @@ initSocket(server);
 app.use(express.json());
 app.use(cors());
 
+
 // Routes
 app.use("/api/otp", otpRoute);
 app.use("/api/patient", patientRoute);
@@ -125,11 +126,12 @@ app.use((req, res, next) => {
 
 let currentId = 0; // To simulate incremental IDs
 // Generate a custom Employee ID
-app.get("http://localhost:5000/api/generate-employee-id", (req, res) => {
+app.get("/api/generate-employee-id", (req, res) => {
   currentId += 1;
   const customId = `EMP-${String(currentId).padStart(5, "0")}`;
   res.json({ success: true, employeeID: customId });
 });
+
 
 // Example API route
 app.get("/api/example", (req, res) => {
@@ -295,6 +297,10 @@ app.post("/generateToken", (req, res) => {
 app.get("/Tarun", (req, res) => {
   return res.status(200).json({ message: "Endpoint reached" });
 });
+app.get("/", (req, res) => {
+  res.send("✅ Backend is up and running!");
+});
+
 
 const PORT = process.env.PORT || 8000;
 app.listen(PORT, () => {
