@@ -233,9 +233,9 @@ app.post("/make-call", (req, res) => {
     .then((call) => res.status(200).send(call.sid))
     .catch((error) => res.status(500).send(error));
 });
-// https.createServer(options, app).listen(5000, () => {
-//   console.log('Server is running on https://localhost:5000');
-// });
+//https.createServer(options, app).listen(5000, () => {
+// console.log('Server is running on https://localhost:5000');
+//});
 
 // For getting the user straight to Home page from the splash screen if the response is true else to the login page
 app.post("/api/validate-token", validateToken, (req, res) => {

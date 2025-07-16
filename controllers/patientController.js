@@ -24,6 +24,7 @@ const accountSid = process.env.TWILIO_ACCOUNT_SID;
 const authToken = process.env.TWILIO_AUTH_TOKEN;
 const client = new twilio(accountSid, authToken);
 const bcrypt = require("bcrypt");
+const Prescription = require('../models/Prescription');
 const mongoose = require("mongoose");
 
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID;
@@ -1208,25 +1209,27 @@ exports.updateFollowUpStatus = async (req, res) => {
 
     const exDtTm = new Date();
 
-    // Update follow-up status
-    switch (appointment.follow) {
-      case "Follow up-C":
-        appointment.follow = "Follow up-P";
-        break;
-      case "Follow up-P":
-        appointment.follow = "Follow up-Mship";
-        appointment.followUpTimestamp = exDtTm; // Store timestamp when status changes to Mship
-        break;
-      case "Follow up-Mship":
-        appointment.follow = "Follow up-MP";
-        break;
-      case "Follow up-MP":
-        appointment.follow = "Follow up-ship";
-        break;
-      default:
-        return res.status(400).json({ message: "Invalid follow-up status" });
-    }
-
+// Update follow-up status
+switch (appointment.follow) {
+  case "Follow up-C":
+    appointment.follow = "Follow up-P";
+    break;
+  case "Follow up-P":
+    appointment.follow = "Follow up-Mship";
+    appointment.followUpTimestamp = exDtTm; // Store timestamp when status changes to Mship
+    break;
+  case "Follow up-Mship":
+    appointment.follow = "Follow up-MP";
+    break;
+  case "Follow up-MP":
+    appointment.follow = "Follow up-ship";
+    break;
+  case "Follow up-ship":
+    appointment.follow = "Follow up-PC"; // NEW: Patient Care stage
+    break;
+  default:
+    return res.status(400).json({ message: "Invalid follow-up status" });
+}
     await appointment.save();
 
     res.status(200).json({
@@ -1275,6 +1278,35 @@ exports.updateFollowPatientCall = async (req, res) => {
     res.status(500).json({ message: "Server error", error });
   }
 };
+exports.markProductReceived = async (req, res) => {
+  try {
+    const { prescriptionId } = req.params;
+    console.log("👉 Prescription ID:", prescriptionId);
+
+    const prescription = await Prescription.findById(prescriptionId);
+    if (!prescription) {
+      console.log("❌ Prescription not found");
+      return res.status(404).json({ message: "Prescription not found" });
+    }
+
+    if (!prescription.trackingId) {
+      console.log("🚫 No tracking ID");
+      return res.status(400).json({ message: "Cannot acknowledge receipt without a tracking ID." });
+    }
+
+    prescription.isProductReceived = true;
+    await prescription.save();
+
+    console.log("✅ Marked as received");
+    res.json({ message: "Product confirmed as received", prescription });
+
+  } catch (error) {
+    console.error("💥 Error acknowledging receipt:", error);
+    res.status(500).json({ message: "Internal server error" });
+  }
+};
+
+
 
 exports.referFriend = asyncHandler(async (req, res) => {
   const { friendName, friendPhone } = req.body;

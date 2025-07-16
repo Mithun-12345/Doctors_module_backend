@@ -24,7 +24,9 @@ const {
   getPayments,
   validateCoupon,
   fetchFamilyDetails,
+  markProductReceived, 
 } = require("../controllers/patientController");
+const {upload, handleMulterError } = require("../middlewares/uploadMiddleware");
 
 const {
   pendingAppointment,
@@ -38,10 +40,6 @@ const {
 } = require("../controllers/UIController");
 
 const validateToken = require("../middlewares/validateTokenHandler");
-const {
-  upload,
-  handleMulterError,
-} = require("../middlewares/uploadMiddleware");
 
 const router = express.Router();
 
@@ -76,6 +74,7 @@ router.get("/validateCoupon", validateCoupon);
 router.post("/addFamily", validateToken, addFamily);
 router.get("/fetchFamilyDetails", fetchFamilyDetails);
 router.get("/getFamilyMembers", validateToken, getFamilyMembers);
+router.patch('/prescriptions/:prescriptionId/receive', validateToken, markProductReceived);
 
 const familyMemberController = require("../controllers/patientController");
 const { validate } = require("../models/patientModel");

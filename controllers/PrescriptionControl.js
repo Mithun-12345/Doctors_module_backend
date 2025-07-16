@@ -5,6 +5,7 @@ const Appointment = require('../models/appointmentModel');
 const RawMaterial = require('../models/RawMaterial');
 const Medicine = require('../models/Medicine');
 
+
 const createPrescription = async (req, res) => {
   try {
     console.log("createPrescription reached");

@@ -235,6 +235,8 @@ const prescriptionSchema = new mongoose.Schema({
     ref: "Appointment",
   },
   prescriptionItems: [prescriptionItemSchema],
+  startDate: { type: Date, required: false },
+  endDate: { type: Date, default: null },
   followUpDays: {
     type: Number,
     default: 10,
@@ -250,6 +252,23 @@ const prescriptionSchema = new mongoose.Schema({
   shippingCharges: {
     type: Number,
     default: 0,
+  },
+  trackingId: { 
+    type: String, 
+    default: null 
+  },
+  isProductReceived: { 
+    type: Boolean, 
+    default: null, 
+    required:false 
+  },
+  isProductShipped: { 
+    type: Boolean, 
+    default: false 
+  },
+  shippedDate: {
+  type: Date,
+  default: null
   },
   notes: {
     type: String,

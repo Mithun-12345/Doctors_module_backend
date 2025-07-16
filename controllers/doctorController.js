@@ -4,6 +4,7 @@ const Appointment = require("../models/appointmentModel.js");
 const Patient = require("../models/patientModel.js");
 const moment = require("moment");
 const cloudinary = require("cloudinary").v2;
+const Prescription = require('../models/Prescription.js');
 const fs = require("fs");
 
 exports.addDoctor = async (req, res) => {
@@ -617,7 +618,107 @@ exports.uploadProfilePicture = async (req, res) => {
     });
   }
 };
+exports.updateTrackingId = async (req, res) => {
+  try {
+    const { prescriptionId } = req.params;
+    const { trackingId } = req.body;
 
+    if (!trackingId) {
+      return res.status(400).json({ message: "Tracking ID is required." });
+    }
+
+    const prescription = await Prescription.findById(prescriptionId);
+    if (!prescription) {
+      return res.status(404).json({ message: "Prescription not found." });
+    }
+
+    // Optional: Only the doctor who owns the prescription can update
+    if (prescription.doctorId.toString() !== req.user.userId) {
+      return res.status(403).json({ message: "Not authorized to update this prescription." });
+    }
+
+    prescription.trackingId = trackingId;
+    prescription.isProductShipped = true;
+    await prescription.save();
+
+    res.json({
+      message: "Tracking ID updated successfully.",
+      prescription
+    });
+  } catch (err) {
+    console.error("Error updating tracking ID:", err);
+    res.status(500).json({ message: "Internal server error" });
+  }
+};
+exports.getDeliveryStatusByPatient = async (req, res) => {
+  try {
+    const { patientId } = req.params;
+    const objectId = new mongoose.Types.ObjectId(patientId);
+
+    const prescriptions = await Prescription.find({ patientId: objectId })
+      .select('trackingId isProductReceived shippedDate prescriptionItems');
+
+    if (!prescriptions.length) {
+      return res.status(404).json({ message: "No prescriptions found for this patient." });
+    }
+
+    const simplified = prescriptions.map((prescription) => ({
+      id: prescription._id,
+      trackingId: prescription.trackingId,
+      shippedDate: prescription.shippedDate || null, 
+      isProductReceived: prescription.isProductReceived,
+      items: prescription.prescriptionItems.map((item) => ({
+        name: item.medicineName,
+        qty: item.dispenseQuantity,
+        uom: item.uom
+      }))
+    }));
+
+    res.json(simplified);
+  } catch (error) {
+    console.error("❌ Error fetching delivery status:", error);
+    res.status(500).json({ message: "Internal server error" });
+  }
+};
+
+exports.startPrescription = async (req, res) => {
+  try {
+    const { prescriptionId } = req.params;
+    const { startDate } = req.body;
+
+    const prescription = await Prescription.findById(prescriptionId);
+    if (!prescription) {
+      return res.status(404).json({ message: 'Prescription not found' });
+    }
+
+    // Enforce that doctor must provide startDate
+    if (!startDate) {
+      return res.status(400).json({ message: 'Start date is required' });
+    }
+
+    // Set startDate and compute endDate
+    prescription.startDate = new Date(startDate);
+
+    if (prescription.medicineCourse) {
+      const moment = require('moment');
+      prescription.endDate = moment(prescription.startDate)
+        .add(prescription.medicineCourse, 'days')
+        .toDate();
+    }
+
+    await prescription.save();
+
+    res.status(200).json({
+      message: 'Start date set successfully',
+      startDate: prescription.startDate,
+      endDate: prescription.endDate,
+    });
+
+  } catch (err) {
+    console.error('Error setting start date:', err);
+    res.status(500).json({ message: 'Internal server error', error: err.message });
+  }
+};
 //To check he is appointed with consultation or not
 exports.getDoctorByFollow = async (req, res) => {
   try {

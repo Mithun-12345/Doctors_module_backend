@@ -11,7 +11,8 @@ const {
   getMyPrescribedAppointments, 
   getPrescribedAppointments, 
   getPrescriptionById, 
-  updatePaymentStatus
+  updatePaymentStatus,
+  
 } = require('../controllers/PrescriptionController');
 
 router.get('/appointment/:appointmentId', auth, getPrescriptionByAppointmentId);
