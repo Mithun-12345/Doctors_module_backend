@@ -42,6 +42,10 @@ const medPrepSummary = require("./routes/medPrepSummary.js")
 const prescriptionControl = require("./routes/PrescriptionControl.js");
 const labelRoutes = require("./routes/labelRoutes.js");
 const consumptionRoutes = require("./routes/consumptionRoutes");
+const scheduleRoutes = require('./routes/generateMedicationScheduleRoutes.js');
+
+
+
 
 dbConnection();
 
@@ -86,7 +90,7 @@ app.use("/api", labelRoutes);
 app.use("/api/consumptions", consumptionRoutes);
 app.use("/api/prescriptionControl", prescriptionControl);
 app.use("/api/posts", require("./routes/postRoutes"));
-
+app.use('/api', scheduleRoutes);
 
 const options = {
   key: fs.readFileSync("server.key"),

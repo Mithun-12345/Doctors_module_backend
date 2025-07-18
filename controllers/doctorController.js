@@ -639,6 +639,8 @@ exports.updateTrackingId = async (req, res) => {
 
     prescription.trackingId = trackingId;
     prescription.isProductShipped = true;
+    prescription.shippedDate = new Date(); 
+
     await prescription.save();
 
     res.json({
@@ -650,6 +652,7 @@ exports.updateTrackingId = async (req, res) => {
     res.status(500).json({ message: "Internal server error" });
   }
 };
+
 exports.getDeliveryStatusByPatient = async (req, res) => {
   try {
     const { patientId } = req.params;

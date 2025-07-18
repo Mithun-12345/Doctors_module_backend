@@ -1216,7 +1216,7 @@ switch (appointment.follow) {
     break;
   case "Follow up-P":
     appointment.follow = "Follow up-Mship";
-    appointment.followUpTimestamp = exDtTm; // Store timestamp when status changes to Mship
+    appointment.followUpTimestamp = exDtTm; 
     break;
   case "Follow up-Mship":
     appointment.follow = "Follow up-MP";
