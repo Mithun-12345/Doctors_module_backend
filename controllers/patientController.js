@@ -368,6 +368,7 @@ exports.sendChronicForm = asyncHandler(async (req, res) => {
   });
 });
 
+
 // Check Available Slots
 exports.checkAvailableSlots = asyncHandler(async (req, res) => {
   const { appointmentDate } = req.body;
@@ -1225,7 +1226,7 @@ switch (appointment.follow) {
     appointment.follow = "Follow up-ship";
     break;
   case "Follow up-ship":
-    appointment.follow = "Follow up-PC"; // NEW: Patient Care stage
+    appointment.follow = "Follow up-PCare"; 
     break;
   default:
     return res.status(400).json({ message: "Invalid follow-up status" });
@@ -1279,34 +1280,35 @@ exports.updateFollowPatientCall = async (req, res) => {
   }
 };
 exports.markProductReceived = async (req, res) => {
-  try {
-    const { prescriptionId } = req.params;
-    console.log("👉 Prescription ID:", prescriptionId);
+try {
+const { prescriptionId } = req.params;
 
-    const prescription = await Prescription.findById(prescriptionId);
-    if (!prescription) {
-      console.log("❌ Prescription not found");
-      return res.status(404).json({ message: "Prescription not found" });
-    }
+if (!mongoose.Types.ObjectId.isValid(prescriptionId)) {
+  return res.status(400).json({ message: "Invalid prescription ID." });
+}
 
-    if (!prescription.trackingId) {
-      console.log("🚫 No tracking ID");
-      return res.status(400).json({ message: "Cannot acknowledge receipt without a tracking ID." });
-    }
+const prescription = await Prescription.findById(prescriptionId);
+if (!prescription) {
+  return res.status(404).json({ message: "Prescription not found" });
+}
 
-    prescription.isProductReceived = true;
-    await prescription.save();
+if (!prescription.trackingId) {
+  return res.status(400).json({ message: "Cannot acknowledge receipt without a tracking ID." });
+}
 
-    console.log("✅ Marked as received");
-    res.json({ message: "Product confirmed as received", prescription });
+prescription.isProductReceived = true;
+prescription.updatedAt = new Date();
 
-  } catch (error) {
-    console.error("💥 Error acknowledging receipt:", error);
-    res.status(500).json({ message: "Internal server error" });
-  }
+await prescription.save({ validateBeforeSave: false });
+
+return res.status(200).json({
+  message: "Product confirmed as received"
+});
+} catch (error) {
+console.error("💥 Error acknowledging receipt:", error);
+return res.status(500).json({ message: "Internal server error", error: error.message });
+}
 };
-
-
 
 exports.referFriend = asyncHandler(async (req, res) => {
   const { friendName, friendPhone } = req.body;

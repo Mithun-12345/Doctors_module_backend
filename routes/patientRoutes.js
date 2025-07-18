@@ -43,6 +43,7 @@ const validateToken = require("../middlewares/validateTokenHandler");
 
 const router = express.Router();
 
+
 router.post("/sendRegForm", sendForm);
 router.post("/sendChronicForm", validateToken, sendChronicForm);
 router.get("/details", validateToken, patientDetails);
