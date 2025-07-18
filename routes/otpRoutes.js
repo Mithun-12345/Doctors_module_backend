@@ -10,7 +10,7 @@ router.post("/verifyOTP", otpController.verifyOTP);
 router.post("/refreshToken", validateToken, otpController.refreshToken);
 router.post("/logout", validateToken, otpController.logout);
 router.post("/send-otp", otpController.sendOTP);
-router.post("/updatePassword", validateToken, otpController.updatePassword);
+router.post("/updatePassword", otpController.updatePassword);
 router.post(
   "/loginWithPassword",
   otpController.loginWithPassword

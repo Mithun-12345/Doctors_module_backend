@@ -632,11 +632,7 @@ exports.updateTrackingId = async (req, res) => {
       return res.status(404).json({ message: "Prescription not found." });
     }
 
-    // Optional: Only the doctor who owns the prescription can update
-    if (prescription.doctorId.toString() !== req.user.userId) {
-      return res.status(403).json({ message: "Not authorized to update this prescription." });
-    }
-
+    // No ownership restriction — anyone with valid access can update
     prescription.trackingId = trackingId;
     prescription.isProductShipped = true;
     prescription.shippedDate = new Date(); 
@@ -657,6 +653,7 @@ exports.getDeliveryStatusByPatient = async (req, res) => {
   try {
     const { patientId } = req.params;
     const objectId = new mongoose.Types.ObjectId(patientId);
+    console.log(req.params.patientId);
 
     const prescriptions = await Prescription.find({ patientId: objectId })
       .select('trackingId isProductReceived shippedDate prescriptionItems');
