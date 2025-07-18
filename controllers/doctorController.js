@@ -6,6 +6,7 @@ const moment = require("moment");
 const cloudinary = require("cloudinary").v2;
 const Prescription = require('../models/Prescription.js');
 const fs = require("fs");
+const NotificationReminderSettings = require('../models/NotificationReminderSettings');
 
 exports.addDoctor = async (req, res) => {
   const { name, age, gender, photo, specialization, bio, phone, role } =
@@ -646,6 +647,184 @@ exports.updateTrackingId = async (req, res) => {
 };
 
 
+exports.startPrescription = async (req, res) => {
+  try {
+    const { prescriptionId } = req.params;
+    const { startDate } = req.body;
+
+    console.log('📥 Start Prescription Request Received');
+    console.log('🔍 Prescription ID:', prescriptionId);
+    console.log('🗓️  Provided Start Date:', startDate);
+
+    const prescription = await Prescription.findById(prescriptionId);
+    if (!prescription) {
+      console.log('❌ Prescription not found');
+      return res.status(404).json({ message: 'Prescription not found' });
+    }
+
+    if (!startDate) {
+      console.log('⚠️  Start date is missing in request');
+      return res.status(400).json({ message: 'Start date is required' });
+    }
+
+    // Set and compute dates
+    prescription.startDate = new Date(startDate);
+    console.log('✅ Start Date Set:', prescription.startDate);
+
+    if (prescription.medicineCourse) {
+      prescription.endDate = moment(prescription.startDate)
+        .add(prescription.medicineCourse, 'days')
+        .toDate();
+      console.log('📆 Calculated End Date:', prescription.endDate);
+    } else {
+      console.log('⚠️  No medicineCourse found in prescription; End Date not calculated');
+    }
+
+    await prescription.save({ validateBeforeSave: false });
+    console.log('💾 Prescription saved successfully');
+
+    const finalSchedule = [];
+
+    for (const item of prescription.prescriptionItems || []) {
+      const {
+        medicineName,
+        frequencies,
+        standardSchedule,
+        frequentSchedule,
+        parallelConsumption,
+      } = item;
+      const medicineSchedule = [];
+
+      if (frequencies?.length > 0) {
+        for (const freq of frequencies) {
+          const {
+            day,
+            frequencyType,
+            standardFrequency,
+            frequentFrequency,
+            parallelConsumption: nestedParallel,
+            timings,
+          } = freq;
+
+          if (!day) continue;
+          const date = moment(prescription.startDate).add(day - 1, 'days').format('YYYY-MM-DD');
+
+          if (frequencyType === 'standard' && standardFrequency) {
+            const timeSlots = ['morning', 'afternoon', 'evening', 'night'];
+            for (const slot of timeSlots) {
+              const timing = standardFrequency?.[slot];
+              if (timing?.from) {
+                medicineSchedule.push({ date, time: timing.from, day });
+              }
+            }
+          }
+
+          if (nestedParallel?.schedule?.length > 0) {
+            for (const nested of nestedParallel.schedule) {
+              const nestedDate = moment(prescription.startDate)
+                .add(nested.day - 1, 'days')
+                .format('YYYY-MM-DD');
+              if (nested.time) {
+                medicineSchedule.push({
+                  date: nestedDate,
+                  time: nested.time,
+                  day: nested.day,
+                });
+              }
+            }
+          }
+
+          if (frequencyType === 'frequent') {
+            if (timings?.length > 0) {
+              for (const time of timings) {
+                medicineSchedule.push({ date, time, day });
+              }
+            } else if (
+              frequentFrequency?.doses &&
+              (frequentFrequency.hours || frequentFrequency.minutes)
+            ) {
+              const totalDoses = frequentFrequency.doses;
+              const intervalMinutes =
+                (frequentFrequency.hours || 0) * 60 + (frequentFrequency.minutes || 0);
+              const startTime = timings?.[0] || '08:00';
+              const firstDose = moment(startTime, 'HH:mm');
+
+              for (let i = 0; i < totalDoses; i++) {
+                const doseTime = firstDose.clone().add(i * intervalMinutes, 'minutes');
+                medicineSchedule.push({
+                  date,
+                  time: doseTime.format('HH:mm'),
+                  day,
+                });
+              }
+            }
+          }
+        }
+      }
+
+      if (standardSchedule?.length > 0) {
+        for (const sched of standardSchedule) {
+          const legacyDate = moment(prescription.startDate)
+            .add(sched.day - 1, 'days')
+            .format('YYYY-MM-DD');
+          for (const time of sched.times || []) {
+            medicineSchedule.push({ date: legacyDate, time, day: sched.day });
+          }
+        }
+      }
+
+      if (parallelConsumption?.schedule?.length > 0) {
+        for (const dateStr of parallelConsumption.schedule) {
+          const time = moment(dateStr).format('HH:mm');
+          const date = moment(dateStr).format('YYYY-MM-DD');
+          medicineSchedule.push({
+            date,
+            time,
+            day: moment(dateStr).diff(moment(prescription.startDate), 'days') + 1,
+          });
+        }
+      }
+
+      if (medicineSchedule.length > 0) {
+        finalSchedule.push({
+          medicineName,
+          schedule: medicineSchedule,
+        });
+      }
+    }
+
+    // ✅ Apply proper IST → UTC conversion for reminder insertion
+    const remindersToInsert = finalSchedule.flatMap((entry) =>
+      entry.schedule.map((s) => ({
+        prescriptionId: prescription._id,
+        patientId: prescription.patientId,
+        doctorId: prescription.doctorId,
+        medicineName: entry.medicineName,
+        date: moment.tz(`${s.date} ${s.time}`, 'YYYY-MM-DD HH:mm', 'Asia/Kolkata').toDate(),
+        doseTime: s.time,
+        day: s.day,
+      }))
+    );
+
+    if (remindersToInsert.length > 0) {
+      await NotificationReminderSettings.insertMany(remindersToInsert);
+      console.log(`✅ ${remindersToInsert.length} reminders created`);
+    } else {
+      console.log('⚠️ No reminders to insert');
+    }
+
+    return res.status(200).json({
+      message: 'Start date set and reminders generated successfully',
+      startDate: prescription.startDate,
+      endDate: prescription.endDate,
+    });
+  } catch (err) {
+    console.error('🔥 Error in startPrescription:', err);
+    res.status(500).json({ message: 'Internal server error', error: err.message });
+  }
+};
+
+
 exports.getDeliveryStatusByPatient = async (req, res) => {
   try {
     const { patientId } = req.params;
@@ -678,65 +857,3 @@ exports.getDeliveryStatusByPatient = async (req, res) => {
   }
 };
 
-exports.startPrescription = async (req, res) => {
-try {
-const { prescriptionId } = req.params;
-const { startDate } = req.body;
-
-console.log('📥 Start Prescription Request Received');
-console.log('🔍 Prescription ID:', prescriptionId);
-console.log('🗓️  Provided Start Date:', startDate);
-
-const prescription = await Prescription.findById(prescriptionId);
-if (!prescription) {
-  console.log('❌ Prescription not found');
-  return res.status(404).json({ message: 'Prescription not found' });
-}
-
-if (!startDate) {
-  console.log('⚠️  Start date is missing in request');
-  return res.status(400).json({ message: 'Start date is required' });
-}
-
-prescription.startDate = new Date(startDate);
-console.log('✅ Start Date Set:', prescription.startDate);
-
-if (prescription.medicineCourse) {
-  const moment = require('moment');
-  prescription.endDate = moment(prescription.startDate)
-    .add(prescription.medicineCourse, 'days')
-    .toDate();
-  console.log('📆 Calculated End Date:', prescription.endDate);
-} else {
-  console.log('⚠️  No medicineCourse found in prescription; End Date not calculated');
-}
-
-await prescription.save({ validateBeforeSave: false });
-console.log('💾 Prescription saved successfully');
-
-res.status(200).json({
-  message: 'Start date set successfully',
-  startDate: prescription.startDate,
-  endDate: prescription.endDate,
-});
-} catch (err) {
-console.error('🔥 Error setting start date:', err);
-res.status(500).json({ message: 'Internal server error', error: err.message });
-}
-};
-//To check he is appointed with consultation or not
-exports.getDoctorByFollow = async (req, res) => {
-  try {
-    const doctorId = req.user.id; // You should extract from token
-    const doctor = await Doctor.findById(doctorId).select("role follow");
-
-    if (!doctor) {
-      return res.status(404).json({ message: "Doctor not found" });
-    }
-
-    res.status(200).json(doctor);
-  } catch (err) {
-    console.error("Error fetching doctor details:", err);
-    res.status(500).json({ message: "Server Error" });
-  }
-};

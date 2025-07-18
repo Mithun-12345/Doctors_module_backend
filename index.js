@@ -43,6 +43,9 @@ const prescriptionControl = require("./routes/PrescriptionControl.js");
 const labelRoutes = require("./routes/labelRoutes.js");
 const consumptionRoutes = require("./routes/consumptionRoutes");
 const scheduleRoutes = require('./routes/generateMedicationScheduleRoutes.js');
+const medicationRoutes = require('./routes/generateMedicationScheduleRoutes');
+
+
 
 
 
@@ -91,6 +94,8 @@ app.use("/api/consumptions", consumptionRoutes);
 app.use("/api/prescriptionControl", prescriptionControl);
 app.use("/api/posts", require("./routes/postRoutes"));
 app.use('/api', scheduleRoutes);
+app.use('/api/medication', medicationRoutes);
+
 
 const options = {
   key: fs.readFileSync("server.key"),

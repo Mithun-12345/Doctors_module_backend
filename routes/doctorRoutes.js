@@ -18,7 +18,6 @@ const {
   fetchProfile,
   updateProfile,
   uploadProfilePicture,
-  getDoctorByFollow,
   getDeliveryStatusByPatient,
   updateTrackingId,
   startPrescription
@@ -88,7 +87,6 @@ router.get(
 );
 
 router.put("/updateProfile", validateToken, updateProfile);
-router.get('/doctor/me', validateToken, getDoctorByFollow);
 router.patch(
   '/prescriptions/:prescriptionId/start',
   validateToken,

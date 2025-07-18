@@ -1,137 +1,140 @@
-const Prescription = require('../models/Prescription');
 const moment = require('moment-timezone');
 const NotificationReminderSettings = require('../models/NotificationReminderSettings');
 
-const generateMedicationSchedule = async (req, res) => {
+// ✅ GET: Today's Medication Schedule
+exports.getTodaysMedicationSchedule = async (req, res) => {
   try {
-    const { prescriptionId } = req.params;
-    console.log('📥 Received request for prescription ID:', prescriptionId);
-
-    if (!prescriptionId) {
-      return res.status(400).json({ message: 'Missing prescriptionId in request' });
+    const { patientId } = req.params;
+    if (!patientId) {
+      return res.status(400).json({ message: "Patient ID is required" });
     }
 
-    const prescription = await Prescription.findById(prescriptionId).lean();
-    if (!prescription || !prescription.prescriptionItems?.length) {
-      return res.status(404).json({ message: 'Prescription not found or empty' });
+    const todayIST = moment().tz('Asia/Kolkata').startOf('day');
+    const tomorrowIST = moment(todayIST).add(1, 'day');
+    const todayUTC = todayIST.clone().utc();
+    const tomorrowUTC = tomorrowIST.clone().utc();
+
+    const reminders = await NotificationReminderSettings.find({
+      patientId,
+      date: { $gte: todayUTC.toDate(), $lt: tomorrowUTC.toDate() }
+    }).sort({ date: 1 });
+
+    if (!reminders.length) {
+      return res.status(200).json({ message: "No medications scheduled for today", medications: [] });
     }
 
-    const startDate = prescription.startDate;
-    if (!startDate) {
-      return res.status(400).json({ message: 'Missing startDate in prescription' });
-    }
-
-    const finalSchedule = [];
-
-    for (const item of prescription.prescriptionItems) {
-      const { medicineName, frequencies } = item;
-      const medicineSchedule = [];
-
-      if (frequencies?.length > 0) {
-        for (const freq of frequencies) {
-          const {
-            day,
-            frequencyType,
-            standardFrequency,
-            frequentFrequency,
-            parallelConsumption,
-            timings
-          } = freq;
-
-          if (!day) continue;
-          const date = moment(startDate).add(day - 1, 'days').format('YYYY-MM-DD');
-
-          // Standard Frequency
-          if (frequencyType === 'standard') {
-            const timeSlots = ['morning', 'afternoon', 'evening', 'night'];
-            for (const slot of timeSlots) {
-              const timing = standardFrequency?.[slot];
-              if (timing?.from) {
-                medicineSchedule.push({ date, time: timing.from, day });
-              }
-            }
-          }
-
-          // Parallel Consumption (independent of frequencyType)
-          if (parallelConsumption?.schedule?.length > 0) {
-            for (const nested of parallelConsumption.schedule) {
-              const nestedDate = moment(startDate).add(nested.day - 1, 'days').format('YYYY-MM-DD');
-              if (nested.time) {
-                medicineSchedule.push({
-                  date: nestedDate,
-                  time: nested.time,
-                  day: nested.day
-                });
-              }
-            }
-          }
-
-          // Frequent Frequency (include timings regardless of parallelConsumption)
-          if (frequencyType === 'frequent') {
-            if (timings?.length > 0) {
-              for (const time of timings) {
-                medicineSchedule.push({ date, time, day });
-              }
-            } else if (
-              frequentFrequency?.doses &&
-              (frequentFrequency.hours || frequentFrequency.minutes)
-            ) {
-              const totalDoses = frequentFrequency.doses;
-              const intervalMinutes = (frequentFrequency.hours || 0) * 60 + (frequentFrequency.minutes || 0);
-              const startTime = timings?.[0] || '08:00';
-              const firstDose = moment(startTime, 'HH:mm');
-
-              for (let i = 0; i < totalDoses; i++) {
-                const doseTime = firstDose.clone().add(i * intervalMinutes, 'minutes');
-                medicineSchedule.push({
-                  date,
-                  time: doseTime.format('HH:mm'),
-                  day
-                });
-              }
-            }
-          }
-        }
-      }
-
-      if (medicineSchedule.length > 0) {
-        finalSchedule.push({
-          medicineName,
-          schedule: medicineSchedule
-        });
-      }
-    }
-
-    const remindersToInsert = finalSchedule.flatMap(entry =>
-      entry.schedule.map(s => ({
-        prescriptionId: prescription._id,
-        patientId: prescription.patientId,
-        doctorId: prescription.doctorId,
-        medicineName: entry.medicineName,
-        date: new Date(`${s.date}T${s.time}:00Z`),
-        doseTime: s.time,
-        day: s.day
-      }))
-    );
-
-    if (remindersToInsert.length > 0) {
-      await NotificationReminderSettings.insertMany(remindersToInsert);
-      console.log(`✅ ${remindersToInsert.length} reminders saved`);
-    }
-
-    return res.json({
-      schedules: finalSchedule.map(({ medicineName, schedule }) => ({
-        medicineName,
-        schedule: schedule.map(({ date, time }) => ({ date, time }))
-      }))
+    const schedule = reminders.map(r => {
+      const istDate = moment(r.date).tz('Asia/Kolkata');
+      return {
+        medicineName: r.medicineName,
+        date: istDate.format('YYYY-MM-DD'),
+        doseTime: istDate.format('HH:mm'),
+        day: r.day,
+        status: r.Status ?? null
+      };
     });
-  } catch (error) {
-    console.error('🔥 Schedule Generation Error:', error);
-    return res.status(500).json({ message: 'Server error generating schedule' });
+
+    return res.status(200).json({
+      message: "Today's medication schedule",
+      medications: schedule
+    });
+  } catch (err) {
+    console.error("🔥 Error fetching today's medication schedule:", err);
+    return res.status(500).json({ message: "Internal server error", error: err.message });
   }
 };
 
+// ✅ PATCH: Update Status for a Medication Dose
+exports.updateMedicationStatus = async (req, res) => {
+  try {
+    const { patientId } = req.params;
+    const { medicineName, doseTime, status } = req.body;
 
-module.exports = generateMedicationSchedule;
+    if (!patientId || !medicineName || !doseTime || typeof status !== 'boolean') {
+      return res.status(400).json({ message: 'Missing required fields' });
+    }
 
+    const todayIST = moment().tz('Asia/Kolkata').format('YYYY-MM-DD');
+    const fullIST = moment.tz(`${todayIST} ${doseTime}`, 'YYYY-MM-DD HH:mm', 'Asia/Kolkata');
+    const fullUTC = fullIST.clone().utc().toDate();
+
+    const updated = await NotificationReminderSettings.findOneAndUpdate(
+      {
+        patientId,
+        medicineName,
+        date: fullUTC
+      },
+      {
+        Status: status,
+        acknowledged: true
+      },
+      { new: true }
+    );
+
+    if (!updated) {
+      return res.status(404).json({ message: 'No matching reminder found to update' });
+    }
+
+    return res.status(200).json({
+      message: `Medication status updated to ${status ? 'taken' : 'not taken'}`,
+      updated
+    });
+
+  } catch (err) {
+    console.error('🔥 Error updating medication status:', err);
+    return res.status(500).json({ message: 'Internal server error', error: err.message });
+  }
+};
+
+// ✅ GET: Notify Doctor if 2+ Doses Missed
+exports.notifyDoctorIfPatientMissesDoses = async (req, res) => {
+  try {
+    const { patientId } = req.params;
+
+    if (!patientId) {
+      return res.status(400).json({ message: 'Patient ID is required' });
+    }
+
+    const todayIST = moment().tz('Asia/Kolkata').startOf('day');
+    const tomorrowIST = moment(todayIST).add(1, 'day');
+    const todayUTC = todayIST.clone().utc();
+    const tomorrowUTC = tomorrowIST.clone().utc();
+
+    const missedReminders = await NotificationReminderSettings.find({
+      patientId,
+      date: { $gte: todayUTC.toDate(), $lt: tomorrowUTC.toDate() },
+      $or: [
+        { Status: false },
+        { Status: { $exists: false } },
+        { Status: null }
+      ]
+    });
+
+    if (missedReminders.length < 2) {
+      return res.status(200).json({ message: 'Less than 2 doses missed. No notification sent.' });
+    }
+
+    const doctorId = missedReminders[0].doctorId;
+
+    const summary = missedReminders.map(r => ({
+      medicineName: r.medicineName,
+      time: moment(r.date).tz('Asia/Kolkata').format('YYYY-MM-DD HH:mm')
+    }));
+
+    console.log(`📨 Notify Doctor ${doctorId}: Patient ${patientId} missed ${summary.length} doses`);
+    summary.forEach(entry => {
+      console.log(`❌ Missed: ${entry.medicineName} at ${entry.time}`);
+    });
+
+    return res.status(200).json({
+      message: `Doctor notified about ${summary.length} missed medications`,
+      doctorId,
+      missedDoses: summary
+    });
+
+  } catch (err) {
+    console.error('🔥 Error checking missed medications:', err);
+    return res.status(500).json({ message: 'Internal server error', error: err.message });
+  }
+};
 
