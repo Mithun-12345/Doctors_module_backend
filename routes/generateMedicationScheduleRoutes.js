@@ -4,7 +4,7 @@ const {
   getTodaysMedicationSchedule,
   updateMedicationStatus,
   notifyDoctorIfPatientMissesDoses
-} = require('../controllers/generatemedicationSchedule');
+} = require('../controllers/generateMedicationSchedule');
 
 // Existing routes
 router.get('/schedule/today/:patientId', getTodaysMedicationSchedule);
