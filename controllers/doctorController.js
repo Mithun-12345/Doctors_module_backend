@@ -632,22 +632,19 @@ exports.updateTrackingId = async (req, res) => {
       return res.status(404).json({ message: "Prescription not found." });
     }
 
-    // No ownership restriction — anyone with valid access can update
     prescription.trackingId = trackingId;
     prescription.isProductShipped = true;
-    prescription.shippedDate = new Date(); 
+    prescription.shippedDate = new Date();
 
-    await prescription.save();
+    await prescription.save({ validateBeforeSave: false });
 
-    res.json({
-      message: "Tracking ID updated successfully.",
-      prescription
-    });
+    res.json({ message: "Tracking ID updated successfully." });
   } catch (err) {
     console.error("Error updating tracking ID:", err);
     res.status(500).json({ message: "Internal server error" });
   }
 };
+
 
 exports.getDeliveryStatusByPatient = async (req, res) => {
   try {
