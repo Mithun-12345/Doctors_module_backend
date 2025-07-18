@@ -22,8 +22,6 @@ const generateMedicationSchedule = async (req, res) => {
     }
 
     const finalSchedule = [];
-    const today = moment().tz('Asia/Kolkata').format('YYYY-MM-DD');
-    console.log('📆 Today (IST):', today);
 
     for (const item of prescription.prescriptionItems) {
       const { medicineName, frequencies } = item;
@@ -42,9 +40,6 @@ const generateMedicationSchedule = async (req, res) => {
 
           if (!day) continue;
           const date = moment(startDate).add(day - 1, 'days').format('YYYY-MM-DD');
-          console.log(`🔍 Checking ${medicineName} on day ${day} → date: ${date}`);
-
-          if (date !== today) continue;
 
           // Standard Frequency
           if (frequencyType === 'standard') {
@@ -57,20 +52,23 @@ const generateMedicationSchedule = async (req, res) => {
             }
           }
 
-          // Frequent Frequency
-          else if (frequencyType === 'frequent') {
-            if (parallelConsumption?.schedule?.length > 0) {
-              for (const dose of parallelConsumption.schedule) {
-                const scheduledDate = moment(startDate).add(dose.day - 1, 'days').format('YYYY-MM-DD');
-                if (scheduledDate === today && dose.time) {
-                  medicineSchedule.push({
-                    date: scheduledDate,
-                    time: dose.time,
-                    day: dose.day
-                  });
-                }
+          // Parallel Consumption (independent of frequencyType)
+          if (parallelConsumption?.schedule?.length > 0) {
+            for (const nested of parallelConsumption.schedule) {
+              const nestedDate = moment(startDate).add(nested.day - 1, 'days').format('YYYY-MM-DD');
+              if (nested.time) {
+                medicineSchedule.push({
+                  date: nestedDate,
+                  time: nested.time,
+                  day: nested.day
+                });
               }
-            } else if (timings?.length > 0) {
+            }
+          }
+
+          // Frequent Frequency (include timings regardless of parallelConsumption)
+          if (frequencyType === 'frequent') {
+            if (timings?.length > 0) {
               for (const time of timings) {
                 medicineSchedule.push({ date, time, day });
               }
@@ -93,25 +91,10 @@ const generateMedicationSchedule = async (req, res) => {
               }
             }
           }
-
-          // Parallel Fallback for non-frequent
-          if (frequencyType !== 'frequent' && parallelConsumption?.schedule?.length > 0) {
-            for (const nested of parallelConsumption.schedule) {
-              const nestedDate = moment(startDate).add(nested.day - 1, 'days').format('YYYY-MM-DD');
-              if (nestedDate === today && nested.time) {
-                medicineSchedule.push({
-                  date: nestedDate,
-                  time: nested.time,
-                  day: nested.day
-                });
-              }
-            }
-          }
         }
       }
 
       if (medicineSchedule.length > 0) {
-        console.log(`✅ ${medicineName} - doses today:`, medicineSchedule);
         finalSchedule.push({
           medicineName,
           schedule: medicineSchedule
@@ -133,7 +116,7 @@ const generateMedicationSchedule = async (req, res) => {
 
     if (remindersToInsert.length > 0) {
       await NotificationReminderSettings.insertMany(remindersToInsert);
-      console.log(`✅ ${remindersToInsert.length} reminders saved for today`);
+      console.log(`✅ ${remindersToInsert.length} reminders saved`);
     }
 
     return res.json({
@@ -148,5 +131,7 @@ const generateMedicationSchedule = async (req, res) => {
   }
 };
 
+
 module.exports = generateMedicationSchedule;
+
 

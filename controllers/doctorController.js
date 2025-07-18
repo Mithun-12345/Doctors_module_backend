@@ -679,42 +679,50 @@ exports.getDeliveryStatusByPatient = async (req, res) => {
 };
 
 exports.startPrescription = async (req, res) => {
-  try {
-    const { prescriptionId } = req.params;
-    const { startDate } = req.body;
+try {
+const { prescriptionId } = req.params;
+const { startDate } = req.body;
 
-    const prescription = await Prescription.findById(prescriptionId);
-    if (!prescription) {
-      return res.status(404).json({ message: 'Prescription not found' });
-    }
+console.log('📥 Start Prescription Request Received');
+console.log('🔍 Prescription ID:', prescriptionId);
+console.log('🗓️  Provided Start Date:', startDate);
 
-    // Enforce that doctor must provide startDate
-    if (!startDate) {
-      return res.status(400).json({ message: 'Start date is required' });
-    }
+const prescription = await Prescription.findById(prescriptionId);
+if (!prescription) {
+  console.log('❌ Prescription not found');
+  return res.status(404).json({ message: 'Prescription not found' });
+}
 
-    // Set startDate and compute endDate
-    prescription.startDate = new Date(startDate);
+if (!startDate) {
+  console.log('⚠️  Start date is missing in request');
+  return res.status(400).json({ message: 'Start date is required' });
+}
 
-    if (prescription.medicineCourse) {
-      const moment = require('moment');
-      prescription.endDate = moment(prescription.startDate)
-        .add(prescription.medicineCourse, 'days')
-        .toDate();
-    }
+prescription.startDate = new Date(startDate);
+console.log('✅ Start Date Set:', prescription.startDate);
 
-    await prescription.save();
+if (prescription.medicineCourse) {
+  const moment = require('moment');
+  prescription.endDate = moment(prescription.startDate)
+    .add(prescription.medicineCourse, 'days')
+    .toDate();
+  console.log('📆 Calculated End Date:', prescription.endDate);
+} else {
+  console.log('⚠️  No medicineCourse found in prescription; End Date not calculated');
+}
 
-    res.status(200).json({
-      message: 'Start date set successfully',
-      startDate: prescription.startDate,
-      endDate: prescription.endDate,
-    });
+await prescription.save({ validateBeforeSave: false });
+console.log('💾 Prescription saved successfully');
 
-  } catch (err) {
-    console.error('Error setting start date:', err);
-    res.status(500).json({ message: 'Internal server error', error: err.message });
-  }
+res.status(200).json({
+  message: 'Start date set successfully',
+  startDate: prescription.startDate,
+  endDate: prescription.endDate,
+});
+} catch (err) {
+console.error('🔥 Error setting start date:', err);
+res.status(500).json({ message: 'Internal server error', error: err.message });
+}
 };
 //To check he is appointed with consultation or not
 exports.getDoctorByFollow = async (req, res) => {

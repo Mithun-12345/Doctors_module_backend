@@ -46,6 +46,10 @@ reminderSent: {
     type: Boolean,
     default: false
   },
+Status:{
+  type: Boolean,
+  default: null
+},
 followUpSent: {
     type: Boolean,
     default: false
