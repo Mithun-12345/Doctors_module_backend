@@ -1,7 +1,6 @@
-const moment = require('moment-timezone');
-const NotificationReminderSettings = require('../models/NotificationReminderSettings');
-const Patient = require('../models/patientModel');
-
+const moment = require("moment-timezone");
+const NotificationReminderSettings = require("../models/NotificationReminderSettings");
+const Patient = require("../models/patientModel");
 
 // ✅ GET: Today's Medication Schedule
 exports.getTodaysMedicationSchedule = async (req, res) => {
@@ -11,38 +10,43 @@ exports.getTodaysMedicationSchedule = async (req, res) => {
       return res.status(400).json({ message: "Patient ID is required" });
     }
 
-    const todayIST = moment().tz('Asia/Kolkata').startOf('day');
-    const tomorrowIST = moment(todayIST).add(1, 'day');
+    const todayIST = moment().tz("Asia/Kolkata").startOf("day");
+    const tomorrowIST = moment(todayIST).add(1, "day");
     const todayUTC = todayIST.clone().utc();
     const tomorrowUTC = tomorrowIST.clone().utc();
 
     const reminders = await NotificationReminderSettings.find({
       patientId,
-      date: { $gte: todayUTC.toDate(), $lt: tomorrowUTC.toDate() }
+      date: { $gte: todayUTC.toDate(), $lt: tomorrowUTC.toDate() },
     }).sort({ date: 1 });
 
     if (!reminders.length) {
-      return res.status(200).json({ message: "No medications scheduled for today", medications: [] });
+      return res.status(200).json({
+        message: "No medications scheduled for today",
+        medications: [],
+      });
     }
 
-    const schedule = reminders.map(r => {
-      const istDate = moment(r.date).tz('Asia/Kolkata');
+    const schedule = reminders.map((r) => {
+      const istDate = moment(r.date).tz("Asia/Kolkata");
       return {
         medicineName: r.medicineName,
-        date: istDate.format('YYYY-MM-DD'),
+        date: istDate.format("YYYY-MM-DD"),
         doseTime: r.doseTime,
         day: r.day,
-        status: r.status ?? null
+        status: r.status ?? null,
       };
     });
 
     return res.status(200).json({
       message: "Today's medication schedule",
-      medications: schedule
+      medications: schedule,
     });
   } catch (err) {
     console.error("🔥 Error fetching today's medication schedule:", err);
-    return res.status(500).json({ message: "Internal server error", error: err.message });
+    return res
+      .status(500)
+      .json({ message: "Internal server error", error: err.message });
   }
 };
 
@@ -83,7 +87,6 @@ exports.updateMedicationStatus = async (req, res) => {
     return res.status(500).json({ message: 'Internal server error', error: err.message });
   }
 };
-
 // ✅ GET: Notify Doctor if 2+ Doses Missed
 exports.notifyDoctorOfMissedDoses = async (req, res) => {
   try {
@@ -161,4 +164,4 @@ exports.notifyDoctorOfMissedDoses = async (req, res) => {
       .status(500)
       .json({ message: "Internal server error", error: err.message });
   }
-}; 
+};

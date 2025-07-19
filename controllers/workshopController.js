@@ -1,9 +1,12 @@
 const Doctor = require("../models/doctorModel");
 const Patient = require("../models/patientModel");
 const Workshop = require("../models/workShopModel");
-const Razorpay = require('razorpay');
-const dotenv = require('dotenv');
-const { generateGoogleMeetLink, generateZoomMeetingLink } = require("../utils/generateMeetLinks");
+const Razorpay = require("razorpay");
+const dotenv = require("dotenv");
+const {
+  generateGoogleMeetLink,
+  generateZoomMeetingLink,
+} = require("../utils/generateMeetLinks");
 dotenv.config();
 
 exports.createWorkshop = async (req, res) => {
@@ -30,7 +33,8 @@ exports.createWorkshop = async (req, res) => {
       allowedParticipants,
       scheduledDateTime,
       limit,
-      meetLink: "https://us05web.zoom.us/j/86204841254?pwd=FkynmvbupbZllXbJEvysDTXKErAqJS.1"
+      meetLink:
+        "https://us05web.zoom.us/j/86204841254?pwd=FkynmvbupbZllXbJEvysDTXKErAqJS.1",
     });
     try {
       await newWorkshop.save();
@@ -40,11 +44,11 @@ exports.createWorkshop = async (req, res) => {
       return res.status(500).json({
         message: "Error saving workshop",
         error: saveError.message,
-        stack: saveError.stack
+        stack: saveError.stack,
       });
     }
-    
-    console.log("saved")
+
+    console.log("saved");
     res.status(201).json({
       message: "Workshop started successfully",
       workshop: newWorkshop,
@@ -68,7 +72,10 @@ exports.viewPendingWorkshops = async (req, res) => {
       userType = "Patient";
     }
     const workshops = await Workshop.find({
-      $or: [{ allowedParticipants: userType }, { allowedParticipants: "Everyone" }],
+      $or: [
+        { allowedParticipants: userType },
+        { allowedParticipants: "Everyone" },
+      ],
     });
 
     res.status(200).json({ workshops });
@@ -144,7 +151,7 @@ exports.bookWorkshop = async (req, res) => {
       return res
         .status(200)
         .json({ message: "Workshop booked successfully", workshop });
-    }    
+    }
   } catch (error) {
     return res
       .status(500)
@@ -174,6 +181,10 @@ exports.viewOwnWorkshops = async (req, res) => {
   }
 };
 
+if (!process.env.RAZORPAY_KEY_ID || !process.env.RAZORPAY_KEY_SECRET) {
+  throw new Error("Razorpay key/secret is not defined in .env");
+}
+
 const razorpay = new Razorpay({
   key_id: process.env.RAZORPAY_KEY_ID, // Add your Razorpay Key ID here
   key_secret: process.env.RAZORPAY_KEY_SECRET, // Add your Razorpay Key Secret here
@@ -186,7 +197,7 @@ exports.createOrder = async (req, res) => {
     // Define Razorpay order options
     const options = {
       amount: amount * 100, // amount in paise
-      currency: 'INR',
+      currency: "INR",
       receipt: `receipt_${new Date().getTime()}`,
     };
 
@@ -199,56 +210,65 @@ exports.createOrder = async (req, res) => {
       amount: order.amount,
     });
   } catch (error) {
-    console.error('Error creating Razorpay order:', error);
-    res.status(500).send('Server error');
+    console.error("Error creating Razorpay order:", error);
+    res.status(500).send("Server error");
   }
 };
 
-const crypto = require('crypto');
-const Payment = require('../models/Payment');
+const crypto = require("crypto");
+const Payment = require("../models/Payment");
 exports.confirmBooking = async (req, res) => {
   try {
     const { orderId, paymentId, signature, workshopId, userId } = req.body;
-    
+
     // Verify the payment signature using crypto
     const text = orderId + "|" + paymentId;
     const generated_signature = crypto
       .createHmac("sha256", process.env.RAZORPAY_KEY_SECRET)
       .update(text)
       .digest("hex");
-    
+
     const isSignatureValid = generated_signature === signature;
-    
+
     if (!isSignatureValid) {
-      return res.status(400).json({ success: false, message: 'Invalid signature' });
+      return res
+        .status(400)
+        .json({ success: false, message: "Invalid signature" });
     }
-    
+
     // Rest of your code remains the same
     const workshop = await Workshop.findById(workshopId);
     if (!workshop) {
-      return res.status(404).json({ success: false, message: 'Workshop not found' });
+      return res
+        .status(404)
+        .json({ success: false, message: "Workshop not found" });
     }
-    
+
     if (workshop.participants.includes(userId)) {
-      return res.status(400).json({ success: false, message: 'You are already registered for this workshop' });
+      return res
+        .status(400)
+        .json({
+          success: false,
+          message: "You are already registered for this workshop",
+        });
     }
-    
+
     workshop.participants.push(userId);
     await workshop.save();
-    
+
     // Make sure you have defined the Payment model
     const payment = new Payment({
       orderId,
-      paymentId, 
+      paymentId,
       workshopId,
       userId,
       amount: workshop.fee,
     });
     await payment.save();
-    
-    res.json({ success: true, message: 'Booking confirmed' });
+
+    res.json({ success: true, message: "Booking confirmed" });
   } catch (error) {
-    console.error('Error confirming booking:', error);
-    res.status(500).json({ success: false, message: 'Server error' });
+    console.error("Error confirming booking:", error);
+    res.status(500).json({ success: false, message: "Server error" });
   }
 };
