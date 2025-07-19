@@ -1,16 +1,14 @@
-const express = require('express');
+const express = require("express");
 const router = express.Router();
 const {
   getTodaysMedicationSchedule,
   updateMedicationStatus,
-  notifyDoctorIfPatientMissesDoses
-} = require('../controllers/generateMedicationSchedule');
+  notifyDoctorOfMissedDoses,
+} = require("../controllers/generateMedicationSchedule");
 
-// Existing routes
-router.get('/schedule/today/:patientId', getTodaysMedicationSchedule);
-router.patch('/schedule/status/:patientId', updateMedicationStatus);
+router.get("/schedule/today/:patientId", getTodaysMedicationSchedule);
+router.patch("/schedule/status/:patientId", updateMedicationStatus);
 
-// ✅ ADD THIS LINE:
-router.get('/schedule/notify-doctor/:patientId', notifyDoctorIfPatientMissesDoses);
+router.get("/schedule/notify-doctor/:doctorId", notifyDoctorOfMissedDoses);
 
 module.exports = router;
