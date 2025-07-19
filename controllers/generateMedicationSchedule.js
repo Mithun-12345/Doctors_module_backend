@@ -32,7 +32,7 @@ exports.getTodaysMedicationSchedule = async (req, res) => {
       return {
         medicineName: r.medicineName,
         date: istDate.format("YYYY-MM-DD"),
-        doseTime: istDate.format("HH:mm"),
+        doseTime: r.doseTime,
         day: r.day,
         status: r.status ?? null,
       };
