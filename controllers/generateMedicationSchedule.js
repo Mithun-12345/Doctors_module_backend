@@ -34,7 +34,7 @@ exports.getTodaysMedicationSchedule = async (req, res) => {
         date: istDate.format("YYYY-MM-DD"),
         doseTime: istDate.format("HH:mm"),
         day: r.day,
-        status: r.Status ?? null,
+        status: r.status ?? null,
       };
     });
 
@@ -80,7 +80,7 @@ exports.updateMedicationStatus = async (req, res) => {
         date: fullUTC,
       },
       {
-        Status: status,
+        status: status,
         acknowledged: true,
       },
       { new: true }
@@ -121,9 +121,9 @@ exports.notifyDoctorOfMissedDoses = async (req, res) => {
       doctorId,
       date: { $gte: todayUTC.toDate(), $lt: tomorrowUTC.toDate() },
       $or: [
-        { Status: false },
-        { Status: { $exists: false } },
-        { Status: null },
+        { status: false },
+        { status: { $exists: false } },
+        { status: null },
       ],
     });
 
