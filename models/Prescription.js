@@ -255,7 +255,7 @@ const prescriptionSchema = new mongoose.Schema({
   },
   trackingId: { 
     type: String, 
-    default: null 
+    default: false
   },
   isProductReceived: { 
     type: Boolean, 
