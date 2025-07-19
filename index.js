@@ -42,6 +42,8 @@ const medPrepSummary = require("./routes/medPrepSummary.js")
 const prescriptionControl = require("./routes/PrescriptionControl.js");
 const labelRoutes = require("./routes/labelRoutes.js");
 const consumptionRoutes = require("./routes/consumptionRoutes");
+const Doctor = require('./models/doctorModel.js'); // adjust path as needed
+const bcrypt = require('bcryptjs');
 
 dbConnection();
 
@@ -52,8 +54,8 @@ app.set("trust proxy", 1);
 const server = createServer(app);
 
 initSocket(server);
-
-app.use(express.json());
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ limit: '10mb', extended: true }));
 app.use(cors());
 
 // Routes
@@ -293,6 +295,34 @@ app.post("/generateToken", (req, res) => {
 app.get("/Tarun", (req, res) => {
   return res.status(200).json({ message: "Endpoint reached" });
 });
+
+
+// const bcrypt = require("bcryptjs");
+
+app.post("/addDoctor", async (req, res) => {
+  try {
+    const { password, ...otherData } = req.body;
+    console.log("add doctor :", req.body);
+    if (!password) {
+      return res.status(400).json({ message: "Password is required" });
+    }
+
+    const hashedPassword = await bcrypt.hash(password, 10);
+
+    const doctor = new Doctor({
+      ...otherData,
+      password: hashedPassword,
+    });
+
+    await doctor.save();
+    res.status(201).json({ message: "Doctor added successfully", doctor });
+  } catch (error) {
+    console.error("Error adding doctor:", error);
+    res.status(400).json({ message: "Failed to add doctor", error: error.message });
+  }
+});
+
+
 
 const PORT = process.env.PORT || 8000;
 app.listen(PORT, () => {

@@ -709,7 +709,7 @@ exports.finalizeAppointment = asyncHandler(async (req, res) => {
   const user = await Patient.findOne({ phone });
   if (!user) return res.status(404).json({ message: "Patient not found" });
 
-  const doctorId = "67bc3391654d85340a8ce713"; // Get from configuration
+  const doctorId = "6878c3fbfe3b5dbdbb32a03e"; // Get from configuration
   const doctor = await Doctor.findById(doctorId);
   if (!doctor) {
     return res.status(404).json({ message: "Doctor not found" });
@@ -911,8 +911,9 @@ exports.bookAppointment = asyncHandler(async (req, res) => {
     consultingReason,
     symptom,
   } = req.body;
-
-  const doctorId = "66c8312667b91b0b7730e725"; // should be changed
+console.log("Phone: ", req.user.phone);
+console.log("Book Appointment: ", req.body);
+  const doctorId = "6878c3fbfe3b5dbdbb32a03e"; // should be changed
 
   try {
     // Find user and validate
