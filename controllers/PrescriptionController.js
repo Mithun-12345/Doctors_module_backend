@@ -245,17 +245,14 @@ const getPrescriptionSummaryById = async (req, res) => {
       return res.status(404).json({ message: 'Prescription not found' });
     }
 
-    const { startDate, patientId, doctorId } = prescription;
-
-    const patientDetails = await PatientDetails.findOne({ patientId });
-    const diseaseName = patientDetails?.diseaseName || 'N/A';
+    const { startDate, doctorId, consultingFor } = prescription;
 
     const doctor = await Doctor.findById(doctorId);
     const doctorName = doctor?.name || 'Unknown';
 
     return res.status(200).json({
       startDate,
-      diseaseName,
+      consultingFor,
       doctorName
     });
   } catch (err) {
@@ -263,6 +260,7 @@ const getPrescriptionSummaryById = async (req, res) => {
     return res.status(500).json({ message: 'Internal server error', error: err.message });
   }
 };
+
 
 
 module.exports = {
