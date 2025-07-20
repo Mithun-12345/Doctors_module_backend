@@ -32,11 +32,6 @@ const appointmentSchema = new mongoose.Schema(
       type: String,
       required: true,
     },
-    status: {
-      type: String,
-      enum: ["pending", "finished", "cancelled"],
-      default: "pending",
-    },
     payment: {
       required: false,
       type: Number,
@@ -102,6 +97,11 @@ const appointmentSchema = new mongoose.Schema(
       type: Boolean,
       default: false,
     },
+    prescriptionID: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Prescription",
+      required: false,
+    },
     callCount: {
       //no need in frontend
       type: Number,
@@ -114,7 +114,7 @@ const appointmentSchema = new mongoose.Schema(
     },
     status: {
       type: String,
-      enum: ["reserved", "confirmed", "cancelled", "completed"],
+      enum: ["pending", "reserved", "confirmed", "cancelled", "completed"],
       default: "reserved",
     },
     reservedAt: {

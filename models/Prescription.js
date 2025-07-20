@@ -212,6 +212,10 @@ const prescriptionItemSchema = new mongoose.Schema({
     enum: ["Sequential", "Sequential + Gap", "Parallel"],
     required: true,
   },
+  medicineConsumption: {
+    type: String,
+    required: true,
+  },
   label: {
     type: String,
     enum: ["A", "B", "C", "1", "2", "3", "4"],
