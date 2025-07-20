@@ -1,5 +1,6 @@
 const express = require('express');
 const router = express.Router();
+const { getPrescriptionSummaryById } = require('../controllers/PrescriptionController');
 const {
   createPrescription,
   getPatientPrescriptions,
@@ -36,5 +37,6 @@ router.get('/rawMaterials', getRawMaterials);
 router.post("/medicines", postMedicine);
 // Update close comment
 router.patch('/:prescriptionId/closeComment', updateCloseComment);
+router.get('/summary/:prescriptionId', getPrescriptionSummaryById);
 
 module.exports = router;

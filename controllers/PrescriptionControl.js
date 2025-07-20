@@ -658,6 +658,7 @@ const updateCloseComment = async (req, res) => {
   }
 };
 
+
 module.exports = {
   createPrescription,
   getPatientPrescriptions,

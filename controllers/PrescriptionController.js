@@ -4,6 +4,8 @@ const { StatusCodes } = require('http-status-codes');
 const Appointment = require('../models/appointmentModel');
 const Doctor = require('../models/doctorModel');
 const Patient = require('../models/patientModel');
+const PatientDetails = require('../models/patientDetails');
+
 
 // this function is to be removed in order to migrate to getPrescriptionByAppointmentId fn
 // const getPrescriptionByAppointmentId = async (req, res) => {
@@ -230,8 +232,41 @@ const updatePaymentStatus = async (req, res) => {
     });
   }
 };
+const getPrescriptionSummaryById = async (req, res) => {
+  try {
+    const { prescriptionId } = req.params;
+
+    if (!prescriptionId) {
+      return res.status(400).json({ message: 'Prescription ID is required' });
+    }
+
+    const prescription = await Prescription.findById(prescriptionId);
+    if (!prescription) {
+      return res.status(404).json({ message: 'Prescription not found' });
+    }
+
+    const { startDate, patientId, doctorId } = prescription;
+
+    const patientDetails = await PatientDetails.findOne({ patientId });
+    const diseaseName = patientDetails?.diseaseName || 'N/A';
+
+    const doctor = await Doctor.findById(doctorId);
+    const doctorName = doctor?.name || 'Unknown';
+
+    return res.status(200).json({
+      startDate,
+      diseaseName,
+      doctorName
+    });
+  } catch (err) {
+    console.error('🔥 Error fetching prescription summary:', err);
+    return res.status(500).json({ message: 'Internal server error', error: err.message });
+  }
+};
+
 
 module.exports = {
+  getPrescriptionSummaryById,
   getPrescriptionByAppointmentId,
   getMyPrescribedAppointments,
   getPrescribedAppointments,

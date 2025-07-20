@@ -646,184 +646,115 @@ exports.updateTrackingId = async (req, res) => {
   }
 };
 
-
 exports.startPrescription = async (req, res) => {
   try {
     const { prescriptionId } = req.params;
-    const { startDate } = req.body;
+    console.log(`📥 [START PRESCRIPTION] Request for ID: ${prescriptionId}`);
 
-    console.log('📥 Start Prescription Request Received');
-    console.log('🔍 Prescription ID:', prescriptionId);
-    console.log('🗓️  Provided Start Date:', startDate);
+    if (!prescriptionId) {
+      return res.status(400).json({ message: "Missing prescriptionId in request" });
+    }
 
     const prescription = await Prescription.findById(prescriptionId);
     if (!prescription) {
-      console.log('❌ Prescription not found');
-      return res.status(404).json({ message: 'Prescription not found' });
+      return res.status(404).json({ message: "Prescription not found" });
     }
 
-    if (!startDate) {
-      console.log('⚠️  Start date is missing in request');
-      return res.status(400).json({ message: 'Start date is required' });
-    }
+    const startDate = moment().startOf('day');
+    const duration = parseInt(prescription.duration, 10) || 0;
+    const endDate = moment(startDate).add(duration, 'days');
 
-    // Set and compute dates
-    prescription.startDate = new Date(startDate);
-    console.log('✅ Start Date Set:', prescription.startDate);
+    prescription.startDate = startDate.toDate();
+    prescription.endDate = endDate.toDate();
 
-    if (prescription.medicineCourse) {
-      prescription.endDate = moment(prescription.startDate)
-        .add(prescription.medicineCourse, 'days')
-        .toDate();
-      console.log('📆 Calculated End Date:', prescription.endDate);
-    } else {
-      console.log('⚠️  No medicineCourse found in prescription; End Date not calculated');
-    }
+    console.log(`📅 Start Date Set: ${prescription.startDate.toISOString()}`);
+    console.log(`📅 End Date Calculated: ${prescription.endDate.toISOString()}`);
 
-    await prescription.save({ validateBeforeSave: false });
-    console.log('💾 Prescription saved successfully');
+    await prescription.save();
+    console.log("💾 Prescription saved to DB");
 
-    const finalSchedule = [];
+    const remindersToInsert = [];
 
-    for (const item of prescription.prescriptionItems || []) {
-      const {
-        medicineName,
-        frequencies,
-        standardSchedule,
-        frequentSchedule,
-        parallelConsumption,
-      } = item;
-      const medicineSchedule = [];
+    for (const [index, med] of (prescription.medicines || []).entries()) {
+      try {
+        const {
+          medicineName = "Unnamed Medicine",
+          dosage = "",
+          instructions = "",
+          standardSchedule = [],
+        } = med || {};
 
-      if (frequencies?.length > 0) {
-        for (const freq of frequencies) {
-          const {
-            day,
-            frequencyType,
-            standardFrequency,
-            frequentFrequency,
-            parallelConsumption: nestedParallel,
-            timings,
-          } = freq;
-
-          if (!day) continue;
-          const date = moment(prescription.startDate).add(day - 1, 'days').format('YYYY-MM-DD');
-
-          if (frequencyType === 'standard' && standardFrequency) {
-            const timeSlots = ['morning', 'afternoon', 'evening', 'night'];
-            for (const slot of timeSlots) {
-              const timing = standardFrequency?.[slot];
-              if (timing?.from) {
-                medicineSchedule.push({ date, time: timing.from, day });
-              }
-            }
-          }
-
-          if (nestedParallel?.schedule?.length > 0) {
-            for (const nested of nestedParallel.schedule) {
-              const nestedDate = moment(prescription.startDate)
-                .add(nested.day - 1, 'days')
-                .format('YYYY-MM-DD');
-              if (nested.time) {
-                medicineSchedule.push({
-                  date: nestedDate,
-                  time: nested.time,
-                  day: nested.day,
-                });
-              }
-            }
-          }
-
-          if (frequencyType === 'frequent') {
-            if (timings?.length > 0) {
-              for (const time of timings) {
-                medicineSchedule.push({ date, time, day });
-              }
-            } else if (
-              frequentFrequency?.doses &&
-              (frequentFrequency.hours || frequentFrequency.minutes)
-            ) {
-              const totalDoses = frequentFrequency.doses;
-              const intervalMinutes =
-                (frequentFrequency.hours || 0) * 60 + (frequentFrequency.minutes || 0);
-              const startTime = timings?.[0] || '08:00';
-              const firstDose = moment(startTime, 'HH:mm');
-
-              for (let i = 0; i < totalDoses; i++) {
-                const doseTime = firstDose.clone().add(i * intervalMinutes, 'minutes');
-                medicineSchedule.push({
-                  date,
-                  time: doseTime.format('HH:mm'),
-                  day,
-                });
-              }
-            }
-          }
+        if (!Array.isArray(standardSchedule)) {
+          console.warn(`⚠️ standardSchedule is not an array for medicine #${index + 1}`);
+          continue;
         }
-      }
 
-      if (standardSchedule?.length > 0) {
+        const medicineSchedule = [];
+
         for (const sched of standardSchedule) {
-          const legacyDate = moment(prescription.startDate)
-            .add(sched.day - 1, 'days')
-            .format('YYYY-MM-DD');
-          for (const time of sched.times || []) {
-            medicineSchedule.push({ date: legacyDate, time, day: sched.day });
+          const day = parseInt(sched.day, 10);
+          const times = Array.isArray(sched.times) ? sched.times : [];
+
+          if (isNaN(day) || times.length === 0) {
+            console.warn(`⚠️ Invalid schedule (missing day or times) for ${medicineName}`);
+            continue;
+          }
+
+          const doseDate = moment(startDate).add(day - 1, 'days').format('YYYY-MM-DD');
+
+          for (const time of times) {
+            medicineSchedule.push({ date: doseDate, time, day });
+
+            remindersToInsert.push({
+              patientId: prescription.patientId,
+              doctorId: prescription.doctorId,
+              prescriptionId,
+              medicineName,
+              dosage,
+              instructions,
+              date: doseDate,
+              doseTime: time,
+              taken: false,
+              notificationType: 'reminder',
+            });
           }
         }
-      }
 
-      if (parallelConsumption?.schedule?.length > 0) {
-        for (const dateStr of parallelConsumption.schedule) {
-          const time = moment(dateStr).format('HH:mm');
-          const date = moment(dateStr).format('YYYY-MM-DD');
-          medicineSchedule.push({
-            date,
-            time,
-            day: moment(dateStr).diff(moment(prescription.startDate), 'days') + 1,
+        console.log(`📌 Processed schedule for: ${medicineName} (${medicineSchedule.length} entries)`);
+
+      } catch (medError) {
+        console.error(`🔥 Error processing medicine #${index + 1}:`, medError.message);
+      }
+    }
+
+    if (remindersToInsert.length > 0) {
+      try {
+        await NotificationReminderSettings.insertMany(remindersToInsert, { ordered: false });
+        console.log(`🔔 Reminders created: ${remindersToInsert.length}`);
+      } catch (insertErr) {
+        console.error("🔥 Reminder Insert Error:", insertErr.message);
+        if (insertErr.writeErrors) {
+          insertErr.writeErrors.forEach((err, idx) => {
+            console.error(`❌ Insert Error #${idx + 1}:`, err.errmsg || err.message);
           });
         }
       }
-
-      if (medicineSchedule.length > 0) {
-        finalSchedule.push({
-          medicineName,
-          schedule: medicineSchedule,
-        });
-      }
-    }
-
-    // ✅ Apply proper IST → UTC conversion for reminder insertion
-    const remindersToInsert = finalSchedule.flatMap((entry) =>
-      entry.schedule.map((s) => ({
-        prescriptionId: prescription._id,
-        patientId: prescription.patientId,
-        doctorId: prescription.doctorId,
-        medicineName: entry.medicineName,
-        date: moment.tz(`${s.date} ${s.time}`, 'YYYY-MM-DD HH:mm', 'Asia/Kolkata').toDate(),
-        doseTime: s.time,
-        day: s.day,
-      }))
-    );
-
-    if (remindersToInsert.length > 0) {
-      await NotificationReminderSettings.insertMany(remindersToInsert);
-      console.log(`✅ ${remindersToInsert.length} reminders created`);
     } else {
-      console.log('⚠️ No reminders to insert');
+      console.log("⚠️ No reminders to create");
     }
 
-    return res.status(200).json({
-      message: 'Start date set and reminders generated successfully',
-      startDate: prescription.startDate,
-      endDate: prescription.endDate,
+    res.status(200).json({
+      message: "Prescription started. Reminders created where possible. Any invalid data was skipped.",
     });
-  } catch (err) {
-    console.error('🔥 Error in startPrescription:', err);
-    res.status(500).json({ message: 'Internal server error', error: err.message });
+
+  } catch (error) {
+    console.error("🔥 Unhandled Error in startPrescription:", error.message);
+    res.status(500).json({
+      message: "Something went wrong while starting the prescription",
+      error: error.message,
+    });
   }
 };
-
 
 exports.getDeliveryStatusByPatient = async (req, res) => {
   try {
