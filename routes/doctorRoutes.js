@@ -20,8 +20,7 @@ const {
   uploadProfilePicture,
   getDeliveryStatusByPatient,
   updateTrackingId,
-  startPrescription
-  getDoctorByFollow
+  startPrescription,
 } = require("../controllers/doctorController");
 const {
   upload,
@@ -35,7 +34,6 @@ const {
 const { zoomAuth, zoomCallback } = require("../controllers/zoomController");
 
 const router = express.Router();
-
 
 router.get("/google/authorize", googleAuth);
 router.get("/google/callback", googleCallback);
@@ -82,19 +80,19 @@ router.post(
   uploadProfilePicture
 );
 router.get(
-  '/prescriptions/delivery-status/:patientId',
+  "/prescriptions/delivery-status/:patientId",
   validateToken,
   getDeliveryStatusByPatient
 );
 
 router.put("/updateProfile", validateToken, updateProfile);
 router.patch(
-  '/prescriptions/:prescriptionId/start',
+  "/prescriptions/:prescriptionId/start",
   validateToken,
   startPrescription
 );
 router.patch(
-  '/prescriptions/:prescriptionId/tracking',
+  "/prescriptions/:prescriptionId/tracking",
   validateToken, // doctor token
   updateTrackingId
 );
@@ -108,6 +106,6 @@ router.post(
   uploadProfilePicture
 );
 router.put("/updateProfile", validateToken, updateProfile);
-router.get('/doctor/me', validateToken, getDoctorByFollow);
+router.get("/doctor/me", validateToken, getDoctorByFollow);
 
 module.exports = router;
