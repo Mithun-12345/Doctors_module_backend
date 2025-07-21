@@ -913,8 +913,9 @@ exports.bookAppointment = asyncHandler(async (req, res) => {
     consultingReason,
     symptom,
   } = req.body;
-
-  const doctorId = "66c8312667b91b0b7730e725"; // should be changed
+  console.log("Phone: ", req.user.phone);
+  console.log("Book Appointment: ", req.body);
+  const doctorId = "67bc3391654d85340a8ce713"; // should be changed
 
   try {
     // Find user and validate

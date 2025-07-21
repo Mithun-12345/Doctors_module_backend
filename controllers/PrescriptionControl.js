@@ -10,6 +10,7 @@ const createPrescription = async (req, res) => {
   try {
     console.log("createPrescription reached");
     const {
+      appointmentID,
       patientId,
       prescriptionItems,
       followUpDays,
@@ -20,18 +21,23 @@ const createPrescription = async (req, res) => {
       action,
       parentPrescriptionId,
       consultingType,
-      consultingFor
+      consultingFor,
     } = req.body;
     console.log(req.body);
-    
+
     const doctorId = req.user._id;
-    
+
     // Validate required fields
-    if (!patientId || !prescriptionItems || !prescriptionItems.length || !medicineCourse) {
+    if (
+      !patientId ||
+      !prescriptionItems ||
+      !prescriptionItems.length ||
+      !medicineCourse
+    ) {
       console.log("Missing required fields");
       return res.status(400).json({
         success: false,
-        message: 'Missing required fields'
+        message: "Missing required fields",
       });
     }
 
@@ -40,7 +46,7 @@ const createPrescription = async (req, res) => {
     if (!patient) {
       return res.status(404).json({
         success: false,
-        message: 'Patient not found'
+        message: "Patient not found",
       });
     }
 
@@ -49,7 +55,7 @@ const createPrescription = async (req, res) => {
     if (!doctor) {
       return res.status(404).json({
         success: false,
-        message: 'Doctor not found'
+        message: "Doctor not found",
       });
     }
 
@@ -61,7 +67,7 @@ const createPrescription = async (req, res) => {
           if (!rawMaterial) {
             return res.status(404).json({
               success: false,
-              message: `Raw material ${rmDetail.name} not found`
+              message: `Raw material ${rmDetail.name} not found`,
             });
           }
         }
@@ -104,7 +110,6 @@ const createPrescription = async (req, res) => {
               hours: freq.frequentFrequency.hours || 0,
               minutes: freq.frequentFrequency.minutes || 0,
             };
-            
             // Include timings if present
             if (freq.timings) {
               processedFreq.timings = freq.timings;
@@ -250,36 +255,34 @@ const createPrescription = async (req, res) => {
     // Save prescription
     const savedPrescription = await prescription.save();
 
-    console.log("Prescription saved successfully:");
-    console.log("Prescription ID:", savedPrescription._id);
-    
-    // Log each item's frequency data for debugging
-    savedPrescription.prescriptionItems.forEach((item, index) => {
-      console.log(`Item ${index + 1} (${item.medicineName}):`);
-      console.log("  Frequencies:", item.frequencies);
-      console.log("  FrequencyType:", item.frequencyType);
-    });
+    const patientAppointment = await Appointment.findById(appointmentID);
+
+    if (!patientAppointment) {
+      return res.status(404).json({ message: "Appointment not found" });
+    }
+
+    patientAppointment.prescriptionCreated = true;
+    patientAppointment.prescriptionID = savedPrescription._id;
+    await patientAppointment.save();
 
     // If this is a sub-prescription, update parent prescription
     if (parentPrescriptionId) {
-      await Prescription.findByIdAndUpdate(
-        parentPrescriptionId,
-        { $push: { subPrescriptionID: savedPrescription._id } }
-      );
+      await Prescription.findByIdAndUpdate(parentPrescriptionId, {
+        $push: { subPrescriptionID: savedPrescription._id },
+      });
     }
 
     res.status(201).json({
       success: true,
-      message: 'Prescription created successfully',
-      data: savedPrescription
+      message: "Prescription created successfully",
+      data: savedPrescription,
     });
-
   } catch (error) {
-    console.error('Error creating prescription:', error);
+    console.error("Error creating prescription:", error);
     res.status(500).json({
       success: false,
-      message: 'Internal server error',
-      error: error.message
+      message: "Internal server error",
+      error: error.message,
     });
   }
 };
@@ -294,42 +297,47 @@ const getPatientPrescriptions = async (req, res) => {
     if (!patient) {
       return res.status(404).json({
         success: false,
-        message: 'Patient not found'
+        message: "Patient not found",
       });
     }
 
     // Get prescriptions with populated data
     const prescriptions = await Prescription.find({ patientId })
-      .populate('doctorId', 'name email')
-      .populate('appointmentId', 'consultingType consultingFor appointmentDate')
+      .populate("doctorId", "name email")
+      .populate("appointmentId", "consultingType consultingFor appointmentDate")
       .sort({ createdAt: -1 });
 
     // Format prescriptions for response
-    const formattedPrescriptions = prescriptions.map(prescription => ({
+    const formattedPrescriptions = prescriptions.map((prescription) => ({
       _id: prescription._id,
-      consultingType: prescription.consultingType || prescription.appointmentId?.consultingType || 'N/A',
-      consultingFor: prescription.consultingFor || prescription.appointmentId?.consultingFor || 'N/A',
+      consultingType:
+        prescription.consultingType ||
+        prescription.appointmentId?.consultingType ||
+        "N/A",
+      consultingFor:
+        prescription.consultingFor ||
+        prescription.appointmentId?.consultingFor ||
+        "N/A",
       medicineCourse: prescription.medicineCourse,
       action: prescription.action,
       createdAt: prescription.createdAt,
-      doctorName: prescription.doctorId?.name || 'Unknown',
+      doctorName: prescription.doctorId?.name || "Unknown",
       prescriptionType: prescription.prescriptionType,
       medicineCharges: prescription.medicineCharges,
       isPaymentDone: prescription.isPaymentDone,
-      subPrescriptionCount: prescription.subPrescriptionID?.length || 0
+      subPrescriptionCount: prescription.subPrescriptionID?.length || 0,
     }));
 
     res.status(200).json({
       success: true,
-      data: formattedPrescriptions
+      data: formattedPrescriptions,
     });
-
   } catch (error) {
-    console.error('Error fetching patient prescriptions:', error);
+    console.error("Error fetching patient prescriptions:", error);
     res.status(500).json({
       success: false,
-      message: 'Internal server error',
-      error: error.message
+      message: "Internal server error",
+      error: error.message,
     });
   }
 };
@@ -513,9 +521,9 @@ const getDoctorPrescriptions = async (req, res) => {
 
     // Build query
     let query = { doctorId };
-    
+
     if (status) {
-      query['action.status'] = status;
+      query["action.status"] = status;
     }
 
     // Get prescriptions with pagination
@@ -543,17 +551,16 @@ const getDoctorPrescriptions = async (req, res) => {
         pagination: {
           current: page,
           pages: Math.ceil(total / limit),
-          total
-        }
-      }
+          total,
+        },
+      },
     });
-
   } catch (error) {
-    console.error('Error fetching doctor prescriptions:', error);
+    console.error("Error fetching doctor prescriptions:", error);
     res.status(500).json({
       success: false,
-      message: 'Internal server error',
-      error: error.message
+      message: "Internal server error",
+      error: error.message,
     });
   }
 };
@@ -567,16 +574,16 @@ const getPrescriptionStats = async (req, res) => {
       { $match: { doctorId: mongoose.Types.ObjectId(doctorId) } },
       {
         $group: {
-          _id: '$action.status',
+          _id: "$action.status",
           count: { $sum: 1 },
-          totalCharges: { $sum: '$medicineCharges' }
-        }
-      }
+          totalCharges: { $sum: "$medicineCharges" },
+        },
+      },
     ]);
 
     const totalPrescriptions = await Prescription.countDocuments({ doctorId });
     const recentPrescriptions = await Prescription.find({ doctorId })
-      .populate('patientId', 'name')
+      .populate("patientId", "name")
       .sort({ createdAt: -1 })
       .limit(5);
 
@@ -585,26 +592,28 @@ const getPrescriptionStats = async (req, res) => {
       data: {
         stats,
         totalPrescriptions,
-        recentPrescriptions
-      }
+        recentPrescriptions,
+      },
     });
-
   } catch (error) {
-    console.error('Error fetching prescription stats:', error);
+    console.error("Error fetching prescription stats:", error);
     res.status(500).json({
       success: false,
-      message: 'Internal server error',
-      error: error.message
+      message: "Internal server error",
+      error: error.message,
     });
   }
 };
 
 const postMedicine = async (req, res) => {
   const { name } = req.body;
-  if (!name) return res.status(400).json({ error: "Medicine name is required" });
+  if (!name)
+    return res.status(400).json({ error: "Medicine name is required" });
 
   try {
-    const existing = await Medicine.findOne({ name: { $regex: new RegExp(`^${name}$`, 'i') } });
+    const existing = await Medicine.findOne({
+      name: { $regex: new RegExp(`^${name}$`, "i") },
+    });
     if (existing) {
       return res.status(409).json({ error: "Medicine name already exists" });
     }
@@ -657,7 +666,6 @@ const updateCloseComment = async (req, res) => {
     res.status(500).json({ success: false, message: "Server error" });
   }
 };
-
 
 module.exports = {
   createPrescription,

@@ -4,8 +4,11 @@ const { StatusCodes } = require('http-status-codes');
 const Appointment = require('../models/appointmentModel');
 const Doctor = require('../models/doctorModel');
 const Patient = require('../models/patientModel');
+<<<<<<< HEAD
 const PatientDetails = require('../models/patientDetails');
 
+=======
+>>>>>>> origin/aravinth
 
 // this function is to be removed in order to migrate to getPrescriptionByAppointmentId fn
 // const getPrescriptionByAppointmentId = async (req, res) => {

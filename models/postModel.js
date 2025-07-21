@@ -78,4 +78,10 @@ const Post = mongoose.model("Post", PostSchema);
 module.exports = {
   Post,
   Comment,
+  createdAt: { type: Date, default: Date.now },
+});
+
+module.exports = {
+  Post: mongoose.model("Post", PostSchema),
+  Comment: Comment,
 };

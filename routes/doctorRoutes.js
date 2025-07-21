@@ -21,6 +21,7 @@ const {
   getDeliveryStatusByPatient,
   updateTrackingId,
   startPrescription
+  getDoctorByFollow
 } = require("../controllers/doctorController");
 const {
   upload,
@@ -98,5 +99,15 @@ router.patch(
   updateTrackingId
 );
 
+router.get("/profile", validateToken, fetchProfile);
+router.post(
+  "/uploadProfilePicture",
+  validateToken,
+  upload.single("profilePhoto"),
+  handleMulterError,
+  uploadProfilePicture
+);
+router.put("/updateProfile", validateToken, updateProfile);
+router.get('/doctor/me', validateToken, getDoctorByFollow);
 
 module.exports = router;

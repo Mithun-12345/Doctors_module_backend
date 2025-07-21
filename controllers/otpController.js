@@ -29,7 +29,7 @@ const checkPatient = async (phone) => {
 
 exports.sendOTP = asyncHandler(async (req, res) => {
   const { phone, role } = req.body;
-  console.log(req.body);
+  console.log("sendOTP: ", req.body);
 
   try {
     let user;

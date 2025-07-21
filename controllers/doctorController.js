@@ -788,3 +788,20 @@ exports.getDeliveryStatusByPatient = async (req, res) => {
   }
 };
 
+
+//To check he is appointed with consultation or not
+exports.getDoctorByFollow = async (req, res) => {
+  try {
+    const doctorId = req.user.id; // You should extract from token
+    const doctor = await Doctor.findById(doctorId).select("role follow");
+
+    if (!doctor) {
+      return res.status(404).json({ message: "Doctor not found" });
+    }
+
+    res.status(200).json(doctor);
+  } catch (err) {
+    console.error("Error fetching doctor details:", err);
+    res.status(500).json({ message: "Server Error" });
+  }
+};

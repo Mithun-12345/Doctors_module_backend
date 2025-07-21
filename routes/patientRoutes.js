@@ -40,6 +40,10 @@ const {
 } = require("../controllers/UIController");
 
 const validateToken = require("../middlewares/validateTokenHandler");
+const {
+  upload,
+  handleMulterError,
+} = require("../middlewares/uploadMiddleware");
 
 const router = express.Router();
 

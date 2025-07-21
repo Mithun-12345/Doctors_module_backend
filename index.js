@@ -49,6 +49,8 @@ const medicationRoutes = require('./routes/generateMedicationScheduleRoutes');
 
 
 
+const Doctor = require('./models/doctorModel.js'); // adjust path as needed
+const bcrypt = require('bcryptjs');
 
 dbConnection();
 
@@ -59,8 +61,8 @@ app.set("trust proxy", 1);
 const server = createServer(app);
 
 initSocket(server);
-
-app.use(express.json());
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ limit: '10mb', extended: true }));
 app.use(cors());
 
 
@@ -140,7 +142,6 @@ app.get("/api/generate-employee-id", (req, res) => {
   const customId = `EMP-${String(currentId).padStart(5, "0")}`;
   res.json({ success: true, employeeID: customId });
 });
-
 
 // Example API route
 app.get("/api/example", (req, res) => {
