@@ -98,8 +98,10 @@ router.patch(
   validateToken, // doctor token
   updateTrackingId
 );
-router.get("/medication-summary/:doctorId", getDoctorPatientMedicationSummary);
-
+router.get(
+  '/medications/summary/:doctorId',
+  getDoctorPatientMedicationSummary
+);
 
 
 module.exports = router;

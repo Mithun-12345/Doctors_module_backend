@@ -899,210 +899,93 @@ exports.getDoctorPatientMedicationSummary = async (req, res) => {
 exports.getDoctorPatientMedicationSummary = async (req, res) => {
   try {
     const { doctorId } = req.params;
+    const { date } = req.query;
 
-    if (!doctorId) {
-      return res.status(400).json({ message: "Doctor ID is required" });
+    if (!doctorId || !date) {
+      return res.status(400).json({ message: "Doctor ID and date are required" });
     }
 
-    console.log("✅ Fetching medication summary for doctorId:", doctorId);
+    const selectedDate = new Date(date);
+    selectedDate.setHours(0, 0, 0, 0);
 
-    const allReminders = await NotificationReminderSettings.find({ doctorId }).lean();
+    console.log("✅ Fetching medication summary for doctorId:", doctorId, "on date:", selectedDate);
 
-    if (!allReminders.length) {
-      console.warn("⚠️ No reminders found for this doctor");
-      return res.status(404).json({ message: "No reminders found for this doctor" });
-    }
-
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-
-    const responseByPatient = {};
-    const prescriptionIdSet = new Set();
-    const patientIdSet = new Set();
-
-    for (const reminder of allReminders) {
-      const patientId = reminder.patientId?.toString();
-      const prescriptionId = reminder.prescriptionId?.toString();
-
-      if (!patientId) {
-        console.warn(`⚠️ Skipping reminder with missing patientId: ${JSON.stringify(reminder)}`);
-        continue;
+    const reminders = await NotificationReminderSettings.find({
+      doctorId,
+      date: {
+        $gte: selectedDate,
+        $lt: new Date(selectedDate.getTime() + 86400000) // +1 day
       }
+    }).lean();
 
-      patientIdSet.add(patientId);
-      if (prescriptionId) prescriptionIdSet.add(prescriptionId);
+    if (!reminders.length) {
+      return res.status(404).json({ message: "No reminders found for this doctor on selected date" });
+    }
 
-      if (!responseByPatient[patientId]) {
-        responseByPatient[patientId] = {
-          patientId,
-          name: "",
-          age: "",
-          gender: "",
-          consultingForList: new Set(),
-          prescriptions: new Set(),
-          todaysMedication: [],
-          upcomingIntakes: [],
-          prescriptionHistory: [],
-          totalMissedDoses: 0,
-          missedDosesDetails: [],
-          pendingDoses: 0,
-          pendingDosesDetails: [],
-          dosesTaken: 0,
-          takenDosesDetails: [],
+    const patientIds = [...new Set(reminders.map(r => r.patientId.toString()))];
+
+    const patients = await Patient.find({ _id: { $in: patientIds } }).lean();
+    const patientDetailsDocs = await patientDetails.find({ patientId: { $in: patientIds } }).lean();
+
+    const patientMap = Object.fromEntries(patients.map(p => [p._id.toString(), p]));
+    const patientMetaMap = Object.fromEntries(patientDetailsDocs.map(p => [p.patientId.toString(), p]));
+
+    const response = [];
+
+    for (const pid of patientIds) {
+      const patientReminders = reminders.filter(r => r.patientId.toString() === pid);
+
+      const demo = patientMap[pid];
+      const meta = patientMetaMap[pid];
+
+      const taken = [], missed = [], pending = [], viewMedications = [];
+
+      for (const reminder of patientReminders) {
+        const base = {
+          medicineName: reminder.medicineName || "",
+          doseTime: reminder.doseTime || ""
         };
-      }
 
-      const patientObj = responseByPatient[patientId];
-
-      const reminderDate = new Date(reminder.date);
-      reminderDate.setHours(0, 0, 0, 0);
-
-      const formattedReminder = {
-        medicineName: reminder.medicineName || "",
-        doseTime: reminder.doseTime || "",
-        status: reminder.status ?? null,
-        date: reminder.date || null,
-      };
-
-      if (reminderDate.getTime() === today.getTime()) {
-        patientObj.todaysMedication.push(formattedReminder);
-      } else if (reminderDate > today) {
-        patientObj.upcomingIntakes.push(formattedReminder);
-      } else {
-        patientObj.prescriptionHistory.push(formattedReminder);
-      }
-
-      if (reminder.status === false) {
-        patientObj.totalMissedDoses += 1;
-        patientObj.missedDosesDetails.push(formattedReminder);
-      }
-
-      if (reminder.status === null) {
-        patientObj.pendingDoses += 1;
-        patientObj.pendingDosesDetails.push(formattedReminder);
-      } else if (reminder.status === true) {
-        patientObj.dosesTaken += 1;
-        patientObj.takenDosesDetails.push(formattedReminder);
-      }
-
-      if (prescriptionId) {
-        patientObj.prescriptions.add(prescriptionId);
-      }
-    }
-
-    // Fetch patient metadata from both models
-    let patientMeta = [];
-    let patientDemographics = [];
-
-    try {
-      patientMeta = await patientDetails.find({ patientId: { $in: Array.from(patientIdSet) } }).lean();
-    } catch (err) {
-      console.warn("⚠️ Failed to fetch patientDetails:", err.message);
-    }
-
-    try {
-      patientDemographics = await Patient.find({ _id: { $in: Array.from(patientIdSet) } }).lean();
-    } catch (err) {
-      console.warn("⚠️ Failed to fetch patientModel (demographics):", err.message);
-    }
-
-    const patientMetaMap = {};
-    for (const meta of patientMeta) {
-      if (meta?.patientId) {
-        patientMetaMap[meta.patientId.toString()] = meta;
-      }
-    }
-
-    const patientDemographicMap = {};
-    for (const demo of patientDemographics) {
-      if (demo?._id) {
-        patientDemographicMap[demo._id.toString()] = demo;
-      }
-    }
-
-    // Fetch prescriptions
-    let prescriptionDocs = [];
-    try {
-      prescriptionDocs = await Prescription.find({ _id: { $in: Array.from(prescriptionIdSet) } })
-        .select("_id startDate endDate consultingFor prescriptionItems")
-        .lean();
-    } catch (err) {
-      console.warn("⚠️ Failed to fetch prescriptions:", err.message);
-    }
-
-    const prescriptionMap = {};
-    for (const p of prescriptionDocs) {
-      if (p?._id) prescriptionMap[p._id.toString()] = p;
-    }
-
-    for (const patientId of patientIdSet) {
-      const patientObj = responseByPatient[patientId];
-
-      const demo = patientDemographicMap[patientId.toString()];
-      if (demo) {
-        patientObj.name = demo.name || "";
-        patientObj.age = demo.age || "";
-        patientObj.gender = demo.gender || "";
-      } else {
-        console.warn(`⚠️ Missing demographic data for patientId: ${patientId}`);
-      }
-
-      const meta = patientMetaMap[patientId.toString()];
-      if (!meta) {
-        console.warn(`⚠️ Missing metadata for patientId: ${patientId}`);
-      }
-
-      const prescriptionList = [];
-      for (const pid of patientObj.prescriptions) {
-        const presc = prescriptionMap[pid];
-        if (presc) {
-          if (presc.consultingFor) {
-            patientObj.consultingForList.add(presc.consultingFor);
-          }
-
-          prescriptionList.push({
-            prescriptionId: presc._id,
-            startDate: presc.startDate || null,
-            endDate: presc.endDate || null,
-            prescriptionItems: Array.isArray(presc.prescriptionItems)
-              ? presc.prescriptionItems.map((item) => ({
-                  medicineName: item.medicineName || "",
-                  frequencyType: item.frequencyType || "",
-                  duration: item.duration || "",
-                  form: item.form || "",
-                }))
-              : [],
-          });
+        if (reminder.status === true) {
+          taken.push(base);
+          viewMedications.push({ ...base, status: "taken" });
+        } else if (reminder.status === false) {
+          missed.push(base);
+          viewMedications.push({ ...base, status: "missed" });
         } else {
-          console.warn(`⚠️ Missing prescription for ID: ${pid}`);
+          pending.push(base);
+          viewMedications.push({ ...base, status: "pending" });
         }
       }
 
-      patientObj.prescriptions = prescriptionList;
-      patientObj.consultingForList = Array.from(patientObj.consultingForList);
+      response.push({
+        patientId: pid,
+        name: demo?.name || "",
+        age: demo?.age || "",
+        gender: demo?.gender || "",
+        diseaseName: meta?.diseaseName || "",
+        diseaseType: meta?.diseaseType?.name || "",
 
-      const sortByDateTime = (a, b) => {
-        const aDateTime = new Date(`${new Date(a.date).toISOString().split("T")[0]}T${a.doseTime}`);
-        const bDateTime = new Date(`${new Date(b.date).toISOString().split("T")[0]}T${b.doseTime}`);
-        return aDateTime - bDateTime;
-      };
+        doses: {
+          taken: {
+            count: taken.length,
+            data: taken
+          },
+          missed: {
+            count: missed.length,
+            data: missed
+          },
+          pending: {
+            count: pending.length,
+            data: pending
+          }
+        },
 
-      patientObj.todaysMedication.sort(sortByDateTime);
-      patientObj.upcomingIntakes.sort(sortByDateTime);
-      patientObj.prescriptionHistory.sort(sortByDateTime);
-      patientObj.missedDosesDetails.sort(sortByDateTime);
-      patientObj.pendingDosesDetails.sort(sortByDateTime);
-      patientObj.takenDosesDetails.sort(sortByDateTime);
+        viewMedications
+      });
     }
 
-    const finalResponse = {
-      doctorId,
-      patients: Object.values(responseByPatient),
-    };
-
-    console.log("✅ Final response prepared");
-    return res.status(200).json(finalResponse);
-
+    return res.status(200).json(response);
   } catch (error) {
     console.error("❌ Error in getDoctorPatientMedicationSummary:", error);
     return res.status(500).json({ message: "Server error", error });
