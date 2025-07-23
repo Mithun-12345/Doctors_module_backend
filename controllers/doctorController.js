@@ -2,6 +2,7 @@ const mongoose = require("mongoose");
 const Doctor = require("../models/doctorModel");
 const Appointment = require("../models/appointmentModel.js");
 const Patient = require("../models/patientModel.js");
+const patientDetails = require("../models/patientDetails"); // clinical info
 const moment = require("moment");
 const cloudinary = require("cloudinary").v2;
 const Prescription = require('../models/Prescription.js');
@@ -989,12 +990,34 @@ exports.getDoctorPatientMedicationSummary = async (req, res) => {
       }
     }
 
-    // Fetch patient metadata
+    // Fetch patient metadata from both models
     let patientMeta = [];
+    let patientDemographics = [];
+
     try {
-      patientMeta = await patientDetails.find({ _id: { $in: Array.from(patientIdSet) } }).lean();
+      patientMeta = await patientDetails.find({ patientId: { $in: Array.from(patientIdSet) } }).lean();
     } catch (err) {
       console.warn("⚠️ Failed to fetch patientDetails:", err.message);
+    }
+
+    try {
+      patientDemographics = await Patient.find({ _id: { $in: Array.from(patientIdSet) } }).lean();
+    } catch (err) {
+      console.warn("⚠️ Failed to fetch patientModel (demographics):", err.message);
+    }
+
+    const patientMetaMap = {};
+    for (const meta of patientMeta) {
+      if (meta?.patientId) {
+        patientMetaMap[meta.patientId.toString()] = meta;
+      }
+    }
+
+    const patientDemographicMap = {};
+    for (const demo of patientDemographics) {
+      if (demo?._id) {
+        patientDemographicMap[demo._id.toString()] = demo;
+      }
     }
 
     // Fetch prescriptions
@@ -1015,12 +1038,17 @@ exports.getDoctorPatientMedicationSummary = async (req, res) => {
     for (const patientId of patientIdSet) {
       const patientObj = responseByPatient[patientId];
 
-      const meta = patientMeta.find(p => p._id.toString() === patientId);
-      if (meta) {
-        patientObj.name = meta.name || "";
-        patientObj.age = meta.age || "";
-        patientObj.gender = meta.gender || "";
+      const demo = patientDemographicMap[patientId.toString()];
+      if (demo) {
+        patientObj.name = demo.name || "";
+        patientObj.age = demo.age || "";
+        patientObj.gender = demo.gender || "";
       } else {
+        console.warn(`⚠️ Missing demographic data for patientId: ${patientId}`);
+      }
+
+      const meta = patientMetaMap[patientId.toString()];
+      if (!meta) {
         console.warn(`⚠️ Missing metadata for patientId: ${patientId}`);
       }
 
