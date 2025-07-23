@@ -20,6 +20,7 @@ const {
   uploadProfilePicture,
   getDeliveryStatusByPatient,
   updateTrackingId,
+  getDoctorPatientMedicationSummary,
   startPrescription
 } = require("../controllers/doctorController");
 const {
@@ -97,6 +98,8 @@ router.patch(
   validateToken, // doctor token
   updateTrackingId
 );
+router.get("/medication-summary/:doctorId", getDoctorPatientMedicationSummary);
+
 
 
 module.exports = router;
