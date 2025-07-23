@@ -919,7 +919,6 @@ exports.getDoctorPatientMedicationSummary = async (req, res) => {
     const prescriptionIdSet = new Set();
     const patientIdSet = new Set();
 
-    // Grouping reminders by patient
     for (const reminder of allReminders) {
       const patientId = reminder.patientId?.toString();
       const prescriptionId = reminder.prescriptionId?.toString();
@@ -944,8 +943,11 @@ exports.getDoctorPatientMedicationSummary = async (req, res) => {
           upcomingIntakes: [],
           prescriptionHistory: [],
           totalMissedDoses: 0,
-          pendingDoses: 0,   // ✅ Added
-          dosesTaken: 0      // ✅ Added
+          missedDosesDetails: [],
+          pendingDoses: 0,
+          pendingDosesDetails: [],
+          dosesTaken: 0,
+          takenDosesDetails: [],
         };
       }
 
@@ -971,13 +973,15 @@ exports.getDoctorPatientMedicationSummary = async (req, res) => {
 
       if (reminder.status === false) {
         patientObj.totalMissedDoses += 1;
+        patientObj.missedDosesDetails.push(formattedReminder);
       }
 
-      // ✅ Add pending and taken dose tracking
       if (reminder.status === null) {
         patientObj.pendingDoses += 1;
+        patientObj.pendingDosesDetails.push(formattedReminder);
       } else if (reminder.status === true) {
         patientObj.dosesTaken += 1;
+        patientObj.takenDosesDetails.push(formattedReminder);
       }
 
       if (prescriptionId) {
@@ -993,7 +997,7 @@ exports.getDoctorPatientMedicationSummary = async (req, res) => {
       console.warn("⚠️ Failed to fetch patientDetails:", err.message);
     }
 
-    // Fetch prescription data (including consultingFor now!)
+    // Fetch prescriptions
     let prescriptionDocs = [];
     try {
       prescriptionDocs = await Prescription.find({ _id: { $in: Array.from(prescriptionIdSet) } })
@@ -1008,11 +1012,9 @@ exports.getDoctorPatientMedicationSummary = async (req, res) => {
       if (p?._id) prescriptionMap[p._id.toString()] = p;
     }
 
-    // Enrich patient data
     for (const patientId of patientIdSet) {
       const patientObj = responseByPatient[patientId];
 
-      // Add patient metadata
       const meta = patientMeta.find(p => p._id.toString() === patientId);
       if (meta) {
         patientObj.name = meta.name || "";
@@ -1022,7 +1024,6 @@ exports.getDoctorPatientMedicationSummary = async (req, res) => {
         console.warn(`⚠️ Missing metadata for patientId: ${patientId}`);
       }
 
-      // Add prescription details + consultingFor
       const prescriptionList = [];
       for (const pid of patientObj.prescriptions) {
         const presc = prescriptionMap[pid];
@@ -1061,6 +1062,9 @@ exports.getDoctorPatientMedicationSummary = async (req, res) => {
       patientObj.todaysMedication.sort(sortByDateTime);
       patientObj.upcomingIntakes.sort(sortByDateTime);
       patientObj.prescriptionHistory.sort(sortByDateTime);
+      patientObj.missedDosesDetails.sort(sortByDateTime);
+      patientObj.pendingDosesDetails.sort(sortByDateTime);
+      patientObj.takenDosesDetails.sort(sortByDateTime);
     }
 
     const finalResponse = {
