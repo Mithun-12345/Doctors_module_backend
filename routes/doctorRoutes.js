@@ -21,6 +21,7 @@ const {
   uploadProfilePicture,
   getDeliveryStatusByPatient,
   updateTrackingId,
+  getDoctorPatientMedicationSummary,
   startPrescription,
 } = require("../controllers/doctorController");
 const {
@@ -97,6 +98,7 @@ router.patch(
   validateToken, // doctor token
   updateTrackingId
 );
+router.get("/medications/summary/:doctorId", getDoctorPatientMedicationSummary);
 
 router.get("/profile", validateToken, fetchProfile);
 router.post(

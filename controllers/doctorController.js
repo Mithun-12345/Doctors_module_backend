@@ -2,6 +2,7 @@ const mongoose = require("mongoose");
 const Doctor = require("../models/doctorModel");
 const Appointment = require("../models/appointmentModel.js");
 const Patient = require("../models/patientModel.js");
+const patientDetails = require("../models/patientDetails"); // clinical info
 const moment = require("moment");
 const cloudinary = require("cloudinary").v2;
 const Prescription = require("../models/Prescription.js");
@@ -833,5 +834,205 @@ exports.getDoctorByFollow = async (req, res) => {
   } catch (err) {
     console.error("Error fetching doctor details:", err);
     res.status(500).json({ message: "Server Error" });
+exports.getDoctorPatientMedicationSummary = async (req, res) => {
+  try {
+    const { doctorId } = req.params;
+
+    if (!doctorId) {
+      return res.status(400).json({ message: "Doctor ID is required" });
+    }
+
+    const prescriptions = await Prescription.find({ doctorId })
+      .populate("patientId", "name age gender")
+      .lean();
+
+    if (!prescriptions.length) {
+      return res.status(404).json({ message: "No prescriptions found for this doctor" });
+    }
+
+    const responseByPatient = {};
+
+    for (const prescription of prescriptions) {
+      const {
+        _id: prescriptionId,
+        patientId,
+        consultingFor,
+        prescriptionItems,
+        startDate,
+        endDate
+      } = prescription;
+
+      const patientKey = patientId._id.toString();
+
+      if (!responseByPatient[patientKey]) {
+        responseByPatient[patientKey] = {
+          patientId: patientKey,
+          name: patientId.name,
+          age: patientId.age,
+          gender: patientId.gender,
+          consultingForList: new Set(),
+          prescriptions: [],
+          todaysMedication: [],
+          totalMissedDoses: 0,
+        };
+      }
+
+      if (consultingFor) {
+        responseByPatient[patientKey].consultingForList.add(consultingFor);
+      }
+
+      responseByPatient[patientKey].prescriptions.push({
+        prescriptionId,
+        consultingFor,
+        startDate,
+        endDate,
+        prescriptionItems: prescriptionItems.map(item => ({
+          medicineName: item.medicineName,
+          frequencyType: item.frequencyType,
+          duration: item.duration,
+          form: item.form,
+        }))
+      });
+
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+
+      const tomorrow = new Date(today);
+      tomorrow.setDate(tomorrow.getDate() + 1);
+
+      const reminders = await NotificationReminderSettings.find({
+        doctorId,
+        patientId: patientId._id,
+        date: { $gte: today, $lt: tomorrow },
+      }).lean();
+
+      for (const r of reminders) {
+        responseByPatient[patientKey].todaysMedication.push({
+          medicineName: r.medicineName,
+          doseTime: r.doseTime,
+          status: r.status,
+          date: r.date,
+        });
+
+        if (r.status === false) {
+          responseByPatient[patientKey].totalMissedDoses += 1;
+        }
+      }
+    }
+
+    for (const key in responseByPatient) {
+      responseByPatient[key].consultingForList = Array.from(responseByPatient[key].consultingForList);
+
+      responseByPatient[key].todaysMedication.sort((a, b) => {
+        const aDateTime = new Date(`${a.date.toISOString().split("T")[0]}T${a.doseTime}`);
+        const bDateTime = new Date(`${b.date.toISOString().split("T")[0]}T${b.doseTime}`);
+        return aDateTime - bDateTime;
+      });
+    }
+
+    return res.status(200).json({
+      doctorId,
+      patients: Object.values(responseByPatient),
+    });
+
+  } catch (error) {
+    console.error("Error in getDoctorPatientMedicationSummary:", error);
+    res.status(500).json({ message: "Server error", error });
+  }
+};
+
+exports.getDoctorPatientMedicationSummary = async (req, res) => {
+  try {
+    const { doctorId } = req.params;
+    const { date } = req.query;
+
+    if (!doctorId || !date) {
+      return res.status(400).json({ message: "Doctor ID and date are required" });
+    }
+
+    const selectedDate = new Date(date);
+    selectedDate.setHours(0, 0, 0, 0);
+
+    console.log("✅ Fetching medication summary for doctorId:", doctorId, "on date:", selectedDate);
+
+    const reminders = await NotificationReminderSettings.find({
+      doctorId,
+      date: {
+        $gte: selectedDate,
+        $lt: new Date(selectedDate.getTime() + 86400000) // +1 day
+      }
+    }).lean();
+
+    if (!reminders.length) {
+      return res.status(404).json({ message: "No reminders found for this doctor on selected date" });
+    }
+
+    const patientIds = [...new Set(reminders.map(r => r.patientId.toString()))];
+
+    const patients = await Patient.find({ _id: { $in: patientIds } }).lean();
+    const patientDetailsDocs = await patientDetails.find({ patientId: { $in: patientIds } }).lean();
+
+    const patientMap = Object.fromEntries(patients.map(p => [p._id.toString(), p]));
+    const patientMetaMap = Object.fromEntries(patientDetailsDocs.map(p => [p.patientId.toString(), p]));
+
+    const response = [];
+
+    for (const pid of patientIds) {
+      const patientReminders = reminders.filter(r => r.patientId.toString() === pid);
+
+      const demo = patientMap[pid];
+      const meta = patientMetaMap[pid];
+
+      const taken = [], missed = [], pending = [], viewMedications = [];
+
+      for (const reminder of patientReminders) {
+        const base = {
+          medicineName: reminder.medicineName || "",
+          doseTime: reminder.doseTime || ""
+        };
+
+        if (reminder.status === true) {
+          taken.push(base);
+          viewMedications.push({ ...base, status: "taken" });
+        } else if (reminder.status === false) {
+          missed.push(base);
+          viewMedications.push({ ...base, status: "missed" });
+        } else {
+          pending.push(base);
+          viewMedications.push({ ...base, status: "pending" });
+        }
+      }
+
+      response.push({
+        patientId: pid,
+        name: demo?.name || "",
+        age: demo?.age || "",
+        gender: demo?.gender || "",
+        diseaseName: meta?.diseaseName || "",
+        diseaseType: meta?.diseaseType?.name || "",
+
+        doses: {
+          taken: {
+            count: taken.length,
+            data: taken
+          },
+          missed: {
+            count: missed.length,
+            data: missed
+          },
+          pending: {
+            count: pending.length,
+            data: pending
+          }
+        },
+
+        viewMedications
+      });
+    }
+
+    return res.status(200).json(response);
+  } catch (error) {
+    console.error("❌ Error in getDoctorPatientMedicationSummary:", error);
+    return res.status(500).json({ message: "Server error", error });
   }
 };
