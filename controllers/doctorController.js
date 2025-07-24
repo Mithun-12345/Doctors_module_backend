@@ -830,10 +830,9 @@ exports.getDoctorByFollow = async (req, res) => {
       return res.status(404).json({ message: "Doctor not found" });
     }
 
-    res.status(200).json(doctor);
-  } catch (err) {
+    res.status(200).json(doctor); } catch(err){
     console.error("Error fetching doctor details:", err);
-    res.status(500).json({ message: "Server Error" });
+    res.status(500).json({ message: "Server Error" })}};
 exports.getDoctorPatientMedicationSummary = async (req, res) => {
   try {
     const { doctorId } = req.params;
@@ -1001,8 +1000,7 @@ exports.getDoctorPatientMedicationSummary = async (req, res) => {
           pending.push(base);
           viewMedications.push({ ...base, status: "pending" });
         }
-      }
-
+      };
       response.push({
         patientId: pid,
         name: demo?.name || "",
