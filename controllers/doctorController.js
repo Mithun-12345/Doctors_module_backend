@@ -4,9 +4,9 @@ const Appointment = require("../models/appointmentModel.js");
 const Patient = require("../models/patientModel.js");
 const moment = require("moment");
 const cloudinary = require("cloudinary").v2;
-const Prescription = require('../models/Prescription.js');
+const Prescription = require("../models/Prescription.js");
 const fs = require("fs");
-const NotificationReminderSettings = require('../models/NotificationReminderSettings');
+const NotificationReminderSettings = require("../models/NotificationReminderSettings");
 
 exports.addDoctor = async (req, res) => {
   const { name, age, gender, photo, specialization, bio, phone, role } =
@@ -251,7 +251,9 @@ exports.doctorDetails = async (req, res) => {
 
 exports.getDoctorFollow = async (req, res) => {
   console.log("GetDoctorFollow reached");
+  console.log("GetDoctorFollow reached");
   const phone = req.user.phone; // Use the phone from the token
+  console.log("doctor Phone:", phone);
   console.log("doctor Phone:", phone);
   try {
     const doctor = await Doctor.findOne({ phone }); // Find by phone instead of ID
@@ -285,6 +287,7 @@ exports.getDoctorById = async (req, res) => {
   try {
     const doctor = await Doctor.findById(req.params.id);
     if (!doctor) {
+      return res.status(404).json({ message: "Doctor not found" });
       return res.status(404).json({ message: "Doctor not found" });
     }
     res.json(doctor);
@@ -331,6 +334,7 @@ exports.updateSettings = async (req, res) => {
     // Use req.doctorId, which was added by the middleware, to update the doctor’s settings
     const doctor = await Doctor.findByIdAndUpdate(
       req.doctorId, // Use the doctorId from the request
+      req.doctorId, // Use the doctorId from the request
       { videoPlatform },
       { new: true }
     );
@@ -338,6 +342,11 @@ exports.updateSettings = async (req, res) => {
     if (!doctor) {
       return res.status(404).json({ error: "Doctor not found" });
     }
+    console.log("Platform:", doctor.videoPlatform);
+    res.json({
+      message: "Settings updated successfully",
+      videoPlatform: doctor.videoPlatform,
+    });
     console.log("Platform:", doctor.videoPlatform);
     res.json({
       message: "Settings updated successfully",
@@ -652,7 +661,9 @@ exports.startPrescription = async (req, res) => {
     console.log(`📥 [START PRESCRIPTION] Request for ID: ${prescriptionId}`);
 
     if (!prescriptionId) {
-      return res.status(400).json({ message: "Missing prescriptionId in request" });
+      return res
+        .status(400)
+        .json({ message: "Missing prescriptionId in request" });
     }
 
     const prescription = await Prescription.findById(prescriptionId);
@@ -660,15 +671,17 @@ exports.startPrescription = async (req, res) => {
       return res.status(404).json({ message: "Prescription not found" });
     }
 
-    const startDate = moment().startOf('day');
+    const startDate = moment().startOf("day");
     const duration = parseInt(prescription.duration, 10) || 0;
-    const endDate = moment(startDate).add(duration, 'days');
+    const endDate = moment(startDate).add(duration, "days");
 
     prescription.startDate = startDate.toDate();
     prescription.endDate = endDate.toDate();
 
     console.log(`📅 Start Date Set: ${prescription.startDate.toISOString()}`);
-    console.log(`📅 End Date Calculated: ${prescription.endDate.toISOString()}`);
+    console.log(
+      `📅 End Date Calculated: ${prescription.endDate.toISOString()}`
+    );
 
     await prescription.save();
     console.log("💾 Prescription saved to DB");
@@ -685,7 +698,9 @@ exports.startPrescription = async (req, res) => {
         } = med || {};
 
         if (!Array.isArray(standardSchedule)) {
-          console.warn(`⚠️ standardSchedule is not an array for medicine #${index + 1}`);
+          console.warn(
+            `⚠️ standardSchedule is not an array for medicine #${index + 1}`
+          );
           continue;
         }
 
@@ -696,11 +711,15 @@ exports.startPrescription = async (req, res) => {
           const times = Array.isArray(sched.times) ? sched.times : [];
 
           if (isNaN(day) || times.length === 0) {
-            console.warn(`⚠️ Invalid schedule (missing day or times) for ${medicineName}`);
+            console.warn(
+              `⚠️ Invalid schedule (missing day or times) for ${medicineName}`
+            );
             continue;
           }
 
-          const doseDate = moment(startDate).add(day - 1, 'days').format('YYYY-MM-DD');
+          const doseDate = moment(startDate)
+            .add(day - 1, "days")
+            .format("YYYY-MM-DD");
 
           for (const time of times) {
             medicineSchedule.push({ date: doseDate, time, day });
@@ -715,27 +734,36 @@ exports.startPrescription = async (req, res) => {
               date: doseDate,
               doseTime: time,
               taken: false,
-              notificationType: 'reminder',
+              notificationType: "reminder",
             });
           }
         }
 
-        console.log(`📌 Processed schedule for: ${medicineName} (${medicineSchedule.length} entries)`);
-
+        console.log(
+          `📌 Processed schedule for: ${medicineName} (${medicineSchedule.length} entries)`
+        );
       } catch (medError) {
-        console.error(`🔥 Error processing medicine #${index + 1}:`, medError.message);
+        console.error(
+          `🔥 Error processing medicine #${index + 1}:`,
+          medError.message
+        );
       }
     }
 
     if (remindersToInsert.length > 0) {
       try {
-        await NotificationReminderSettings.insertMany(remindersToInsert, { ordered: false });
+        await NotificationReminderSettings.insertMany(remindersToInsert, {
+          ordered: false,
+        });
         console.log(`🔔 Reminders created: ${remindersToInsert.length}`);
       } catch (insertErr) {
         console.error("🔥 Reminder Insert Error:", insertErr.message);
         if (insertErr.writeErrors) {
           insertErr.writeErrors.forEach((err, idx) => {
-            console.error(`❌ Insert Error #${idx + 1}:`, err.errmsg || err.message);
+            console.error(
+              `❌ Insert Error #${idx + 1}:`,
+              err.errmsg || err.message
+            );
           });
         }
       }
@@ -744,9 +772,9 @@ exports.startPrescription = async (req, res) => {
     }
 
     res.status(200).json({
-      message: "Prescription started. Reminders created where possible. Any invalid data was skipped.",
+      message:
+        "Prescription started. Reminders created where possible. Any invalid data was skipped.",
     });
-
   } catch (error) {
     console.error("🔥 Unhandled Error in startPrescription:", error.message);
     res.status(500).json({
@@ -762,23 +790,26 @@ exports.getDeliveryStatusByPatient = async (req, res) => {
     const objectId = new mongoose.Types.ObjectId(patientId);
     console.log(req.params.patientId);
 
-    const prescriptions = await Prescription.find({ patientId: objectId })
-      .select('trackingId isProductReceived shippedDate prescriptionItems');
+    const prescriptions = await Prescription.find({
+      patientId: objectId,
+    }).select("trackingId isProductReceived shippedDate prescriptionItems");
 
     if (!prescriptions.length) {
-      return res.status(404).json({ message: "No prescriptions found for this patient." });
+      return res
+        .status(404)
+        .json({ message: "No prescriptions found for this patient." });
     }
 
     const simplified = prescriptions.map((prescription) => ({
       id: prescription._id,
       trackingId: prescription.trackingId,
-      shippedDate: prescription.shippedDate || null, 
+      shippedDate: prescription.shippedDate || null,
       isProductReceived: prescription.isProductReceived,
       items: prescription.prescriptionItems.map((item) => ({
         name: item.medicineName,
         qty: item.dispenseQuantity,
-        uom: item.uom
-      }))
+        uom: item.uom,
+      })),
     }));
 
     res.json(simplified);
@@ -787,7 +818,6 @@ exports.getDeliveryStatusByPatient = async (req, res) => {
     res.status(500).json({ message: "Internal server error" });
   }
 };
-
 
 //To check he is appointed with consultation or not
 exports.getDoctorByFollow = async (req, res) => {

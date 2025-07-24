@@ -9,6 +9,7 @@ const {
   getAssistantDoctors,
   getUserRole,
   getDoctorFollow,
+  getDoctorByFollow,
   getDoctorById,
   getSettings,
   updateSettings,

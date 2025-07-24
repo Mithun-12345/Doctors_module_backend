@@ -1,14 +1,14 @@
-const Prescription = require('../models/Prescription');
-const Patient = require('../models/patientModel');
-const Doctor = require('../models/doctorModel');
-const Appointment = require('../models/appointmentModel');
-const RawMaterial = require('../models/RawMaterial');
-const Medicine = require('../models/Medicine');
-
+const Prescription = require("../models/Prescription");
+const Patient = require("../models/patientModel");
+const Doctor = require("../models/doctorModel");
+const Appointment = require("../models/appointmentModel");
+const RawMaterial = require("../models/RawMaterial");
+const Medicine = require("../models/Medicine");
 
 const createPrescription = async (req, res) => {
   try {
     console.log("createPrescription reached");
+
     const {
       appointmentID,
       patientId,
@@ -23,45 +23,35 @@ const createPrescription = async (req, res) => {
       consultingType,
       consultingFor,
     } = req.body;
-    console.log(req.body);
 
     const doctorId = req.user._id;
 
     // Validate required fields
-    if (
-      !patientId ||
-      !prescriptionItems ||
-      !prescriptionItems.length ||
-      !medicineCourse
-    ) {
-      console.log("Missing required fields");
+    if (!patientId || !prescriptionItems?.length || !medicineCourse) {
       return res.status(400).json({
         success: false,
         message: "Missing required fields",
       });
     }
 
-    // Validate patient exists
-    const patient = await Patient.findById(patientId);
-    if (!patient) {
-      return res.status(404).json({
-        success: false,
-        message: "Patient not found",
-      });
-    }
+    // Validate patient & doctor
+    const [patient, doctor] = await Promise.all([
+      Patient.findById(patientId),
+      Doctor.findById(doctorId),
+    ]);
 
-    // Validate doctor exists
-    const doctor = await Doctor.findById(doctorId);
-    if (!doctor) {
-      return res.status(404).json({
-        success: false,
-        message: "Doctor not found",
-      });
-    }
+    if (!patient)
+      return res
+        .status(404)
+        .json({ success: false, message: "Patient not found" });
+    if (!doctor)
+      return res
+        .status(404)
+        .json({ success: false, message: "Doctor not found" });
 
-    // Validate raw materials exist
+    // Validate raw materials
     for (const item of prescriptionItems) {
-      if (item.rawMaterialDetails && item.rawMaterialDetails.length > 0) {
+      if (item.rawMaterialDetails?.length) {
         for (const rmDetail of item.rawMaterialDetails) {
           const rawMaterial = await RawMaterial.findById(rmDetail._id);
           if (!rawMaterial) {
@@ -74,26 +64,14 @@ const createPrescription = async (req, res) => {
       }
     }
 
-    // Get appointment ID if patient has an active appointment
-    let appointmentId = null;
-    if (patient.appointmentId) {
-      const appointment = await Appointment.findById(patient.appointmentId);
-      if (appointment) {
-        appointmentId = appointment._id;
-      }
-    }
-
-    // Create prescription with proper item mapping
+    // Create prescription
     const prescription = new Prescription({
       patientId,
       doctorId,
-      appointmentId,
-      prescriptionItems: prescriptionItems.map(item => {
-        console.log("Processing item:", item.medicineName);
-        console.log("Item frequencies:", item.frequencies);
-
-        // Process frequencies - keep the exact structure
-        const frequencies = (item.frequencies || []).map(freq => {
+      appointmentID,
+      prescriptionItems: prescriptionItems.map((item) => {
+        // Process frequencies
+        const frequencies = (item.frequencies || []).map((freq) => {
           const processedFreq = {
             consumptionPattern: freq.consumptionPattern || "single",
             day: freq.day,
@@ -103,53 +81,56 @@ const createPrescription = async (req, res) => {
             isOverlapping: freq.isOverlapping || false,
           };
 
-          // Add frequency-specific data
+          // Handle frequent frequency
           if (freq.frequencyType === "frequent" && freq.frequentFrequency) {
             processedFreq.frequentFrequency = {
               doses: freq.frequentFrequency.doses || 1,
               hours: freq.frequentFrequency.hours || 0,
               minutes: freq.frequentFrequency.minutes || 0,
             };
-            // Include timings if present
+
             if (freq.timings) {
               processedFreq.timings = freq.timings;
             }
-          } else if (freq.frequencyType === "standard" && freq.standardFrequency) {
-            processedFreq.standardFrequency = {
-              morning: {
-                foodType: freq.standardFrequency.morning?.foodType || "",
-                from: freq.standardFrequency.morning?.from || "",
-              },
-              afternoon: {
-                foodType: freq.standardFrequency.afternoon?.foodType || "",
-                from: freq.standardFrequency.afternoon?.from || "",
-              },
-              evening: {
-                foodType: freq.standardFrequency.evening?.foodType || "",
-                from: freq.standardFrequency.evening?.from || "",
-              },
-              night: {
-                foodType: freq.standardFrequency.night?.foodType || "",
-                from: freq.standardFrequency.night?.from || "",
-              },
-            };
           }
 
-          // Add parallel consumption data if present
+          // Handle standard frequency safely
+          if (freq.frequencyType === "standard" && freq.standardFrequency) {
+            const sf = {};
+
+            ["morning", "afternoon", "evening", "night"].forEach((time) => {
+              if (
+                freq.standardFrequency[time]?.foodType &&
+                freq.standardFrequency[time]?.from
+              ) {
+                sf[time] = {
+                  foodType: freq.standardFrequency[time].foodType,
+                  from: freq.standardFrequency[time].from,
+                };
+              }
+            });
+
+            processedFreq.standardFrequency = sf;
+          }
+
+          // Handle parallel consumption
           if (freq.parallelConsumption) {
             processedFreq.parallelConsumption = {
               type: freq.parallelConsumption.type || "sequential",
-              schedule: (freq.parallelConsumption.schedule || []).map(scheduleItem => ({
-                day: scheduleItem.day,
-                doseNumber: scheduleItem.doseNumber || 1,
-                time: scheduleItem.time || "08:00",
-                medicineIndex: scheduleItem.medicineIndex || 0,
-                medicineName: scheduleItem.medicineName || item.medicineName || "",
-                type: scheduleItem.type || "sequential",
-                sequentialOrder: scheduleItem.sequentialOrder,
-                parallelGroup: scheduleItem.parallelGroup,
-                isOverlapping: scheduleItem.isOverlapping || false,
-              })),
+              schedule: (freq.parallelConsumption.schedule || []).map(
+                (scheduleItem) => ({
+                  day: scheduleItem.day,
+                  doseNumber: scheduleItem.doseNumber || 1,
+                  time: scheduleItem.time || "08:00",
+                  medicineIndex: scheduleItem.medicineIndex || 0,
+                  medicineName:
+                    scheduleItem.medicineName || item.medicineName || "",
+                  type: scheduleItem.type || "sequential",
+                  sequentialOrder: scheduleItem.sequentialOrder,
+                  parallelGroup: scheduleItem.parallelGroup,
+                  isOverlapping: scheduleItem.isOverlapping || false,
+                })
+              ),
               autoGenerated: freq.parallelConsumption.autoGenerated || false,
             };
           }
@@ -157,33 +138,27 @@ const createPrescription = async (req, res) => {
           return processedFreq;
         });
 
-        // Generate legacy format for backward compatibility
+        // Generate legacy fields
         const legacyStandardSchedule = [];
         const legacyFrequentSchedule = [];
         let legacyParallelConsumption = null;
 
-        frequencies.forEach(freq => {
+        frequencies.forEach((freq) => {
           if (freq.frequencyType === "standard" && freq.standardFrequency) {
+            const timing = {};
+
+            ["morning", "afternoon", "evening", "night"].forEach((time) => {
+              if (freq.standardFrequency[time]) {
+                timing[time] = {
+                  food: freq.standardFrequency[time].foodType,
+                  time: freq.standardFrequency[time].from,
+                };
+              }
+            });
+
             legacyStandardSchedule.push({
               day: freq.day,
-              timing: {
-                morning: {
-                  food: freq.standardFrequency.morning?.foodType || "",
-                  time: freq.standardFrequency.morning?.from || "",
-                },
-                afternoon: {
-                  food: freq.standardFrequency.afternoon?.foodType || "",
-                  time: freq.standardFrequency.afternoon?.from || "",
-                },
-                evening: {
-                  food: freq.standardFrequency.evening?.foodType || "",
-                  time: freq.standardFrequency.evening?.from || "",
-                },
-                night: {
-                  food: freq.standardFrequency.night?.foodType || "",
-                  time: freq.standardFrequency.night?.from || "",
-                },
-              }
+              timing,
             });
           } else if (freq.frequencyType === "frequent") {
             legacyFrequentSchedule.push({
@@ -193,7 +168,6 @@ const createPrescription = async (req, res) => {
             });
           }
 
-          // Set parallel consumption from first occurrence
           if (freq.parallelConsumption && !legacyParallelConsumption) {
             legacyParallelConsumption = {
               type: freq.parallelConsumption.type,
@@ -204,57 +178,53 @@ const createPrescription = async (req, res) => {
               intervalHours: freq.frequentFrequency?.hours || 0,
               intervalMinutes: freq.frequentFrequency?.minutes || 0,
               totalDoses: freq.frequentFrequency?.doses || 1,
-              startTime: freq.parallelConsumption.schedule?.[0]?.time || "08:00",
+              startTime:
+                freq.parallelConsumption.schedule?.[0]?.time || "08:00",
             };
           }
         });
 
-        console.log("Processed frequencies:", frequencies);
-
         return {
-          medicineName: item.medicineName || '',
-          rawMaterialDetails: (item.rawMaterialDetails || []).map(rm => ({
+          medicineName: item.medicineName || "",
+          rawMaterialDetails: (item.rawMaterialDetails || []).map((rm) => ({
             _id: rm._id,
             name: rm.name,
             quantity: rm.quantity || 0,
             pricePerUnit: rm.pricePerUnit || 0,
-            totalPrice: rm.totalPrice || 0
+            totalPrice: rm.totalPrice || 0,
           })),
-          form: item.form || 'Tablets',
-          dispenseQuantity: item.dispenseQuantity || '',
-          duration: item.duration || '',
-          uom: item.uom || 'Pieces',
+          form: item.form || "Tablets",
+          dispenseQuantity: item.dispenseQuantity || "",
+          duration: item.duration || "",
+          uom: item.uom || "Pieces",
           price: item.price || 0,
-          additionalComments: item.additionalComments || '',
-          
-          // New frequency structure
-          frequencies: frequencies,
-          frequencyType: frequencies.length > 0 ? frequencies[0].frequencyType : "standard",
-          
-          // Legacy fields for backward compatibility
+          additionalComments: item.additionalComments || "",
+          medicineConsumption: item.medicineConsumption || "",
+          frequencies,
+          frequencyType:
+            frequencies.length > 0 ? frequencies[0].frequencyType : "standard",
           standardSchedule: legacyStandardSchedule,
           frequentSchedule: legacyFrequentSchedule,
           parallelConsumption: legacyParallelConsumption,
-          
-          // Individual item fields
-          prescriptionType: item.prescriptionType || 'Only Prescription',
-          consumptionType: item.consumptionType || 'Sequential',
-          label: item.label || 'A',
+          prescriptionType: item.prescriptionType || "Only Prescription",
+          consumptionType: item.consumptionType || "Sequential",
+          label: item.label || "A",
         };
       }),
       followUpDays: followUpDays || 10,
       medicineCharges: medicineCharges || 0,
       shippingCharges: shippingCharges || 0,
-      notes: notes || '',
+      notes: notes || "",
       medicineCourse,
-      action: action || { status: 'In Progress', closeComment: '' },
-      consultingType: consultingType || '',
-      consultingFor: consultingFor || ''
+      action: action || { status: "In Progress", closeComment: "" },
+      consultingType: consultingType || "",
+      consultingFor: consultingFor || "",
     });
 
     // Save prescription
     const savedPrescription = await prescription.save();
 
+    // Update appointment
     const patientAppointment = await Appointment.findById(appointmentID);
 
     if (!patientAppointment) {
@@ -265,7 +235,7 @@ const createPrescription = async (req, res) => {
     patientAppointment.prescriptionID = savedPrescription._id;
     await patientAppointment.save();
 
-    // If this is a sub-prescription, update parent prescription
+    // Update parent prescription if sub-prescription
     if (parentPrescriptionId) {
       await Prescription.findByIdAndUpdate(parentPrescriptionId, {
         $push: { subPrescriptionID: savedPrescription._id },
@@ -348,29 +318,28 @@ const getPrescriptionById = async (req, res) => {
     const { prescriptionId } = req.params;
 
     const prescription = await Prescription.findById(prescriptionId)
-      .populate('patientId', 'name age phone email')
-      .populate('doctorId', 'name email')
-      .populate('appointmentId', 'consultingType consultingFor appointmentDate')
-      .populate('subPrescriptionID');
+      .populate("patientId", "name age phone email")
+      .populate("doctorId", "name email")
+      .populate("appointmentId", "consultingType consultingFor appointmentDate")
+      .populate("subPrescriptionID");
 
     if (!prescription) {
       return res.status(404).json({
         success: false,
-        message: 'Prescription not found'
+        message: "Prescription not found",
       });
     }
 
     res.status(200).json({
       success: true,
-      data: prescription
+      data: prescription,
     });
-
   } catch (error) {
-    console.error('Error fetching prescription:', error);
+    console.error("Error fetching prescription:", error);
     res.status(500).json({
       success: false,
-      message: 'Internal server error',
-      error: error.message
+      message: "Internal server error",
+      error: error.message,
     });
   }
 };
@@ -386,7 +355,7 @@ const updatePrescription = async (req, res) => {
     if (!prescription) {
       return res.status(404).json({
         success: false,
-        message: 'Prescription not found'
+        message: "Prescription not found",
       });
     }
 
@@ -394,7 +363,7 @@ const updatePrescription = async (req, res) => {
     if (prescription.doctorId.toString() !== req.user.userId) {
       return res.status(403).json({
         success: false,
-        message: 'Not authorized to update this prescription'
+        message: "Not authorized to update this prescription",
       });
     }
 
@@ -403,21 +372,21 @@ const updatePrescription = async (req, res) => {
       prescriptionId,
       { ...updateData, updatedAt: Date.now() },
       { new: true, runValidators: true }
-    ).populate('patientId', 'name age phone email')
-     .populate('doctorId', 'name email');
+    )
+      .populate("patientId", "name age phone email")
+      .populate("doctorId", "name email");
 
     res.status(200).json({
       success: true,
-      message: 'Prescription updated successfully',
-      data: updatedPrescription
+      message: "Prescription updated successfully",
+      data: updatedPrescription,
     });
-
   } catch (error) {
-    console.error('Error updating prescription:', error);
+    console.error("Error updating prescription:", error);
     res.status(500).json({
       success: false,
-      message: 'Internal server error',
-      error: error.message
+      message: "Internal server error",
+      error: error.message,
     });
   }
 };
@@ -433,7 +402,7 @@ const closePrescription = async (req, res) => {
     if (!prescription) {
       return res.status(404).json({
         success: false,
-        message: 'Prescription not found'
+        message: "Prescription not found",
       });
     }
 
@@ -441,29 +410,28 @@ const closePrescription = async (req, res) => {
     if (prescription.doctorId.toString() !== req.user.userId) {
       return res.status(403).json({
         success: false,
-        message: 'Not authorized to close this prescription'
+        message: "Not authorized to close this prescription",
       });
     }
 
     // Update prescription status
-    prescription.action.status = 'Close';
-    prescription.action.closeComment = closeComment || '';
+    prescription.action.status = "Close";
+    prescription.action.closeComment = closeComment || "";
     prescription.updatedAt = Date.now();
 
     await prescription.save();
 
     res.status(200).json({
       success: true,
-      message: 'Prescription closed successfully',
-      data: prescription
+      message: "Prescription closed successfully",
+      data: prescription,
     });
-
   } catch (error) {
-    console.error('Error closing prescription:', error);
+    console.error("Error closing prescription:", error);
     res.status(500).json({
       success: false,
-      message: 'Internal server error',
-      error: error.message
+      message: "Internal server error",
+      error: error.message,
     });
   }
 };
@@ -472,20 +440,19 @@ const closePrescription = async (req, res) => {
 const getMedicines = async (req, res) => {
   try {
     const medicines = await Medicine.find()
-      .select('name form ingredients dosage')
+      .select("name form ingredients dosage")
       .sort({ name: 1 });
     console.log(medicines);
     res.status(200).json({
       success: true,
-      data: medicines
+      data: medicines,
     });
-
   } catch (error) {
-    console.error('Error fetching medicines:', error);
+    console.error("Error fetching medicines:", error);
     res.status(500).json({
       success: false,
-      message: 'Internal server error',
-      error: error.message
+      message: "Internal server error",
+      error: error.message,
     });
   }
 };
@@ -494,21 +461,20 @@ const getMedicines = async (req, res) => {
 const getRawMaterials = async (req, res) => {
   try {
     const rawMaterials = await RawMaterial.find({})
-      .select('name uom currentQuantity costPerUnit description')
+      .select("name uom currentQuantity costPerUnit description")
       .sort({ name: 1 });
 
-      console.log("rawMaterials:",rawMaterials);
+    console.log("rawMaterials:", rawMaterials);
     res.status(200).json({
       success: true,
-      data: rawMaterials
+      data: rawMaterials,
     });
-
   } catch (error) {
-    console.error('Error fetching raw materials:', error);
+    console.error("Error fetching raw materials:", error);
     res.status(500).json({
       success: false,
-      message: 'Internal server error',
-      error: error.message
+      message: "Internal server error",
+      error: error.message,
     });
   }
 };
@@ -528,8 +494,8 @@ const getDoctorPrescriptions = async (req, res) => {
 
     // Get prescriptions with pagination
     const prescriptions = await Prescription.find(query)
-      .populate('patientId', 'name age phone')
-      .populate('appointmentId', 'consultingType consultingFor')
+      .populate("patientId", "name age phone")
+      .populate("appointmentId", "consultingType consultingFor")
       .sort({ createdAt: -1 })
       .limit(limit * 1)
       .skip((page - 1) * limit);
@@ -537,8 +503,10 @@ const getDoctorPrescriptions = async (req, res) => {
     // Filter by patient name if provided
     let filteredPrescriptions = prescriptions;
     if (patientName) {
-      filteredPrescriptions = prescriptions.filter(prescription =>
-        prescription.patientId?.name?.toLowerCase().includes(patientName.toLowerCase())
+      filteredPrescriptions = prescriptions.filter((prescription) =>
+        prescription.patientId?.name
+          ?.toLowerCase()
+          .includes(patientName.toLowerCase())
       );
     }
 
@@ -636,11 +604,15 @@ const updateCloseComment = async (req, res) => {
   console.log("Request params:", req.params);
 
   if (!status) {
-    return res.status(400).json({ success: false, message: "Status is required" });
+    return res
+      .status(400)
+      .json({ success: false, message: "Status is required" });
   }
 
-  if (!['In Progress', 'Close'].includes(status)) {
-    return res.status(400).json({ success: false, message: "Invalid status value" });
+  if (!["In Progress", "Close"].includes(status)) {
+    return res
+      .status(400)
+      .json({ success: false, message: "Invalid status value" });
   }
 
   try {
@@ -657,7 +629,9 @@ const updateCloseComment = async (req, res) => {
     );
 
     if (!updatedPrescription) {
-      return res.status(404).json({ success: false, message: "Prescription not found" });
+      return res
+        .status(404)
+        .json({ success: false, message: "Prescription not found" });
     }
 
     res.status(200).json({ success: true, data: updatedPrescription });
@@ -678,5 +652,5 @@ module.exports = {
   getDoctorPrescriptions,
   getPrescriptionStats,
   postMedicine,
-  updateCloseComment
+  updateCloseComment,
 };
