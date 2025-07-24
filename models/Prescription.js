@@ -268,6 +268,29 @@ const prescriptionSchema = new mongoose.Schema({
     type: Number,
     default: 0,
   },
+  trackingId: { 
+    type: String, 
+    default: null 
+  },
+  isProductReceived: { 
+    type: Boolean, 
+    default: null, 
+    required:false 
+  },
+  isProductShipped: { 
+    type: Boolean, 
+    default: false 
+  },
+  shippedDate: {
+  type: Date,
+  default: null
+  },
+  startDate: { 
+    type: Date, 
+    required: false },
+  endDate: { 
+     type: Date,
+     default: null },
   notes: {
     type: String,
   },

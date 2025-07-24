@@ -61,10 +61,5 @@ default: false // Optional: can mirror status or be removed if redundant
 timestamps: true
 });
 
-// Enforce uniqueness per patient + medicine + date + time
-notificationReminderSettingsSchema.index(
-{ patientId: 1, medicineName: 1, date: 1, doseTime: 1 },
-{ unique: true }
-);
 
 module.exports = mongoose.model('NotificationReminderSettings', notificationReminderSettingsSchema);
