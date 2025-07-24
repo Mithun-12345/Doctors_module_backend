@@ -25,6 +25,8 @@ const {
   validateCoupon,
   fetchFamilyDetails,
   markProductReceived,
+  savePatientNotification,
+  updateReminderOffset
 } = require("../controllers/patientController");
 const {
   upload,
@@ -40,6 +42,7 @@ const {
   referFriendUI,
   appointments,
   getPatientPayments,
+
 } = require("../controllers/UIController");
 
 const validateToken = require("../middlewares/validateTokenHandler");
@@ -112,5 +115,6 @@ router.get("/pendingTransactions", validateToken, pendingTransactions);
 router.get("/referrals", validateToken, referFriendUI);
 router.get("/", validateToken, appointments);
 router.get("/patientPayments", validateToken, getPatientPayments);
-
+router.post("/storenotifications/:patientId", savePatientNotification);
+router.patch("/offset/:patientId", updateReminderOffset);       
 module.exports = router;

@@ -95,7 +95,7 @@ router.patch(
 );
 router.patch(
   "/prescriptions/:prescriptionId/tracking",
-  validateToken, // doctor token
+  validateToken, 
   updateTrackingId
 );
 router.get("/medications/summary/:doctorId", getDoctorPatientMedicationSummary);

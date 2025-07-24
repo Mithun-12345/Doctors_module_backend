@@ -26,6 +26,7 @@ const client = new twilio(accountSid, authToken);
 const bcrypt = require("bcrypt");
 const Prescription = require('../models/Prescription');
 const mongoose = require("mongoose");
+const PatientNotification = require("../models/PatientNotification");
 
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID;
 const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET;
@@ -2360,3 +2361,77 @@ exports.updateAppointment = async (req, res) => {
       .json({ message: "Error updating appointment", error: error.message });
   }
 };
+
+// Save a new patient notification
+exports.savePatientNotification = async function (req, res) {
+  try {
+    const { message } = req.body;
+    const { patientId } = req.params;
+
+    if (!patientId || !message) {
+      return res.status(400).json({ message: "Missing required fields" });
+    }
+
+    // Explicitly define only allowed fields
+    const notification = new PatientNotification({
+      patientId,
+      message
+    });
+
+    await notification.save();
+
+    return res.status(201).json({
+      message: "Notification saved",
+      data: {
+        _id: notification._id,
+        patientId: notification.patientId,
+        message: notification.message,
+        createdAt: notification.createdAt
+      }
+    });
+
+  } catch (err) {
+    console.error("Error saving notification:", err);
+    return res.status(500).json({
+      message: "Error saving notification",
+      error: err.message
+    });
+  }
+};
+
+exports.updateReminderOffset = async function (req, res) {
+  try {
+    const { reminderOffset } = req.body;
+    const { patientId } = req.params; 
+
+    if (!patientId || reminderOffset === undefined) {
+      return res.status(400).json({ message: "Missing patientId or reminderOffset" });
+    }
+
+    const updated = await Patient.findByIdAndUpdate(
+      patientId,
+      { reminderOffset },
+      { new: true }
+    );
+
+    if (!updated) {
+      return res.status(404).json({ message: "Patient not found" });
+    }
+
+    return res.status(200).json({
+      message: "Reminder offset updated",
+      reminderOffset: updated.reminderOffset
+    });
+
+  } catch (err) {
+    console.error("Error updating reminder offset:", err);
+    return res.status(500).json({
+      message: "Error updating reminder offset",
+      error: err.message
+    });
+  }
+};
+
+
+
+

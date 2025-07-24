@@ -118,6 +118,11 @@ const patientSchema = new mongoose.Schema(
       type: Date,
       default: null, // Set this when the follow-up status transitions to 'Follow up-Mship'
     },
+    reminderOffset: {
+      type: Number,
+     enum: [5, 10, 15],
+     default: 10, // or choose your default
+    },
   },
   { timestamps: true }
 );
