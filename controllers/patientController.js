@@ -27,6 +27,7 @@ const bcrypt = require("bcrypt");
 const Prescription = require('../models/Prescription');
 const mongoose = require("mongoose");
 const PatientNotification = require("../models/PatientNotification");
+const NotificationReminderSettings = require('../models/NotificationReminderSettings');
 
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID;
 const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET;
@@ -2432,6 +2433,66 @@ exports.updateReminderOffset = async function (req, res) {
   }
 };
 
+
+exports.getPrescriptionsGroupedByPrescriptionId = asyncHandler(async (req, res) => {
+  const { patientId } = req.params;
+
+  // 1. Get reminders for this patient
+  const reminders = await NotificationReminderSettings.find({ patientId })
+    .select("prescriptionId medicineName date doseTime")
+    .populate("prescriptionId", "_id")
+    .sort({ prescriptionId: 1, date: 1 });
+
+  // 2. Group reminders by prescriptionId
+  const grouped = reminders.reduce((acc, curr) => {
+    const key = curr.prescriptionId?._id?.toString() || "Unlinked";
+    if (!acc[key]) acc[key] = [];
+    acc[key].push({
+      medicineName: curr.medicineName,
+      date: curr.date,
+      doseTime: curr.doseTime,
+    });
+    return acc;
+  }, {});
+
+  // 3. Fetch patient name
+  const patient = await Patient.findById(patientId).select("name");
+  const patientName = patient?.name || "Unknown Patient";
+
+  // 4. Fetch all prescriptions for this patient
+  const prescriptionIds = Object.keys(grouped);
+  const prescriptions = await Prescription.find({ _id: { $in: prescriptionIds } })
+    .populate("doctorId", "name")
+    .select("label startDate endDate medicineCourse consultingFor notes doctorId");
+
+  // 5. Map prescription metadata by ID
+  const prescriptionMeta = {};
+  prescriptions.forEach((pres) => {
+    prescriptionMeta[pres._id] = {
+      label: pres.label,
+      startDate: pres.startDate,
+      endDate: pres.endDate,
+      medicineCourse: pres.medicineCourse,
+      consultingFor: pres.consultingFor,
+      notes: pres.notes,
+      doctorName: pres.doctorId?.name || "Unknown Doctor",
+    };
+  });
+
+  // 6. Build final response
+  const result = {};
+  for (const id of Object.keys(grouped)) {
+    result[id] = {
+      metadata: prescriptionMeta[id] || {},
+      reminders: grouped[id],
+    };
+  }
+
+  res.status(200).json({
+    patientName,
+    prescriptions: result,
+  });
+});
 
 
 

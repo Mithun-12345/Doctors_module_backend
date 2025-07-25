@@ -25,6 +25,7 @@ const {
   validateCoupon,
   fetchFamilyDetails,
   markProductReceived,
+  getPrescriptionsGroupedByPrescriptionId,
   savePatientNotification,
   updateReminderOffset
 } = require("../controllers/patientController");
@@ -116,5 +117,6 @@ router.get("/referrals", validateToken, referFriendUI);
 router.get("/", validateToken, appointments);
 router.get("/patientPayments", validateToken, getPatientPayments);
 router.post("/storenotifications/:patientId", savePatientNotification);
-router.patch("/offset/:patientId", updateReminderOffset);       
+router.patch("/offset/:patientId", updateReminderOffset);   
+router.get('/prescriptions/grouped/:patientId', getPrescriptionsGroupedByPrescriptionId);    
 module.exports = router;

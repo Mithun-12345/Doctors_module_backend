@@ -866,7 +866,6 @@ exports.getDoctorPatientMedicationSummary = async (req, res) => {
       return res.status(400).json({ message: "Doctor ID and date are required" });
     }
 
-    // Ensure UTC consistency — clear hours to 00:00 UTC
     const selectedDateUTC = new Date(date);
     selectedDateUTC.setUTCHours(0, 0, 0, 0);
 
@@ -952,7 +951,7 @@ exports.getDoctorPatientMedicationSummary = async (req, res) => {
 
     return res.status(200).json(response);
   } catch (error) {
-    console.error("❌ Error in getDoctorPatientMedicationSummary:", error);
+    console.error("Error in getDoctorPatientMedicationSummary:", error);
     return res.status(500).json({ message: "Server error", error });
   }
 };
