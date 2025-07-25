@@ -29,6 +29,8 @@ const mongoose = require("mongoose");
 const PatientNotification = require("../models/PatientNotification");
 const NotificationReminderSettings = require('../models/NotificationReminderSettings');
 
+
+
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID;
 const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET;
 const GOOGLE_REDIRECT_URI = process.env.GOOGLE_REDIRECT_URI;
@@ -2432,8 +2434,6 @@ exports.updateReminderOffset = async function (req, res) {
     });
   }
 };
-
-
 exports.getPrescriptionsGroupedByPrescriptionId = asyncHandler(async (req, res) => {
   const { patientId } = req.params;
 
@@ -2492,7 +2492,93 @@ exports.getPrescriptionsGroupedByPrescriptionId = asyncHandler(async (req, res) 
     patientName,
     prescriptions: result,
   });
-});
+}); 
+
+exports.getPatientMedicationSummary = async (req, res) => {
+  try {
+    const { patientId } = req.params;
+    const { date } = req.query;
+
+    if (!patientId || !date) {
+      return res.status(400).json({ message: "Patient ID and date are required" });
+    }
+
+    const selectedDateUTC = new Date(date);
+    selectedDateUTC.setUTCHours(0, 0, 0, 0);
+
+    const nextDateUTC = new Date(selectedDateUTC);
+    nextDateUTC.setUTCDate(selectedDateUTC.getUTCDate() + 1);
+
+    console.log("✅ Fetching medication summary for patientId:", patientId, "on date:", selectedDateUTC.toISOString());
+
+    const reminders = await NotificationReminderSettings.find({
+      patientId,
+      date: {
+        $gte: selectedDateUTC,
+        $lt: nextDateUTC
+      }
+    }).lean();
+
+    if (!reminders.length) {
+      return res.status(404).json({ message: "No reminders found for this patient on selected date" });
+    }
+
+    const patient = await Patient.findById(patientId).lean();
+    const meta = await Patient.findById(patientId).lean(); // or findOne({ _id: patientId })
+
+
+    const taken = [], missed = [], pending = [], viewMedications = [];
+
+    for (const reminder of reminders) {
+      const base = {
+        medicineName: reminder.medicineName || "",
+        doseTime: reminder.doseTime || ""
+      };
+
+      if (reminder.status === true) {
+        taken.push(base);
+        viewMedications.push({ ...base, status: "taken" });
+      } else if (reminder.status === false) {
+        missed.push(base);
+        viewMedications.push({ ...base, status: "missed" });
+      } else {
+        pending.push(base);
+        viewMedications.push({ ...base, status: "pending" });
+      }
+    }
+
+    const response = {
+      patientId,
+      name: patient?.name || "",
+      age: patient?.age || "",
+      gender: patient?.gender || "",
+      diseaseName: meta?.diseaseName || "",
+      diseaseType: meta?.diseaseType?.name || "",
+
+      doses: {
+        taken: {
+          count: taken.length,
+          data: taken
+        },
+        missed: {
+          count: missed.length,
+          data: missed
+        },
+        pending: {
+          count: pending.length,
+          data: pending
+        }
+      },
+
+      viewMedications
+    };
+
+    return res.status(200).json(response);
+  } catch (error) {
+    console.error("❌ Error in getPatientMedicationSummary:", error);
+    return res.status(500).json({ message: "Server error", error });
+  }
+};
 
 
 
