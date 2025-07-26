@@ -1310,7 +1310,7 @@ return res.status(200).json({
   message: "Product confirmed as received"
 });
 } catch (error) {
-console.error("💥 Error acknowledging receipt:", error);
+console.error("Error acknowledging receipt:", error);
 return res.status(500).json({ message: "Internal server error", error: error.message });
 }
 };
@@ -1332,15 +1332,12 @@ exports.referFriend = asyncHandler(async (req, res) => {
   };
 
   try {
-    // Check if the referrer is a registered patient
     const referrer = await Patient.findOne({ phone: referrerPhone });
     if (!referrer) {
       return res
         .status(404)
         .json({ success: false, message: "Referrer not found" });
     }
-
-    // Check if referrer has made at least one appointment
     const appointmentBooked = await Appointment.findOne({
       patient: referrer._id,
     });
@@ -1361,36 +1358,25 @@ exports.referFriend = asyncHandler(async (req, res) => {
         .json({ message: "Patient with this mobile number already exists!" });
     }
 
-    // Check if a referral for this friend already exists
     let referral = await Referral.findOne({
       referredFriendPhone: friendPhone,
-      referrerId: referrer._id, // Match the same referrer
+      referrerId: referrer._id, 
     });
     if (referral) {
-      // If the current user has already referred this friend, don't allow duplication
       return res
         .status(400)
         .json({ message: "You have already referred this friend!" });
     } else {
-      // Create a new referral document for the friend
       referral = await Referral.create({
         code: coupon,
-        referrerId: referrer._id, // The referrer's ID
-        referredFriendPhone: friendPhone, // The phone of the friend being referred
+        referrerId: referrer._id,
+        referredFriendPhone: friendPhone, 
         referredFriendName: friendName,
-        expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), // 30 days from now
+        expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), 
       });
     }
-    // Also pass the referee phone and name via query
-    // Send an SMS to the friend with the registration link
     const referralLink = `https://localhost:5173/firstform?code=${coupon}`;
     console.log(referralLink);
-    // await client.messages.create({
-    //   body: `Hi ${friendName}, you've been referred by ${referrer.phone}. Click here to register: ${referralLink}`,
-    //   from: "+12512728851", // Replace with your Twilio phone number
-    //   to: friendPhone,
-    // });
-
     res.status(200).json({
       success: true,
       message: "Referral sent successfully",
@@ -1442,7 +1428,6 @@ exports.addFamily = async (req, res) => {
         .json({ success: false, message: "User not found" });
     }
 
-    // Check if User has made at least one appointment
     const appointmentBooked = await Appointment.findOne({
       patient: User._id,
     });
@@ -1456,7 +1441,6 @@ exports.addFamily = async (req, res) => {
       relationship.toLowerCase() !== "son" &&
       relationship.toLowerCase() !== "daughter"
     ) {
-      // Check if the `relationship` already exists in the user's familyMembers
       const isPatientExists = User.familyMembers.some(
         (member) => member.relationship === relationship
       );
@@ -1468,7 +1452,6 @@ exports.addFamily = async (req, res) => {
         });
       }
 
-      // Check if the `relationship` already exists in the `familyLink` collection
       const isFamilyLinkExists = await FamilyLink.findOne({
         userId: User._id,
         relationship: relationship,
@@ -1519,9 +1502,9 @@ exports.addFamily = async (req, res) => {
       });
 
       if (family) {
-        // Update existing referral with a new coupon code
+        
         family.token = token;
-        //family.referrerId = referrer._id; // Update the referrer if needed
+
         await family.save();
       } else {
         await FamilyLink.create({
@@ -1534,12 +1517,6 @@ exports.addFamily = async (req, res) => {
       }
 
       const link = `https://localhost:5173/firstform?familyToken=${token}`;
-
-      // await client.messages.create({
-      //   body: `Hi ${familyMemberName}, you've been referred by ${User.phone}. Click here to register: ${link}`,
-      //   from: "+12512728851", // Replace with your Twilio phone number
-      //   to: friendPhone,
-      // });
 
       console.log(link);
       res.status(200).json({
@@ -1570,13 +1547,12 @@ exports.addFamily = async (req, res) => {
       const existingPatient = await Patient.findOne({ phone });
 
       if (existingPatient) {
-        // If patient already exists, return an error response
+        
         return res.status(400).json({
           message: "Patient with this mobile number already exists",
         });
       }
       const currentLocation = country + ", " + state + ", " + city;
-      // Create a new patient document
       const patientDocument = new Patient({
         name,
         age,
@@ -2437,24 +2413,86 @@ exports.updateReminderOffset = async function (req, res) {
 exports.getPrescriptionsGroupedByPrescriptionId = asyncHandler(async (req, res) => {
   const { patientId } = req.params;
 
-  const prescriptions = await Prescription.find({ patientId })
+  // 1. Get reminders for this patient
+  const reminders = await NotificationReminderSettings.find({ patientId })
+    .select("prescriptionId medicineName date doseTime")
+    .populate("prescriptionId", "_id")
+    .sort({ prescriptionId: 1, date: 1 });
+
+  // 2. Group reminders by prescriptionId
+  const grouped = reminders.reduce((acc, curr) => {
+    const key = curr.prescriptionId?._id?.toString() || "Unlinked";
+    if (!acc[key]) acc[key] = [];
+    acc[key].push({
+      medicineName: curr.medicineName,
+      date: curr.date,
+      doseTime: curr.doseTime,
+    });
+    return acc;
+  }, {});
+
+  // 3. Fetch patient name
+  const patient = await Patient.findById(patientId).select("name");
+  const patientName = patient?.name || "Unknown Patient";
+
+  // 4. Fetch all prescriptions for this patient
+  const prescriptionIds = Object.keys(grouped);
+  const prescriptions = await Prescription.find({ _id: { $in: prescriptionIds } })
     .populate("doctorId", "name")
-    .select("startDate endDate consultingFor doctorId");
+    .select("label startDate endDate medicineCourse consultingFor notes doctorId");
 
-  const result = {};
-
+  // 5. Map prescription metadata by ID
+  const prescriptionMeta = {};
   prescriptions.forEach((pres) => {
-    result[pres._id] = {
-      metadata: {
-        startDate: pres.startDate,
-        endDate: pres.endDate,
-        consultingFor: pres.consultingFor,
-        doctorName: pres.doctorId?.name || "Unknown Doctor",
-      },
+    prescriptionMeta[pres._id] = {
+      label: pres.label,
+      startDate: pres.startDate,
+      endDate: pres.endDate,
+      medicineCourse: pres.medicineCourse,
+      consultingFor: pres.consultingFor,
+      notes: pres.notes,
+      doctorName: pres.doctorId?.name || "Unknown Doctor",
     };
   });
 
+  // 6. Build final response with medicineDurations
+  const result = {};
+
+  for (const id of Object.keys(grouped)) {
+    const reminders = grouped[id];
+
+    // Group reminders by medicineName
+    const medicineMap = {};
+    reminders.forEach(({ medicineName, date }) => {
+      if (!medicineMap[medicineName]) {
+        medicineMap[medicineName] = new Set();
+      }
+      medicineMap[medicineName].add(new Date(date).toDateString());
+    });
+
+    // Convert sets to duration info
+    const medicineDurations = Object.entries(medicineMap).map(
+      ([medicineName, dateSet]) => {
+        const datesArray = Array.from(dateSet).map((d) => new Date(d));
+        const sortedDates = datesArray.sort((a, b) => a - b);
+        return {
+          medicineName,
+          startDate: sortedDates[0],
+          endDate: sortedDates[sortedDates.length - 1],
+          numberOfDays: dateSet.size,
+        };
+      }
+    );
+
+    result[id] = {
+      metadata: prescriptionMeta[id] || {},
+      reminders,
+      medicineDurations,
+    };
+  }
+
   res.status(200).json({
+    patientName,
     prescriptions: result,
   });
 });
@@ -2544,6 +2582,46 @@ exports.getPatientMedicationSummary = async (req, res) => {
     return res.status(500).json({ message: "Server error", error });
   }
 };
+exports.getPrescriptionsGroupedByWeekAndDay = asyncHandler(async (req, res) => {
+  const { patientId } = req.params;
+
+  // 1. Get reminders for this patient
+  const reminders = await NotificationReminderSettings.find({ patientId })
+    .select("prescriptionId medicineName date doseTime")
+    .populate("prescriptionId", "_id startDate endDate")
+    .sort({ "prescriptionId.startDate": 1, date: 1 });
+
+  // 2. Group by custom week number (based on prescription start date)
+  const weekMap = {};
+
+  reminders.forEach((reminder) => {
+    const dateObj = new Date(reminder.date);
+    const startDate = new Date(reminder.prescriptionId.startDate);
+    const diffInMs = dateObj - startDate;
+    const diffInDays = Math.floor(diffInMs / (1000 * 60 * 60 * 24));
+    const weekNumber = Math.floor(diffInDays / 7) + 1;
+
+    const dayName = dateObj.toLocaleDateString("en-US", { weekday: "long" });
+    const dayString = dateObj.toISOString().split("T")[0]; // YYYY-MM-DD
+
+    if (!weekMap[`Week ${weekNumber}`]) {
+      weekMap[`Week ${weekNumber}`] = {};
+    }
+
+    if (!weekMap[`Week ${weekNumber}`][`Day ${dayName}`]) {
+      weekMap[`Week ${weekNumber}`][`Day ${dayName}`] = [];
+    }
+
+    weekMap[`Week ${weekNumber}`][`Day ${dayName}`].push({
+      medicineName: reminder.medicineName,
+      date: dayString,
+      day: dayName,
+      doseTime: reminder.doseTime,
+    });
+  });
+
+  res.status(200).json(weekMap);
+});
 
 
 

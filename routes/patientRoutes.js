@@ -26,6 +26,7 @@ const {
   fetchFamilyDetails,
   markProductReceived,
   getPrescriptionsGroupedByPrescriptionId,
+  getPrescriptionsGroupedByWeekAndDay,
   savePatientNotification,
   getPatientMedicationSummary,
   updateReminderOffset
@@ -124,5 +125,6 @@ router.get(
   "/medication-summary/:patientId",
   getPatientMedicationSummary
 );
+router.get('/prescriptions/week-view/:patientId', getPrescriptionsGroupedByWeekAndDay);
 
 module.exports = router;
