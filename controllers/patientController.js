@@ -2582,46 +2582,56 @@ exports.getPatientMedicationSummary = async (req, res) => {
     return res.status(500).json({ message: "Server error", error });
   }
 };
+
 exports.getPrescriptionsGroupedByWeekAndDay = asyncHandler(async (req, res) => {
   const { patientId } = req.params;
 
-  // 1. Get reminders for this patient
   const reminders = await NotificationReminderSettings.find({ patientId })
-    .select("prescriptionId medicineName date doseTime")
+    .select("prescriptionId medicineName date doseTime status")
     .populate("prescriptionId", "_id startDate endDate")
-    .sort({ "prescriptionId.startDate": 1, date: 1 });
+    .sort({ date: 1 });
 
-  // 2. Group by custom week number (based on prescription start date)
+  if (reminders.length === 0) {
+    return res.status(200).json({});
+  }
+
+  // Get the earliest medicine date from reminders
+  const firstReminderDate = new Date(reminders[0].date);
+  firstReminderDate.setUTCHours(0, 0, 0, 0);
+
+  const dayOfWeek = firstReminderDate.getUTCDay(); // 0 (Sun) - 6 (Sat)
+  const daysSinceMonday = (dayOfWeek + 6) % 7; // Makes Monday = 0
+  const startOfWeekOne = new Date(firstReminderDate);
+  startOfWeekOne.setUTCDate(startOfWeekOne.getUTCDate() - daysSinceMonday);
+  startOfWeekOne.setUTCHours(0, 0, 0, 0);
+
+  const msPerDay = 1000 * 60 * 60 * 24;
+  const dayNames = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
   const weekMap = {};
 
   reminders.forEach((reminder) => {
     const dateObj = new Date(reminder.date);
-    const startDate = new Date(reminder.prescriptionId.startDate);
-    const diffInMs = dateObj - startDate;
-    const diffInDays = Math.floor(diffInMs / (1000 * 60 * 60 * 24));
+    dateObj.setUTCHours(0, 0, 0, 0);
+
+    const diffInDays = Math.floor((dateObj - startOfWeekOne) / msPerDay);
     const weekNumber = Math.floor(diffInDays / 7) + 1;
 
-    const dayName = dateObj.toLocaleDateString("en-US", { weekday: "long" });
-    const dayString = dateObj.toISOString().split("T")[0]; // YYYY-MM-DD
+    const dayName = dayNames[dateObj.getUTCDay()];
+    const dayKey = `Day ${dayName}`;
+    const weekKey = `Week ${weekNumber}`;
+    const dayString = dateObj.toISOString().split("T")[0];
 
-    if (!weekMap[`Week ${weekNumber}`]) {
-      weekMap[`Week ${weekNumber}`] = {};
-    }
+    if (!weekMap[weekKey]) weekMap[weekKey] = {};
+    if (!weekMap[weekKey][dayKey]) weekMap[weekKey][dayKey] = [];
 
-    if (!weekMap[`Week ${weekNumber}`][`Day ${dayName}`]) {
-      weekMap[`Week ${weekNumber}`][`Day ${dayName}`] = [];
-    }
-
-    weekMap[`Week ${weekNumber}`][`Day ${dayName}`].push({
+    weekMap[weekKey][dayKey].push({
       medicineName: reminder.medicineName,
       date: dayString,
       day: dayName,
       doseTime: reminder.doseTime,
+      status: reminder.status,
     });
   });
 
   res.status(200).json(weekMap);
 });
-
-
-
