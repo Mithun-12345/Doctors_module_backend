@@ -9,7 +9,6 @@ router.get('/raw-materials/:id',  rawMaterialController.getRawMaterial);
 router.post('/raw-materials',  rawMaterialController.createRawMaterial);
 router.put('/raw-materials/:id',  rawMaterialController.updateRawMaterial);
 router.delete('/raw-materials/:id',  rawMaterialController.deleteRawMaterial);
-
 router.get('/medicines', medicineController.getAllMedicines);
 router.post('/medicines', medicineController.createMedicine);
 router.post('/medicines/calculate-price', medicineController.calculatePrice);
@@ -21,5 +20,6 @@ router.post(
   validateToken, 
   rawMaterialController.reduceQuantity
 );
+router.get("/barcode/:barcode",rawMaterialController.getRawMaterialByBarcode);
 
 module.exports = router;

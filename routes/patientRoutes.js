@@ -118,13 +118,13 @@ router.get("/pendingTransactions", validateToken, pendingTransactions);
 router.get("/referrals", validateToken, referFriendUI);
 router.get("/", validateToken, appointments);
 router.get("/patientPayments", validateToken, getPatientPayments);
-router.post("/storenotifications/:patientId", savePatientNotification);
+router.post("/storenotifications/:patientId",validateToken, savePatientNotification);
 router.patch("/offset/:patientId", updateReminderOffset);   
-router.get('/prescriptions/grouped/:patientId', getPrescriptionsGroupedByPrescriptionId); 
+router.get('/prescriptions/grouped/:patientId',validateToken, getPrescriptionsGroupedByPrescriptionId); 
 router.get(
-  "/medication-summary/:patientId",
+  "/medication-summary/:patientId",validateToken,
   getPatientMedicationSummary
 );
-router.get('/prescriptions/week-view/:patientId', getPrescriptionsGroupedByWeekAndDay);
+router.get('/prescriptions/week-view/:patientId', validateToken,getPrescriptionsGroupedByWeekAndDay);
 
 module.exports = router;

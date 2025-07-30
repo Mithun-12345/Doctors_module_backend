@@ -692,7 +692,6 @@ exports.startPrescription = async (req, res) => {
       } = med || {};
 
       // Standard Schedule
-      // Standard Schedule
 for (const sched of standardSchedule) {
   const { day, timing = {} } = sched;
   if (!day || !timing || typeof timing !== "object") continue;
@@ -838,7 +837,7 @@ exports.getDeliveryStatusByPatient = async (req, res) => {
 
     res.json(simplified);
   } catch (error) {
-    console.error("❌ Error fetching delivery status:", error);
+    console.error("Error fetching delivery status:", error);
     res.status(500).json({ message: "Internal server error" });
   }
 };
@@ -871,8 +870,6 @@ exports.getDoctorPatientMedicationSummary = async (req, res) => {
 
     const nextDateUTC = new Date(selectedDateUTC);
     nextDateUTC.setUTCDate(selectedDateUTC.getUTCDate() + 1);
-
-    console.log("✅ Fetching medication summary for doctorId:", doctorId, "on date:", selectedDateUTC.toISOString());
 
     const reminders = await NotificationReminderSettings.find({
       doctorId,

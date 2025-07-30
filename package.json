@@ -17,6 +17,7 @@
     "axios": "^1.10.0",
     "bcrypt": "^5.1.1",
     "bcryptjs": "^2.4.3",
+    "bwip-js": "^4.7.0",
     "cloudinary": "^1.41.3",
     "cors": "^2.8.5",
     "date-fns": "^4.1.0",
@@ -47,6 +48,7 @@
     "pdfkit": "^0.15.1",
     "razorpay": "^2.9.6",
     "socket.io": "^4.7.5",
+    "streamifier": "^0.1.1",
     "twilio": "^5.2.3",
     "zoomus": "^0.1.4"
   },
