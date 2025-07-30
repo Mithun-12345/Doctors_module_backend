@@ -242,10 +242,10 @@ exports.thresholdcalculator = async(req,res)=>{
 
 exports.particularRawmaterial = async (req,res)=>{
   try{
-    const {name} = req.body;
+    const {_id} = req.body;
 
-    if(!name){
-      return res.status(400).json({ message: 'Name field is required.' });
+    if(!_id){
+      return res.status(400).json({ message: 'Id field is required.' });
     }
 
     const output = await RawMaterial.find({name : name});
@@ -266,10 +266,10 @@ exports.particularRawmaterial = async (req,res)=>{
 
 exports.ammendmentlogupdation = async (req, res) => {
   try {
-    const { name, ...updateFields } = req.body;
+    const { _id, ...updateFields } = req.body;
 
-    if (!name) {
-      return res.status(400).json({ message: 'Name field is required.' });
+    if (!_id) {
+      return res.status(400).json({ message: 'Id field is required.' });
     }
 
     if (Object.keys(updateFields).length === 0) {
