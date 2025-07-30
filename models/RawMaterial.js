@@ -20,7 +20,7 @@ const rawMaterialSchema = new mongoose.Schema({
   costPerUnit: { type: Number, required: true, min: 0 },
 
   // New field
-  Ammendment: { type: Boolean, required: false },
+  Ammendment: { type: Boolean, required: false,default: false },
 
   createdAt: { type: Date, default: Date.now },
   updatedAt: { type: Date, default: Date.now }
