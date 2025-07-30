@@ -2512,7 +2512,7 @@ exports.getPatientMedicationSummary = async (req, res) => {
     const nextDateUTC = new Date(selectedDateUTC);
     nextDateUTC.setUTCDate(selectedDateUTC.getUTCDate() + 1);
 
-    console.log("✅ Fetching medication summary for patientId:", patientId, "on date:", selectedDateUTC.toISOString());
+    console.log("Fetching medication summary for patientId:", patientId, "on date:", selectedDateUTC.toISOString());
 
     const reminders = await NotificationReminderSettings.find({
       patientId,
@@ -2578,7 +2578,7 @@ exports.getPatientMedicationSummary = async (req, res) => {
 
     return res.status(200).json(response);
   } catch (error) {
-    console.error("❌ Error in getPatientMedicationSummary:", error);
+    console.error("Error in getPatientMedicationSummary:", error);
     return res.status(500).json({ message: "Server error", error });
   }
 };
