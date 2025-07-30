@@ -292,7 +292,7 @@ exports.ammendmentlogupdation = async (req, res) => {
       return res.status(404).json({ message: 'No matching documents found.' });
     }
 
-    res.json({ message: Successfully updated ${result.modifiedCount} documents. });
+    res.json({ message: `Successfully updated ${result.modifiedCount} documents.` });
   } catch (error) {
     console.error('Error updating documents:', error);
     res.status(500).json({ message: 'Server error.' });
