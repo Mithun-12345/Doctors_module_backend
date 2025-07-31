@@ -189,9 +189,10 @@ exports.updateRawMaterial = async (req, res) => {
       // Compare expiryDate or other Date fields as-is
       if (oldVal instanceof Date && newVal instanceof Date) {
         if (oldVal.getTime() !== newVal.getTime()) {
-          changes[key] = `${oldVal} → ${newVal}`;
-        }
-      }
+          changes[key] = {
+                 from: oldVal,
+                 to: newVal
+                          };}}
       // Compare all other fields normally
       else if (oldVal !== newVal) {
         changes[key] = `${oldVal} → ${newVal}`;
