@@ -161,7 +161,7 @@ exports.updateRawMaterial = async (req, res) => {
   try {
     const updatePayload = {
       ...req.body,
-      updatedAt: new Date()
+      updatedAt: new Date() // Keep as real Date
     };
 
     // Fetch original document before update
@@ -177,22 +177,23 @@ exports.updateRawMaterial = async (req, res) => {
       { new: true, runValidators: true }
     );
 
-    // Detect differences
+    // Detect differences without formatting
     const changes = {};
     for (const key in updatePayload) {
       const oldVal = originalDoc[key];
       const newVal = updatePayload[key];
 
-      // Skip if unchanged or undefined
+      // Skip comparison if either is undefined
       if (oldVal === undefined || newVal === undefined) continue;
 
-      if (key === 'expiryDate') {
-        const oldDate = new Date(oldVal).toISOString().split('T')[0];
-        const newDate = new Date(newVal).toISOString().split('T')[0];
-        if (oldDate !== newDate) {
-          changes[key] = `${oldDate} → ${newDate}`;
+      // Compare expiryDate or other Date fields as-is
+      if (oldVal instanceof Date && newVal instanceof Date) {
+        if (oldVal.getTime() !== newVal.getTime()) {
+          changes[key] = `${oldVal} → ${newVal}`;
         }
-      } else if (oldVal !== newVal) {
+      }
+      // Compare all other fields normally
+      else if (oldVal !== newVal) {
         changes[key] = `${oldVal} → ${newVal}`;
       }
     }
@@ -201,7 +202,7 @@ exports.updateRawMaterial = async (req, res) => {
     if (Object.keys(changes).length > 0) {
       await AmendmentHistory.create({
         rawMaterialId: req.params.id,
-        updatedBy: 'System', // Replace with req.user.name if auth exists
+        updatedBy: 'System', // Replace with req.user.name if available
         changes,
         updatedAt: updatePayload.updatedAt
       });
