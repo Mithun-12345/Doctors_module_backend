@@ -159,56 +159,59 @@ exports.createRawMaterial = async (req, res) => {
 // Update a raw material
 exports.updateRawMaterial = async (req, res) => {
   try {
-    req.body.updatedAt = new Date();
+    const updatePayload = {
+      ...req.body,
+      updatedAt: new Date()
+    };
 
-    // Get the original document before update
+    // Fetch original document before update
     const originalDoc = await RawMaterial.findById(req.params.id).lean();
     if (!originalDoc) {
       return res.status(404).json({ message: 'Raw material not found' });
     }
 
     // Perform the update
-    const updatedRawMaterial = await RawMaterial.findByIdAndUpdate(
+    const updatedDoc = await RawMaterial.findByIdAndUpdate(
       req.params.id,
-      req.body,
+      updatePayload,
       { new: true, runValidators: true }
     );
 
-    // Detect changes between original and updated
+    // Detect differences
     const changes = {};
-    for (const key in req.body) {
-      if (req.body[key] !== undefined && originalDoc[key] !== undefined) {
-        const oldVal = originalDoc[key];
-        const newVal = req.body[key];
+    for (const key in updatePayload) {
+      const oldVal = originalDoc[key];
+      const newVal = updatePayload[key];
 
-        // Special case for date comparison
-        if (key === 'expiryDate') {
-          const oldDate = new Date(oldVal).toISOString();
-          const newDate = new Date(newVal).toISOString();
-          if (oldDate !== newDate) {
-            changes[key] = `${oldDate.split('T')[0]} → ${newDate.split('T')[0]}`;
-          }
-        } else if (oldVal !== newVal) {
-          changes[key] = `${oldVal} → ${newVal}`;
+      // Skip if unchanged or undefined
+      if (oldVal === undefined || newVal === undefined) continue;
+
+      if (key === 'expiryDate') {
+        const oldDate = new Date(oldVal).toISOString().split('T')[0];
+        const newDate = new Date(newVal).toISOString().split('T')[0];
+        if (oldDate !== newDate) {
+          changes[key] = `${oldDate} → ${newDate}`;
         }
+      } else if (oldVal !== newVal) {
+        changes[key] = `${oldVal} → ${newVal}`;
       }
     }
 
-    // Log the amendment if any changes occurred
+    // Save amendment history if changes exist
     if (Object.keys(changes).length > 0) {
       await AmendmentHistory.create({
         rawMaterialId: req.params.id,
-        updatedBy: 'System', // Or dynamically from req.user.name if auth is used
+        updatedBy: 'System', // Replace with req.user.name if auth exists
         changes,
-        updatedAt: req.body.updatedAt
+        updatedAt: updatePayload.updatedAt
       });
     }
 
     res.status(200).json({
       message: 'Raw material updated successfully',
       original: originalDoc,
-      changes,
-      updated: updatedRawMaterial
+      updated: updatedDoc,
+      changes
     });
   } catch (error) {
     res.status(400).json({
@@ -217,6 +220,7 @@ exports.updateRawMaterial = async (req, res) => {
     });
   }
 };
+
 
 // Delete a raw material
 exports.deleteRawMaterial = async (req, res) => {
