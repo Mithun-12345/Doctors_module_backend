@@ -39,6 +39,8 @@ router.patch('/amendmentLogEdit',rawMaterialController.ammendmentlogupdation);
 // get all the updated values where ammendent = true 
 
 router.get('/getupdateddocument',rawMaterialController.getAllUpdateddocument);
+router.get('/fetchAllAmendmentHistories', rawMaterialController.fetchAllAmendmentHistories);
+
 
 
 module.exports = router;

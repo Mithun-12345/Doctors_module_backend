@@ -367,3 +367,31 @@ exports.getAllUpdateddocument = async (req,res)=>{
     res.status(500).json({ message: 'Server error.' });
   }
 }
+exports.fetchAllAmendmentHistories = async (req, res) => {
+  try {
+    // Populate rawMaterial info (to get name/type/category etc.)
+    const histories = await AmendmentHistory.find().lean();
+
+    // Fetch raw material names in bulk
+    const rawMaterialIds = histories.map(h => h.rawMaterialId);
+    const rawMaterialsMap = await RawMaterial.find({ _id: { $in: rawMaterialIds } })
+      .select('name')
+      .lean()
+      .then(results =>
+        results.reduce((acc, item) => {
+          acc[item._id.toString()] = item.name;
+          return acc;
+        }, {})
+      );
+
+    // Attach the name to each history record
+    const enrichedHistories = histories.map(h => ({
+      ...h,
+      rawMaterialName: rawMaterialsMap[h.rawMaterialId.toString()] || 'Unknown',
+    }));
+
+    res.status(200).json(enrichedHistories);
+  } catch (error) {
+    res.status(500).json({ message: 'Failed to fetch amendment histories', error: error.message });
+  }
+};
