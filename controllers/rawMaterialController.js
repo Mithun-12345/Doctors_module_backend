@@ -161,7 +161,7 @@ exports.updateRawMaterial = async (req, res) => {
   try {
     const updatePayload = {
       ...req.body,
-      updatedAt: new Date() // Keep as real Date
+      updatedAt: new Date()
     };
 
     // Fetch original document before update
@@ -177,35 +177,37 @@ exports.updateRawMaterial = async (req, res) => {
       { new: true, runValidators: true }
     );
 
-    // Detect differences without formatting
+    // Detect differences
     const changes = {};
     for (const key in updatePayload) {
       const oldVal = originalDoc[key];
       const newVal = updatePayload[key];
 
-      // Skip comparison if either is undefined
       if (oldVal === undefined || newVal === undefined) continue;
 
-      // Compare expiryDate or other Date fields as-is
-      if (oldVal instanceof Date && newVal instanceof Date) {
+      const isOldDate = oldVal instanceof Date;
+      const isNewDate = newVal instanceof Date;
+
+      if (isOldDate && isNewDate) {
         if (oldVal.getTime() !== newVal.getTime()) {
           changes[key] = {
-                 from: oldVal,
-                 to: newVal
-                          };}}
-      // Compare all other fields normally
-      else if (oldVal !== newVal) {
+            from: oldVal,
+            to: newVal
+          };
+        }
+      } else if (oldVal !== newVal) {
         changes[key] = `${oldVal} → ${newVal}`;
       }
     }
 
-    // Save amendment history if changes exist
+    // Save amendment log if there are any changes
     if (Object.keys(changes).length > 0) {
       await AmendmentHistory.create({
         rawMaterialId: req.params.id,
-        updatedBy: 'System', // Replace with req.user.name if available
+        rawMaterialName: originalDoc.name,
+        updatedBy: 'System', // Use req.user.name if available
         changes,
-        updatedAt: updatePayload.updatedAt
+        amendedAt: new Date()
       });
     }
 
@@ -222,7 +224,6 @@ exports.updateRawMaterial = async (req, res) => {
     });
   }
 };
-
 
 // Delete a raw material
 exports.deleteRawMaterial = async (req, res) => {
