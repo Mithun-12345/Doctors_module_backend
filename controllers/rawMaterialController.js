@@ -159,9 +159,9 @@ exports.createRawMaterial = async (req, res) => {
 // Update a raw material
 exports.updateRawMaterial = async (req, res) => {
   try {
-    req.body.updatedAt = Date.now();
+    req.body.updatedAt = new Date();
 
-    // Get the original before update
+    // Get the original document before update
     const originalDoc = await RawMaterial.findById(req.params.id).lean();
     if (!originalDoc) {
       return res.status(404).json({ message: 'Raw material not found' });
@@ -174,28 +174,36 @@ exports.updateRawMaterial = async (req, res) => {
       { new: true, runValidators: true }
     );
 
-    // Compare original and updated
+    // Detect changes between original and updated
     const changes = {};
     for (const key in req.body) {
-      if (
-        req.body[key] !== undefined &&
-        originalDoc[key] !== undefined &&
-        originalDoc[key] !== req.body[key]
-      ) {
-        changes[key] = `${originalDoc[key]} → ${req.body[key]}`;
+      if (req.body[key] !== undefined && originalDoc[key] !== undefined) {
+        const oldVal = originalDoc[key];
+        const newVal = req.body[key];
+
+        // Special case for date comparison
+        if (key === 'expiryDate') {
+          const oldDate = new Date(oldVal).toISOString();
+          const newDate = new Date(newVal).toISOString();
+          if (oldDate !== newDate) {
+            changes[key] = `${oldDate.split('T')[0]} → ${newDate.split('T')[0]}`;
+          }
+        } else if (oldVal !== newVal) {
+          changes[key] = `${oldVal} → ${newVal}`;
+        }
       }
     }
 
-    // Log amendment
+    // Log the amendment if any changes occurred
     if (Object.keys(changes).length > 0) {
       await AmendmentHistory.create({
         rawMaterialId: req.params.id,
-        updatedBy: 'System', // or req.user.name if using auth
+        updatedBy: 'System', // Or dynamically from req.user.name if auth is used
         changes,
+        updatedAt: req.body.updatedAt
       });
     }
 
-    // Respond
     res.status(200).json({
       message: 'Raw material updated successfully',
       original: originalDoc,
@@ -203,7 +211,10 @@ exports.updateRawMaterial = async (req, res) => {
       updated: updatedRawMaterial
     });
   } catch (error) {
-    res.status(400).json({ message: 'Error updating raw material', error: error.message });
+    res.status(400).json({
+      message: 'Error updating raw material',
+      error: error.message
+    });
   }
 };
 
