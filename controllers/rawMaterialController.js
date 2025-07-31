@@ -4,6 +4,7 @@ const RawMaterial = require('../models/RawMaterial');
 const bwipjs = require('bwip-js');
 const cloudinary = require('cloudinary').v2;
 const streamifier = require('streamifier');
+const AmendmentHistory = require('../models/AmendmentHistory');
 
 // Utility: Generate barcode buffer
 const generateBarcodeBuffer = async (text) => {
@@ -159,15 +160,48 @@ exports.createRawMaterial = async (req, res) => {
 exports.updateRawMaterial = async (req, res) => {
   try {
     req.body.updatedAt = Date.now();
+
+    // Get the original before update
+    const originalDoc = await RawMaterial.findById(req.params.id).lean();
+    if (!originalDoc) {
+      return res.status(404).json({ message: 'Raw material not found' });
+    }
+
+    // Perform the update
     const updatedRawMaterial = await RawMaterial.findByIdAndUpdate(
       req.params.id,
       req.body,
       { new: true, runValidators: true }
     );
-    if (!updatedRawMaterial) {
-      return res.status(404).json({ message: 'Raw material not found' });
+
+    // Compare original and updated
+    const changes = {};
+    for (const key in req.body) {
+      if (
+        req.body[key] !== undefined &&
+        originalDoc[key] !== undefined &&
+        originalDoc[key] !== req.body[key]
+      ) {
+        changes[key] = `${originalDoc[key]} → ${req.body[key]}`;
+      }
     }
-    res.status(200).json(updatedRawMaterial);
+
+    // Log amendment
+    if (Object.keys(changes).length > 0) {
+      await AmendmentHistory.create({
+        rawMaterialId: req.params.id,
+        updatedBy: 'System', // or req.user.name if using auth
+        changes,
+      });
+    }
+
+    // Respond
+    res.status(200).json({
+      message: 'Raw material updated successfully',
+      original: originalDoc,
+      changes,
+      updated: updatedRawMaterial
+    });
   } catch (error) {
     res.status(400).json({ message: 'Error updating raw material', error: error.message });
   }
