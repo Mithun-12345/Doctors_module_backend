@@ -3,10 +3,16 @@ const router = express.Router();
 const medicineController = require('../controllers/medicineController');
 const rawMaterialController = require('../controllers/rawMaterialController');
 const validateToken = require('../middlewares/validateTokenHandler');
+const { upload, handleMulterError } = require('../middlewares/uploadMiddleware');
 // Raw Material routes
 router.get('/raw-materials',  rawMaterialController.getAllRawMaterials);
 router.get('/raw-materials/:id',  rawMaterialController.getRawMaterial);
-router.post('/raw-materials',  rawMaterialController.createRawMaterial);
+router.post(
+  '/raw-materials',
+  upload.single('productImage'),     // <- attaches Multer
+  handleMulterError,         // <- optional error handler
+  rawMaterialController.createRawMaterial
+);
 router.put('/raw-materials/:id',  rawMaterialController.updateRawMaterial);
 router.delete('/raw-materials/:id',  rawMaterialController.deleteRawMaterial);
 router.get('/medicines', medicineController.getAllMedicines);
@@ -21,5 +27,18 @@ router.post(
   rawMaterialController.reduceQuantity
 );
 router.get("/barcode/:barcode",rawMaterialController.getRawMaterialByBarcode);
+// for threshold
+router.get('/threshold',rawMaterialController.thresholdcalculator);
+
+// particular raw material 
+router.get('/particularRawmaterial',rawMaterialController.particularRawmaterial);
+
+// amendment log editor
+router.patch('/amendmentLogEdit',rawMaterialController.ammendmentlogupdation);
+
+// get all the updated values where ammendent = true 
+
+router.get('/getupdateddocument',rawMaterialController.getAllUpdateddocument);
+
 
 module.exports = router;

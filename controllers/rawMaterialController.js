@@ -84,6 +84,9 @@ exports.getRawMaterial = async (req, res) => {
   }
 };
 
+const fs = require('fs');
+const path = require('path');
+
 // Create a new raw material
 exports.createRawMaterial = async (req, res) => {
   try {
@@ -97,18 +100,37 @@ exports.createRawMaterial = async (req, res) => {
       currentQuantity,
       thresholdQuantity,
       expiryDate,
-      productImage,
       costPerUnit,
     } = req.body;
 
-    // Step 1: Generate unique barcode
+    // Step 1: Upload product image to Cloudinary if file exists
+    let productImageUrl = '';
+    if (req.file && req.file.path) {
+      productImageUrl = await new Promise((resolve, reject) => {
+        cloudinary.uploader.upload(
+          req.file.path,
+          { folder: 'productImages', resource_type: 'image' },
+          (error, result) => {
+            if (result) resolve(result.secure_url);
+            else reject(error);
+          }
+        );
+      });
+
+      // Optional: delete the file from local disk after upload
+      fs.unlink(req.file.path, (err) => {
+        if (err) console.error('Failed to delete temp file:', err);
+      });
+    }
+
+    // Step 2: Generate unique barcode
     const barcode = await generateUniqueBarcode();
 
-    // Step 2: Generate barcode image
+    // Step 3: Generate barcode image and upload to Cloudinary
     const barcodeBuffer = await generateBarcodeBuffer(barcode);
     const barcodeImageUrl = await uploadToCloudinary(barcodeBuffer);
 
-    // Step 3: Create and save raw material with barcode fields
+    // Step 4: Create and save raw material
     const newRawMaterial = new RawMaterial({
       name,
       type,
@@ -119,7 +141,7 @@ exports.createRawMaterial = async (req, res) => {
       currentQuantity: Number(currentQuantity),
       thresholdQuantity: Number(thresholdQuantity),
       expiryDate: new Date(expiryDate),
-      productImage,
+      productImage: productImageUrl,
       costPerUnit: Number(costPerUnit),
       barcode,
       barcodeImageUrl,
