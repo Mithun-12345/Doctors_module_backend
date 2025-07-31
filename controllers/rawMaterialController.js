@@ -156,7 +156,6 @@ exports.createRawMaterial = async (req, res) => {
   }
 };
 
-// Update a raw material
 exports.updateRawMaterial = async (req, res) => {
   try {
     const updatePayload = {
@@ -183,29 +182,35 @@ exports.updateRawMaterial = async (req, res) => {
       const oldVal = originalDoc[key];
       const newVal = updatePayload[key];
 
+      // Skip undefined fields
       if (oldVal === undefined || newVal === undefined) continue;
 
+      // Normalize ObjectId to string
+      const normOld = mongoose.isValidObjectId(oldVal) ? oldVal.toString() : oldVal;
+      const normNew = mongoose.isValidObjectId(newVal) ? newVal.toString() : newVal;
+
+      // Normalize Date values
       const isOldDate = oldVal instanceof Date;
       const isNewDate = newVal instanceof Date;
 
       if (isOldDate && isNewDate) {
         if (oldVal.getTime() !== newVal.getTime()) {
           changes[key] = {
-            from: oldVal,
-            to: newVal
+            from: oldVal.toISOString(),
+            to: newVal.toISOString()
           };
         }
-      } else if (oldVal !== newVal) {
-        changes[key] = `${oldVal} → ${newVal}`;
+      } else if (normOld !== normNew) {
+        changes[key] = `${normOld} → ${normNew}`;
       }
     }
 
-    // Save amendment log if there are any changes
+    // Save amendment log if changes exist
     if (Object.keys(changes).length > 0) {
       await AmendmentHistory.create({
         rawMaterialId: req.params.id,
         rawMaterialName: originalDoc.name,
-        updatedBy: 'System', // Use req.user.name if available
+        updatedBy: req.user?.name || 'System',
         changes,
         amendedAt: new Date()
       });
@@ -224,7 +229,6 @@ exports.updateRawMaterial = async (req, res) => {
     });
   }
 };
-
 // Delete a raw material
 exports.deleteRawMaterial = async (req, res) => {
   try {
