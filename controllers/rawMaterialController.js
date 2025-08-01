@@ -291,7 +291,7 @@ exports.getRawMaterialByBarcode = async (req, res) => {
     res.status(500).json({ message: "Server error" });
   }
 };
-// threshold value calculator for all the medicine and alert the meicine below the threshold value
+// Threshold value calculator for all the medicines and alert those below threshold
 exports.thresholdcalculator = async (req, res) => {
   try {
     const result = await RawMaterial.aggregate([
@@ -300,13 +300,14 @@ exports.thresholdcalculator = async (req, res) => {
           _id: { name: "$name", package: "$packageSize" },
           totalQuantity: { $sum: "$quantity" },
           currentQuantity: { $sum: "$currentQuantity" },
-          threshold: { $first: "$thresholdQuantity" }  // stored as percentage, e.g., 80
+          threshold: { $first: "$thresholdQuantity" } // stored as % of consumption, e.g., 80
         }
       }
     ]);
 
+    // Apply logic: alert when remaining < (100 - threshold)%
     const finalresult = result.filter(item => {
-      const thresholdLimit = (item.totalQuantity * item.threshold) / 100;
+      const thresholdLimit = item.totalQuantity * (1 - item.threshold / 100);
       return item.currentQuantity < thresholdLimit;
     });
 
@@ -317,7 +318,7 @@ exports.thresholdcalculator = async (req, res) => {
     res.status(200).json({ rawmaterial: finalresult });
 
   } catch (err) {
-    console.log("Error in threshold part", err);
+    console.error("Error in threshold calculator:", err);
     res.status(500).json({ message: "Server error." });
   }
 };
