@@ -292,32 +292,34 @@ exports.getRawMaterialByBarcode = async (req, res) => {
   }
 };
 // threshold value calculator for all the medicine and alert the meicine below the threshold value
-exports.thresholdcalculator = async(req,res)=>{
-
-    try{
-
-      const result = await RawMaterial.aggregate([
-          {
-          $group: {
-              _id: { name: "$name", package: "$packageSize" },
-              totalQuantity: { $sum: "$quantity" },
-              currentQuantity : {$sum : "$currentQuantity"},
-              threshold: { $first: "$thresholdQuantity" }
-          }
-          }
-      ]);
-
-      const finalresult = result.filter(item => item.currentQuantity < item.threshold);
-      if(!finalresult){
-          res.send({"message" : "no rawmaterial reached the threshold"});
+exports.thresholdcalculator = async (req, res) => {
+  try {
+    const result = await RawMaterial.aggregate([
+      {
+        $group: {
+          _id: { name: "$name", package: "$packageSize" },
+          totalQuantity: { $sum: "$quantity" },
+          currentQuantity: { $sum: "$currentQuantity" },
+          threshold: { $first: "$thresholdQuantity" }  // stored as percentage, e.g., 80
+        }
       }
+    ]);
 
-      res.status(200).json({"rawmaterial": finalresult});
+    const finalresult = result.filter(item => {
+      const thresholdLimit = (item.totalQuantity * item.threshold) / 100;
+      return item.currentQuantity < thresholdLimit;
+    });
 
+    if (finalresult.length === 0) {
+      return res.status(200).json({ message: "No raw material has dropped below the threshold." });
     }
-    catch(err){
-        console.log("error in threshold part",err);
-    }
+
+    res.status(200).json({ rawmaterial: finalresult });
+
+  } catch (err) {
+    console.log("Error in threshold part", err);
+    res.status(500).json({ message: "Server error." });
+  }
 };
 
 // particular log in rawmaterial collection
