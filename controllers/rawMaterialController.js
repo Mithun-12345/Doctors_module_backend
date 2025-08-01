@@ -210,9 +210,13 @@ exports.updateRawMaterial = async (req, res) => {
       await AmendmentHistory.create({
         rawMaterialId: req.params.id,
         rawMaterialName: originalDoc.name,
-        updatedBy: req.user?.name || 'System',
+        updatedBy: req.user?.name || 'Admin',
         changes,
-        amendedAt: new Date()
+        amendedAt: new Date(),
+        isPresent: updatedDoc.isPresent,
+        isDamaged: updatedDoc.isDamaged,
+        isSealed: updatedDoc.isSealed,
+        usageStatus: updatedDoc.usageStatus
       });
     }
 
@@ -220,7 +224,7 @@ exports.updateRawMaterial = async (req, res) => {
       message: 'Raw material updated successfully',
       original: originalDoc,
       updated: updatedDoc,
-      changes
+      changesLogged: changes
     });
   } catch (error) {
     res.status(400).json({
@@ -417,3 +421,94 @@ exports.fetchAllAmendmentHistories = async (req, res) => {
     res.status(500).json({ message: 'Failed to fetch amendment histories', error: error.message });
   }
 };
+exports.getUsedAndUnusedRawMaterials = async (req, res) => {
+  try {
+    // Step 1: Find all amendment logs where currentQuantity was changed
+    const logs = await AmendmentHistory.find({
+      'changes.currentQuantity': { $exists: true }
+    }).select('rawMaterialId');
+
+    const usedIds = logs.map(log => String(log.rawMaterialId));
+
+    // Step 2: Fetch all raw materials
+    const allMaterials = await RawMaterial.find();
+
+    // Step 3: Prepare updates and update DB
+    const bulkOperations = allMaterials.map(material => {
+      const isUsed = usedIds.includes(String(material._id));
+      const newStatus = isUsed ? 'used' : 'unused';
+
+      return {
+        updateOne: {
+          filter: { _id: material._id },
+          update: { $set: { usageStatus: newStatus } }
+        }
+      };
+    });
+
+    // Step 4: Execute bulk update
+    await RawMaterial.bulkWrite(bulkOperations);
+
+    // Step 5: Fetch updated records
+    const updatedMaterials = await RawMaterial.find();
+
+    return res.status(200).json(updatedMaterials);
+  } catch (error) {
+    console.error('Error updating usage status:', error);
+    return res.status(500).json({ message: 'Server error' });
+  }
+};
+exports.getUnusedRawMaterialByBarcode = async (req, res) => {
+  try {
+    const { barcode } = req.params;
+
+    const rawMaterial = await RawMaterial.findOne({ barcode });
+
+    if (!rawMaterial) {
+      return res.status(404).json({ message: "Raw material not found for this barcode" });
+    }
+
+    if (rawMaterial.usageStatus === "used") {
+      return res.status(403).json({ message: "The item you scanned is frequently used" });
+    }
+
+    return res.status(200).json(rawMaterial);
+  } catch (error) {
+    console.error("Error retrieving unused raw material by barcode:", error);
+    return res.status(500).json({ message: "Server error" });
+  }
+};
+exports.updateRawMaterialStatusFlags = async (req, res) => {
+  try {
+    const { barcode } = req.params;
+    const { isPresent, isDamaged, isSealed } = req.body;
+
+    if (!barcode) {
+      return res.status(400).json({ message: "Barcode is required in the URL." });
+    }
+
+    const updateFields = {};
+    if (typeof isPresent === 'boolean') updateFields.isPresent = isPresent;
+    if (typeof isDamaged === 'boolean') updateFields.isDamaged = isDamaged;
+    if (typeof isSealed === 'boolean') updateFields.isSealed = isSealed;
+
+    const updatedMaterial = await RawMaterial.findOneAndUpdate(
+      { barcode },
+      { $set: updateFields },
+      { new: true }
+    );
+
+    if (!updatedMaterial) {
+      return res.status(404).json({ message: "Raw material not found for given barcode." });
+    }
+
+    return res.status(200).json({
+      message: "Status flags updated successfully.",
+      updatedMaterial
+    });
+  } catch (error) {
+    console.error("Error updating raw material flags:", error);
+    return res.status(500).json({ message: "Server error." });
+  }
+};
+

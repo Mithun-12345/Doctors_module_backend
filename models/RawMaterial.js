@@ -11,22 +11,31 @@ const rawMaterialSchema = new mongoose.Schema({
   thresholdQuantity: { type: Number, required: true, min: 0 },
   expiryDate: { type: Date, required: true },
 
-  // Unique barcode text like "RM<OBJECTID>"
+  // Unique barcode
   barcode: { type: String, required: true, unique: true },
-
-  // Store barcode image (either base64 string or URL to cloud-hosted PNG)
   barcodeImageUrl: { type: String, trim: true }, // Cloudinary URL
-
   productImage: { type: String, trim: true },
+
   costPerUnit: { type: Number, required: true, min: 0 },
 
-  // New field
-  IsAmendment: { type: Boolean, required: false,default: false },
+  // Amendment status
+  IsAmendment: { type: Boolean, default: false },
 
+  // ✅ New fields for status tracking
+  isPresent: { type: Boolean, default: true },
+  isDamaged: { type: Boolean, default: false },
+  isSealed: { type: Boolean, default: true },
+
+  usageStatus: {
+  type: String,
+  enum: ['used', 'unused'],
+  default: 'unused'
+},
   createdAt: { type: Date, default: Date.now },
   updatedAt: { type: Date, default: Date.now }
 });
 
 module.exports = mongoose.model('RawMaterial', rawMaterialSchema);
+
 
 

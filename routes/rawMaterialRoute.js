@@ -4,6 +4,8 @@ const medicineController = require('../controllers/medicineController');
 const rawMaterialController = require('../controllers/rawMaterialController');
 const validateToken = require('../middlewares/validateTokenHandler');
 const { upload, handleMulterError } = require('../middlewares/uploadMiddleware');
+const AmendmentHistory = require('../models/AmendmentHistory');
+
 // Raw Material routes
 router.get('/raw-materials',  rawMaterialController.getAllRawMaterials);
 router.get('/raw-materials/:id',  rawMaterialController.getRawMaterial);
@@ -40,6 +42,11 @@ router.patch('/amendmentLogEdit',rawMaterialController.ammendmentlogupdation);
 
 router.get('/getupdateddocument',rawMaterialController.getAllUpdateddocument);
 router.get('/fetchAllAmendmentHistories', rawMaterialController.fetchAllAmendmentHistories);
+router.get('/usage-status', rawMaterialController.getUsedAndUnusedRawMaterials);
+router.get('/unused/barcode/:barcode', rawMaterialController.getUnusedRawMaterialByBarcode);
+router.put('/status-flags/:barcode', rawMaterialController.updateRawMaterialStatusFlags);
+
+
 
 
 

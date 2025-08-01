@@ -120,7 +120,7 @@ router.get("/", validateToken, appointments);
 router.get("/patientPayments", validateToken, getPatientPayments);
 router.post("/storenotifications/:patientId",validateToken, savePatientNotification);
 router.patch("/offset/:patientId", updateReminderOffset);   
-router.get('/prescriptions/grouped/:patientId',validateToken, getPrescriptionsGroupedByPrescriptionId); 
+router.get('/prescriptions/grouped/:patientId', getPrescriptionsGroupedByPrescriptionId); 
 router.get(
   "/medication-summary/:patientId",validateToken,
   getPatientMedicationSummary
