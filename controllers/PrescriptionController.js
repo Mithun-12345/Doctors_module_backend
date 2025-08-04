@@ -40,42 +40,42 @@ const getPrescriptionByAppointmentId = async (req, res) => {
     console.log("getPrescriptionByAppointmentId is reaching");
     const { appointmentId } = req.params;
     console.log("appointmentId", appointmentId);
+
+    // Validate appointment ID format
     if (!mongoose.Types.ObjectId.isValid(appointmentId)) {
-      return res
-        .status(StatusCodes.BAD_REQUEST)
-        .json({ message: "Invalid appointment ID format" });
+      return res.status(StatusCodes.BAD_REQUEST).json({
+        message: "Invalid appointment ID format",
+      });
     }
 
+    // Find the appointment
     const appointment = await Appointment.findById(appointmentId);
 
     if (!appointment) {
-      return res
-        .status(StatusCodes.NOT_FOUND)
-        .json({ message: `Appointment not found with ID: ${appointmentId}` });
+      return res.status(StatusCodes.NOT_FOUND).json({
+        message: `Appointment not found with ID: ${appointmentId}`,
+      });
     }
 
-    // if (
-    //   appointment.patient.toString() !== req.user.id &&
-    //   req.user.userRole != 'doctor' &&
-    //   req.user.role !== 'admin'
-    // ) {
-    //   return res.status(StatusCodes.UNAUTHORIZED).json({ message: 'Not authorized to access this prescription' });
-    // }
+    // Check if prescriptionID is present
+    if (!appointment.prescriptionID) {
+      return res.status(StatusCodes.NOT_FOUND).json({
+        message: `No prescription linked to this appointment.`,
+      });
+    }
 
-    const prescription = await Prescription.findOne({
-      appointmentId: new mongoose.Types.ObjectId(appointmentId),
-    })
+    // Fetch the prescription using prescriptionID from the appointment
+    const prescription = await Prescription.findById(appointment.prescriptionID)
       .populate("doctorId", "name specialty licenseNumber")
       .populate("patientId", "name");
 
     if (!prescription) {
-      return res
-        .status(StatusCodes.NOT_FOUND)
-        .json({
-          message: `No prescription found for appointment ID: ${appointmentId}`,
-        });
+      return res.status(StatusCodes.NOT_FOUND).json({
+        message: `Prescription not found with ID: ${appointment.prescriptionID}`,
+      });
     }
 
+    // Format the response
     const formattedPrescription = {
       _id: prescription._id,
       appointmentId: prescription.appointmentId,
@@ -85,22 +85,22 @@ const getPrescriptionByAppointmentId = async (req, res) => {
       doctorLicense: prescription.doctorId.licenseNumber,
       patientId: prescription.patientId._id,
       patientName: prescription.patientId.name,
-      // diagnosis: prescription.diagnosis,
-      // medications: prescription.medications,
-      // instructions: prescription.instructions,
       prescriptionItems: prescription.prescriptionItems,
       createdAt: prescription.createdAt,
       updatedAt: prescription.updatedAt,
     };
 
-    res.status(StatusCodes.OK).json(formattedPrescription);
+    return res.status(StatusCodes.OK).json(formattedPrescription);
+
   } catch (err) {
     console.error("Error fetching prescription by appointment ID:", err);
-    res
-      .status(StatusCodes.INTERNAL_SERVER_ERROR)
-      .json({ message: "Server error", error: err.message });
+    return res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
+      message: "Server error",
+      error: err.message,
+    });
   }
 };
+
 
 const getMyPrescribedAppointments = async (req, res) => {
   try {

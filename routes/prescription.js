@@ -14,7 +14,7 @@ const {
   
 } = require('../controllers/PrescriptionController');
 
-router.get('/appointment/:appointmentId', auth, getPrescriptionByAppointmentId);
+router.get('/appointment/:appointmentId',getPrescriptionByAppointmentId);
 router.get('/prescription', auth, getMyPrescribedAppointments);
 
 router.get('/prescribed-appointments/:userId', auth, getPrescribedAppointments);
