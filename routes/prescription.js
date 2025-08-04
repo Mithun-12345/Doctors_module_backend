@@ -5,7 +5,6 @@ const Medicine = require('../models/Medicine');
 const RawMaterial = require('../models/RawMaterial');
 const Prescription = require('../models/Prescription');
 const auth = require('../middlewares/validateTokenHandler');
-const prescriptionController = require('../controllers/PrescriptionController');
 const { 
   getPrescriptionByAppointmentId, 
   getMyPrescribedAppointments, 
