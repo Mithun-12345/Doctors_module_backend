@@ -39,4 +39,5 @@ router.post("/medicines", postMedicine);
 router.patch('/:prescriptionId/closeComment', updateCloseComment);
 router.get('/summary/:prescriptionId', getPrescriptionSummaryById);
 
+
 module.exports = router;

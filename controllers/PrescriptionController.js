@@ -5,6 +5,7 @@ const Appointment = require("../models/appointmentModel");
 const Doctor = require("../models/doctorModel");
 const Patient = require("../models/patientModel");
 const PatientDetails = require("../models/patientDetails");
+const RawMaterial = require('../models/RawMaterial');
 
 // this function is to be removed in order to migrate to getPrescriptionByAppointmentId fn
 // const getPrescriptionByAppointmentId = async (req, res) => {
@@ -277,6 +278,50 @@ const getPrescriptionSummaryById = async (req, res) => {
   }
 };
 
+const getRawMaterialsForPrescription = async (req, res) => {
+  try {
+    const { prescriptionId } = req.params;
+
+    if (!mongoose.Types.ObjectId.isValid(prescriptionId)) {
+      return res.status(400).json({ message: 'Invalid prescription ID' });
+    }
+
+    const prescription = await Prescription.findById(prescriptionId);
+
+    if (!prescription || !prescription.prescriptionItems) {
+      return res.status(404).json({ message: "Prescription not found or has no items" });
+    }
+
+    const result = await Promise.all(
+      prescription.prescriptionItems.map(async (item) => {
+        const enrichedRawMaterials = await Promise.all(
+          (item.rawMaterialDetails || []).map(async (raw) => {
+            const material = await RawMaterial.findById(raw._id).select('currentQuantity expiryDate packageSize');
+
+            return {
+              ...raw._doc || raw, // handles both Mongoose docs and plain objects
+              currentQuantity: material?.currentQuantity ?? null,
+              expiryDate: material?.expiryDate ?? null,
+              packageSize: material?.packageSize ?? null,
+            };
+          })
+        );
+
+        return {
+          medicineName: item.medicineName,
+          prescriptionItemId: item._id,
+          rawMaterials: enrichedRawMaterials
+        };
+      })
+    );
+
+    res.status(200).json(result);
+  } catch (error) {
+    console.error("Error fetching raw materials:", error);
+    res.status(500).json({ message: "Server error" });
+  }
+};
+
 module.exports = {
   getPrescriptionSummaryById,
   getPrescriptionByAppointmentId,
@@ -284,4 +329,6 @@ module.exports = {
   getPrescribedAppointments,
   getPrescriptionById,
   updatePaymentStatus,
+  getRawMaterialsForPrescription
+  
 };

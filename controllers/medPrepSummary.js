@@ -145,3 +145,4 @@ exports.getSummariesByPatient = async (req, res) => {
     });
   }
 };
+
