@@ -281,7 +281,7 @@ const getPrescriptionSummaryById = async (req, res) => {
 const getRawMaterialsForPrescription = async (req, res) => {
   try {
     const { prescriptionId } = req.params;
-    const { medicineName } = req.body; // Get medicineName from payload (POST or PATCH)
+    const { medicineName } = req.body; // Get medicineName from payload
 
     if (!mongoose.Types.ObjectId.isValid(prescriptionId)) {
       return res.status(400).json({ message: 'Invalid prescription ID' });
@@ -302,21 +302,28 @@ const getRawMaterialsForPrescription = async (req, res) => {
       return res.status(404).json({ message: `Medicine '${medicineName}' not found in this prescription` });
     }
 
-    // Enrich raw material details
+    // Enrich raw material details by matching all materials with same name
     const enrichedRawMaterials = await Promise.all(
-      (targetItem.rawMaterialDetails || []).map(async (raw) => {
-        const material = await RawMaterial.findById(raw._id).select('currentQuantity expiryDate packageSize');
+      (targetItem.rawMaterialDetails || []).flatMap(async (raw) => {
+        const matchingMaterials = await RawMaterial.find({ name: raw.name }).select(
+          '_id barcode currentQuantity expiryDate packageSize'
+        );
 
-        return {
-          ...(raw._doc || raw), // Mongoose doc or plain object
-          currentQuantity: material?.currentQuantity ?? null,
-          expiryDate: material?.expiryDate ?? null,
-          packageSize: material?.packageSize ?? null,
-        };
+        // Map each matching raw material document to response format
+        return matchingMaterials.map(material => ({
+          name: raw.name,
+          quantity: raw.quantity,
+          pricePerUnit: raw.pricePerUnit,
+          totalPrice: raw.totalPrice,
+          rawMaterialId: material._id,
+          barcode: material.barcode,
+          currentQuantity: material.currentQuantity,
+          expiryDate: material.expiryDate,
+          packageSize: material.packageSize
+        }));
       })
-    );
+    ).then(results => results.flat());
 
-    // Final result
     const result = {
       medicineName: targetItem.medicineName,
       prescriptionItemId: targetItem._id,
@@ -329,6 +336,7 @@ const getRawMaterialsForPrescription = async (req, res) => {
     res.status(500).json({ message: "Server error" });
   }
 };
+
 
 module.exports = {
   getPrescriptionSummaryById,
