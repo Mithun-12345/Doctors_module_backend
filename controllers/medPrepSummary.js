@@ -299,40 +299,75 @@ const getAllLeakagesDetected = async (req, res) => {
 // Get all records where leakagePercentage > 1 (or dynamic threshold)
 const getLeakagesAboveThreshold = async (req, res) => {
   try {
-    const thresholdPercentage = parseFloat(req.query.threshold || 1); // Default to 1% if not provided
+    const thresholdPercentage = parseFloat(req.query.threshold) || 1;
 
-    // Fetch all summaries from the correct collection
-    const summaries = await MedicinePreparationSummary.find();
+    const summaries = await MedicinePreparationSummary.find({});
 
-    const leakages = summaries
-      .map(summary => {
-        const { prescriptionQuantity, rawMaterialUsedQuantity, prescriptionId, medicineName, rawMaterialId } = summary;
+    const leakages = [];
 
-        if (prescriptionQuantity === 0) return null; // Avoid division by zero
+    for (const summary of summaries) {
+      for (const prep of summary.medicinePreparations) {
+        for (const raw of prep.rawMaterialsUsed) {
+          if (raw.quantityLeaked && raw.quantityLeaked > 0) {
+            let prescribedQuantity = null;
+            let currentRawMaterialQty = null;
 
-        const leakage = rawMaterialUsedQuantity - prescriptionQuantity;
-        const leakagePercentage = (leakage / prescriptionQuantity) * 100;
+            try {
+              const prescription = await Prescription.findById(summary.prescriptionId);
+              if (prescription) {
+                const prescriptionItem = prescription.prescriptionItems.find(
+                  (item) => item.medicineName === prep.medicineName
+                );
+                if (prescriptionItem) {
+                  const rawMaterialDetail = prescriptionItem.rawMaterialDetails.find(
+                    (rm) => rm._id.toString() === raw.materialId.toString()
+                  );
+                  prescribedQuantity = rawMaterialDetail?.quantity ?? null;
+                }
+              }
+            } catch (err) {
+              console.error('Error fetching prescribed quantity:', err);
+            }
 
-        if (leakagePercentage >= thresholdPercentage) {
-          return {
-            prescriptionId,
-            medicineName,
-            rawMaterialId,
-            prescriptionQuantity,
-            rawMaterialUsedQuantity,
-            leakage,
-            leakagePercentage: parseFloat(leakagePercentage.toFixed(2)),
-          };
+            try {
+              const rawMat = await RawMaterial.findById(raw.materialId);
+              currentRawMaterialQty = rawMat?.currentQuantity ?? null;
+            } catch (err) {
+              console.error('Error fetching raw material quantity:', err);
+            }
+
+            if (prescribedQuantity && prescribedQuantity > 0) {
+              const leakagePercentage = (raw.quantityLeaked / prescribedQuantity) * 100;
+
+              if (leakagePercentage >= thresholdPercentage) {
+                leakages.push({
+                  prescriptionId: summary.prescriptionId,
+                  medicineName: prep.medicineName,
+                  materialId: raw.materialId,
+                  materialName: raw.materialName,
+                  quantityUsed: raw.quantityUsed,
+                  quantityLeaked: raw.quantityLeaked,
+                  leakagePercentage: parseFloat(leakagePercentage.toFixed(2)),
+                  netitemUsed: raw.netitemUsed,
+                  preWeight: raw.preWeight,
+                  postWeight: raw.postWeight,
+                  totalWeight: raw.totalWeight,
+                  barcode: raw.barcode,
+                  prescriptionQuantity: prescribedQuantity,
+                  currentQuantity: currentRawMaterialQty,
+                  createdAt: summary.createdAt
+                });
+              }
+            }
+          }
         }
-
-        return null;
-      })
-      .filter(entry => entry !== null);
+      }
+    }
 
     res.status(200).json({ leakages });
   } catch (error) {
-    console.error("Error in getLeakagesAboveThreshold:", error);
-    res.status(500).json({ error: "Failed to retrieve leakage data" });
+    console.error('Error in getLeakagesAboveThreshold:', error);
+    res.status(500).json({ message: 'Internal Server Error' });
   }
 };
 
