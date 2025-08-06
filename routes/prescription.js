@@ -21,7 +21,7 @@ router.get('/prescription', auth, getMyPrescribedAppointments);
 router.get('/prescribed-appointments/:userId', auth, getPrescribedAppointments);
 router.get('/getById/:prescriptionId', auth, getPrescriptionById);
 router.patch('/:prescriptionId/payment', auth, updatePaymentStatus);
-router.get("/:prescriptionId/prepare",getRawMaterialsForPrescription);
+router.patch("/:prescriptionId/prepare",getRawMaterialsForPrescription);
 
 
 // Get all medicines

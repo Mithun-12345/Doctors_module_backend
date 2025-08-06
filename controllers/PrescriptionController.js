@@ -281,6 +281,7 @@ const getPrescriptionSummaryById = async (req, res) => {
 const getRawMaterialsForPrescription = async (req, res) => {
   try {
     const { prescriptionId } = req.params;
+    const { medicineName } = req.body; // Get medicineName from payload (POST or PATCH)
 
     if (!mongoose.Types.ObjectId.isValid(prescriptionId)) {
       return res.status(400).json({ message: 'Invalid prescription ID' });
@@ -292,28 +293,35 @@ const getRawMaterialsForPrescription = async (req, res) => {
       return res.status(404).json({ message: "Prescription not found or has no items" });
     }
 
-    const result = await Promise.all(
-      prescription.prescriptionItems.map(async (item) => {
-        const enrichedRawMaterials = await Promise.all(
-          (item.rawMaterialDetails || []).map(async (raw) => {
-            const material = await RawMaterial.findById(raw._id).select('currentQuantity expiryDate packageSize');
+    // Find the specific prescription item for the given medicineName
+    const targetItem = prescription.prescriptionItems.find(
+      (item) => item.medicineName === medicineName
+    );
 
-            return {
-              ...raw._doc || raw, // handles both Mongoose docs and plain objects
-              currentQuantity: material?.currentQuantity ?? null,
-              expiryDate: material?.expiryDate ?? null,
-              packageSize: material?.packageSize ?? null,
-            };
-          })
-        );
+    if (!targetItem) {
+      return res.status(404).json({ message: `Medicine '${medicineName}' not found in this prescription` });
+    }
+
+    // Enrich raw material details
+    const enrichedRawMaterials = await Promise.all(
+      (targetItem.rawMaterialDetails || []).map(async (raw) => {
+        const material = await RawMaterial.findById(raw._id).select('currentQuantity expiryDate packageSize');
 
         return {
-          medicineName: item.medicineName,
-          prescriptionItemId: item._id,
-          rawMaterials: enrichedRawMaterials
+          ...(raw._doc || raw), // Mongoose doc or plain object
+          currentQuantity: material?.currentQuantity ?? null,
+          expiryDate: material?.expiryDate ?? null,
+          packageSize: material?.packageSize ?? null,
         };
       })
     );
+
+    // Final result
+    const result = {
+      medicineName: targetItem.medicineName,
+      prescriptionItemId: targetItem._id,
+      rawMaterials: enrichedRawMaterials
+    };
 
     res.status(200).json(result);
   } catch (error) {
