@@ -324,6 +324,18 @@ const getRawMaterialsForPrescription = async (req, res) => {
       })
     ).then(results => results.flat());
 
+    // Sort enriched raw materials by expiryDate (asc), then currentQuantity (asc)
+    enrichedRawMaterials.sort((a, b) => {
+      const dateA = new Date(a.expiryDate);
+      const dateB = new Date(b.expiryDate);
+
+      if (dateA.getTime() !== dateB.getTime()) {
+        return dateA - dateB; // Earlier expiry first
+      }
+
+      return a.currentQuantity - b.currentQuantity; // Lower quantity first
+    });
+
     const result = {
       medicineName: targetItem.medicineName,
       prescriptionItemId: targetItem._id,
@@ -336,7 +348,6 @@ const getRawMaterialsForPrescription = async (req, res) => {
     res.status(500).json({ message: "Server error" });
   }
 };
-
 
 module.exports = {
   getPrescriptionSummaryById,
