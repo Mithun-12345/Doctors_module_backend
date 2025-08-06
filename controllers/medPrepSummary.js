@@ -1,6 +1,7 @@
 const mongoose = require('mongoose');
 const MedicinePreparationSummary = require('../models/MedicinePreparationSummary');
 const RawMaterial = require('../models/RawMaterial');
+const Prescription = require("../models/Prescription");
 const initializeMedicinePreparation = async (req, res) => {
   try {
     const { prescriptionId, medicineName, prescriptionItemId, rawMaterials } = req.body;
@@ -112,32 +113,48 @@ const updatePreWeight = async (req, res) => {
 };
 const updatePostWeight = async (req, res) => {
   try {
-    const { preparationId } = req.params;
+    const { prescriptionId, medicineName, rawMaterialId } = req.body;
     const { postWeight } = req.body;
 
-    // 1. Fetch the existing preparation entry
-    const preparation = await Preparation.findById(preparationId);
-    if (!preparation) {
-      return res.status(404).json({ message: "Preparation not found" });
+    // 1. Fetch summary document
+    const summary = await MedicinePreparationSummary.findOne({ prescriptionId });
+    if (!summary) {
+      return res.status(404).json({ message: "Prescription summary not found" });
     }
 
-    const rawMaterial = await RawMaterial.findById(preparation.materialId);
+    // 2. Find the medicine
+    const medicine = summary.medicinePreparations.find(
+      (med) => med.medicineName === medicineName
+    );
+    if (!medicine) {
+      return res.status(404).json({ message: "Medicine not found in preparation summary" });
+    }
+
+    // 3. Find the raw material
+    const rawMaterialUsed = medicine.rawMaterialsUsed.find(
+      (rm) => rm.materialId.toString() === rawMaterialId
+    );
+    if (!rawMaterialUsed) {
+      return res.status(404).json({ message: "Raw material not found in this medicine" });
+    }
+
+    const rawMaterial = await RawMaterial.findById(rawMaterialId);
     if (!rawMaterial) {
-      return res.status(404).json({ message: "Raw Material not found" });
+      return res.status(404).json({ message: "Raw Material not found in master list" });
     }
 
-    const { preWeight } = preparation;
-    const { quantity, currentQuantity,category, isAlcohol, totalWeight } = rawMaterial;
+    const { preWeight } = rawMaterialUsed;
+    const { quantity, currentQuantity, category, isAlcohol, totalWeight } = rawMaterial;
 
     let quantityUsed = 0;
 
-    // 2. Calculate bottleCapWeight
+    // Calculate bottleCapWeight
     const bottleCapWeight = totalWeight - quantity;
 
-    // 3. Net liquid weight used (in grams)
+    // Net liquid weight used
     const netLiquidWeightUsed = (preWeight - postWeight) - bottleCapWeight;
 
-    // 4. Convert to volume in ml (if liquid), else use weight directly
+    // Convert grams to ml if liquid
     if (category === "Liquid") {
       const density = isAlcohol ? 0.789 : 1;
       quantityUsed = netLiquidWeightUsed / density;
@@ -145,29 +162,64 @@ const updatePostWeight = async (req, res) => {
       quantityUsed = preWeight - postWeight;
     }
 
-    // Round to 2 decimal places
+    // Round values
     quantityUsed = parseFloat(quantityUsed.toFixed(2));
+    const netitemUsed = parseFloat(netLiquidWeightUsed.toFixed(2));
 
-    // 5. Calculate updated raw material quantity
+    // Update stock
     const updatedQuantity = currentQuantity - quantityUsed;
     if (updatedQuantity < 0) {
       return res.status(400).json({ message: "Insufficient quantity in stock" });
     }
 
-    // 6. Update preparation entry
-    preparation.postWeight = postWeight;
-    preparation.quantityUsed = quantityUsed;
-    preparation.totalWeight = preWeight - postWeight;
-    await preparation.save();
+    // LEAKAGE DETECTION LOGIC STARTS HERE
+    let leakageDetected = false;
+    let quantityLeaked = 0;
 
-    // 7. Update raw material quantity
+    const prescription = await Prescription.findById(prescriptionId);
+    if (prescription) {
+      const prescriptionItem = prescription.prescriptionItems.find(
+        (item) => item.medicineName === medicineName
+      );
+
+      if (prescriptionItem) {
+        const prescribedRawMaterial = prescriptionItem.rawMaterialDetails.find(
+          (rm) => rm._id.toString() === rawMaterialId
+        );
+
+        if (prescribedRawMaterial) {
+          const prescribedQuantity = prescribedRawMaterial.quantity;
+
+          if (quantityUsed > prescribedQuantity) {
+            leakageDetected = true;
+            quantityLeaked = parseFloat((quantityUsed - prescribedQuantity).toFixed(2));
+          }
+        }
+      }
+    }
+    // LEAKAGE DETECTION LOGIC ENDS HERE
+
+    // Save updates in embedded document
+    rawMaterialUsed.postWeight = postWeight;
+    rawMaterialUsed.quantityUsed = quantityUsed;
+    rawMaterialUsed.totalWeight = preWeight - postWeight;
+    rawMaterialUsed.netitemUsed = netitemUsed;
+    rawMaterialUsed.leakageDetected = leakageDetected;
+    rawMaterialUsed.quantityLeaked = quantityLeaked;
+    
+    summary.markModified('medicinePreparations');
+    await summary.save();
+
     rawMaterial.currentQuantity = updatedQuantity;
     await rawMaterial.save();
 
     res.status(200).json({
       message: "Post-weight and quantity updated successfully.",
-      updatedPreparation: preparation,
+      updatedMaterial: rawMaterialUsed,
       updatedRawMaterialQuantity: updatedQuantity,
+      netitemUsed,
+      leakageDetected,
+      quantityLeaked,
     });
 
   } catch (error) {
@@ -175,6 +227,7 @@ const updatePostWeight = async (req, res) => {
     res.status(500).json({ message: "Server error", error });
   }
 };
+
 
 module.exports = {
   initializeMedicinePreparation,
