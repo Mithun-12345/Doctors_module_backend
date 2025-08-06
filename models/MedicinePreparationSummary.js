@@ -1,1 +1,46 @@
+const mongoose = require('mongoose');
+
+const rawMaterialUsedSchema = new mongoose.Schema({
+  materialId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'RawMaterial',
+    required: true
+  },
+  materialName: { type: String, required: true },
+  isAlcohol: { type: Boolean, default: false },
+  quantityUsed: { type: Number, required: true, min: 0 },
+  type: { type: String, trim: true },
+  category: { type: String, trim: true },
+  packageSize: { type: String, trim: true },
+  uom: { type: String, trim: true },
+  costPerUnit: { type: Number, required: true, min: 0 },
+  totalCost: { type: Number, required: true, min: 0 },
+  expiryDate: { type: Date, required: true },
+  barcode: { type: String, required: true },
+  preWeight: { type: Number, default: null, min: 0 },
+  postWeight: { type: Number, default: null, min: 0 },
+  totalWeight: { type: Number, default: null, min: 0 }  // optional if needed
+}, { _id: false });
+
+const medicinePreparationDetailSchema = new mongoose.Schema({
+  medicineName: { type: String, required: true },
+  preparationVideoUrl: { type: String, trim: true }, // Optional video link
+  rawMaterialsUsed: [rawMaterialUsedSchema]
+}, { _id: false });
+
+const medicinePreparationSummarySchema = new mongoose.Schema({
+  prescriptionId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Prescription',
+    required: true
+  },
+  preparedBy: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User' // optional: if you track which staff prepared
+  },
+  medicinePreparations: [medicinePreparationDetailSchema],
+  createdAt: { type: Date, default: Date.now }
+});
+
+module.exports = mongoose.model('MedicinePreparationSummary', medicinePreparationSummarySchema);
 
