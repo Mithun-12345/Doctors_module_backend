@@ -127,7 +127,7 @@ const updatePostWeight = async (req, res) => {
     }
 
     const { preWeight } = preparation;
-    const { quantity, category, isAlcohol, totalWeight } = rawMaterial;
+    const { quantity, currentQuantity,category, isAlcohol, totalWeight } = rawMaterial;
 
     let quantityUsed = 0;
 
@@ -149,7 +149,7 @@ const updatePostWeight = async (req, res) => {
     quantityUsed = parseFloat(quantityUsed.toFixed(2));
 
     // 5. Calculate updated raw material quantity
-    const updatedQuantity = quantity - quantityUsed;
+    const updatedQuantity = currentQuantity - quantityUsed;
     if (updatedQuantity < 0) {
       return res.status(400).json({ message: "Insufficient quantity in stock" });
     }
@@ -161,7 +161,7 @@ const updatePostWeight = async (req, res) => {
     await preparation.save();
 
     // 7. Update raw material quantity
-    rawMaterial.quantity = updatedQuantity;
+    rawMaterial.currentQuantity = updatedQuantity;
     await rawMaterial.save();
 
     res.status(200).json({
