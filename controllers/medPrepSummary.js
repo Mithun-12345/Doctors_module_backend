@@ -202,7 +202,6 @@ const updatePostWeight = async (req, res) => {
     // Save updates in embedded document
     rawMaterialUsed.postWeight = postWeight;
     rawMaterialUsed.quantityUsed = quantityUsed;
-    rawMaterialUsed.totalWeight = preWeight - postWeight;
     rawMaterialUsed.netitemUsed = netitemUsed;
     rawMaterialUsed.leakageDetected = leakageDetected;
     rawMaterialUsed.quantityLeaked = quantityLeaked;
@@ -228,7 +227,7 @@ const updatePostWeight = async (req, res) => {
   }
 };
 
-// Get all records where leakageDetected is true
+
 const getAllLeakagesDetected = async (req, res) => {
   try {
     const summaries = await MedicinePreparationSummary.find({
@@ -237,10 +236,38 @@ const getAllLeakagesDetected = async (req, res) => {
 
     const leakedRawMaterials = [];
 
-    summaries.forEach(summary => {
-      summary.medicinePreparations.forEach(prep => {
-        prep.rawMaterialsUsed.forEach(raw => {
+    for (const summary of summaries) {
+      for (const prep of summary.medicinePreparations) {
+        for (const raw of prep.rawMaterialsUsed) {
           if (raw.leakageDetected) {
+            // Fetch prescribed quantity from Prescription schema
+            let prescribedQuantity = null;
+            try {
+              const prescription = await Prescription.findById(summary.prescriptionId);
+              if (prescription) {
+                const prescriptionItem = prescription.prescriptionItems.find(
+                  (item) => item.medicineName === prep.medicineName
+                );
+                if (prescriptionItem) {
+                  const rawMaterialDetail = prescriptionItem.rawMaterialDetails.find(
+                    (rm) => rm._id.toString() === raw.materialId.toString()
+                  );
+                  prescribedQuantity = rawMaterialDetail?.quantity ?? null;
+                }
+              }
+            } catch (err) {
+              console.error('Error fetching prescribed quantity:', err);
+            }
+
+            // Fetch currentQuantity from RawMaterial schema
+            let currentQuantity = null;
+            try {
+              const rawMat = await RawMaterial.findById(raw.materialId);
+              currentQuantity = rawMat?.currentQuantity ?? null;
+            } catch (err) {
+              console.error('Error fetching raw material quantity:', err);
+            }
+
             leakedRawMaterials.push({
               prescriptionId: summary.prescriptionId,
               medicineName: prep.medicineName,
@@ -253,12 +280,14 @@ const getAllLeakagesDetected = async (req, res) => {
               postWeight: raw.postWeight,
               totalWeight: raw.totalWeight,
               barcode: raw.barcode,
-              createdAt: summary.createdAt
+              createdAt: summary.createdAt,
+              prescribedQuantity,
+              currentQuantity
             });
           }
-        });
-      });
-    });
+        }
+      }
+    }
 
     res.status(200).json(leakedRawMaterials);
   } catch (error) {
@@ -266,47 +295,47 @@ const getAllLeakagesDetected = async (req, res) => {
     res.status(500).json({ message: 'Internal Server Error' });
   }
 };
+
 // Get all records where leakagePercentage > 1 (or dynamic threshold)
 const getLeakagesAboveThreshold = async (req, res) => {
   try {
-    const threshold = parseFloat(req.query.threshold) || 1;
+    const thresholdPercentage = parseFloat(req.query.threshold || 1); // Default to 1% if not provided
 
-    const summaries = await MedicinePreparationSummary.find({
-      "medicinePreparations.rawMaterialsUsed.leakagePercentage": { $gt: threshold }
-    });
+    // Fetch all summaries from the correct collection
+    const summaries = await MedicinePreparationSummary.find();
 
-    const filtered = [];
+    const leakages = summaries
+      .map(summary => {
+        const { prescriptionQuantity, rawMaterialUsedQuantity, prescriptionId, medicineName, rawMaterialId } = summary;
 
-    summaries.forEach(summary => {
-      summary.medicinePreparations.forEach(prep => {
-        prep.rawMaterialsUsed.forEach(raw => {
-          if (raw.leakagePercentage > threshold) {
-            filtered.push({
-              prescriptionId: summary.prescriptionId,
-              medicineName: prep.medicineName,
-              materialId: raw.materialId,
-              materialName: raw.materialName,
-              quantityUsed: raw.quantityUsed,
-              quantityLeaked: raw.quantityLeaked,
-              leakagePercentage: raw.leakagePercentage,
-              netitemUsed: raw.netitemUsed,
-              preWeight: raw.preWeight,
-              postWeight: raw.postWeight,
-              totalWeight: raw.totalWeight,
-              barcode: raw.barcode,
-              createdAt: summary.createdAt
-            });
-          }
-        });
-      });
-    });
+        if (prescriptionQuantity === 0) return null; // Avoid division by zero
 
-    res.status(200).json(filtered);
+        const leakage = rawMaterialUsedQuantity - prescriptionQuantity;
+        const leakagePercentage = (leakage / prescriptionQuantity) * 100;
+
+        if (leakagePercentage >= thresholdPercentage) {
+          return {
+            prescriptionId,
+            medicineName,
+            rawMaterialId,
+            prescriptionQuantity,
+            rawMaterialUsedQuantity,
+            leakage,
+            leakagePercentage: parseFloat(leakagePercentage.toFixed(2)),
+          };
+        }
+
+        return null;
+      })
+      .filter(entry => entry !== null);
+
+    res.status(200).json({ leakages });
   } catch (error) {
-    console.error('Error in getLeakagesAboveThreshold:', error);
-    res.status(500).json({ message: 'Internal Server Error' });
+    console.error("Error in getLeakagesAboveThreshold:", error);
+    res.status(500).json({ error: "Failed to retrieve leakage data" });
   }
 };
+
 const getAllMedPrepSummaryData = async (req, res) => {
   try {
     const summaries = await MedicinePreparationSummary.find();
