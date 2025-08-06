@@ -34,10 +34,6 @@ const medicinePreparationSummarySchema = new mongoose.Schema({
     ref: 'Prescription',
     required: true
   },
-  preparedBy: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'User' // optional: if you track which staff prepared
-  },
   medicinePreparations: [medicinePreparationDetailSchema],
   createdAt: { type: Date, default: Date.now }
 });

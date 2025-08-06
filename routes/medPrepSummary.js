@@ -1,10 +1,11 @@
 const express = require('express');
 const router = express.Router();
-const controller = require('../controllers/medPrepSummary');
 const validateToken = require("../middlewares/validateTokenHandler");
+const {
+  initializeMedicinePreparation
+} = require('../controllers/medPrepSummary');
 
-router.post('/summary', validateToken, controller.createSummary);
-router.get('/summary/:summaryId', validateToken, controller.getSummaryById);
-router.get('/summaries/patient/:patientId', validateToken, controller.getSummariesByPatient);
+// POST to initialize medicine preparation
+router.post('/init', initializeMedicinePreparation);
 
 module.exports = router;
