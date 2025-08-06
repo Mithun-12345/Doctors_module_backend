@@ -10,6 +10,8 @@ const rawMaterialSchema = new mongoose.Schema({
   currentQuantity: { type: Number, required: true, min: 0 },
   thresholdQuantity: { type: Number, required: true, min: 0 },
   expiryDate: { type: Date, required: true },
+  totalWeight:{type: Number,required},
+  isAlcohol:{type:Boolean},
 
   // Unique barcode
   barcode: { type: String, required: true, unique: true },

@@ -102,6 +102,8 @@ exports.createRawMaterial = async (req, res) => {
       thresholdQuantity,
       expiryDate,
       costPerUnit,
+      totalWeight,
+      isAlcohol
     } = req.body;
 
     // Step 1: Upload product image to Cloudinary if file exists
@@ -145,6 +147,8 @@ exports.createRawMaterial = async (req, res) => {
       productImage: productImageUrl,
       costPerUnit: Number(costPerUnit),
       barcode,
+      totalWeight,
+      isAlcohol,
       barcodeImageUrl,
     });
 
