@@ -206,7 +206,7 @@ const updatePostWeight = async (req, res) => {
     rawMaterialUsed.netitemUsed = netitemUsed;
     rawMaterialUsed.leakageDetected = leakageDetected;
     rawMaterialUsed.quantityLeaked = quantityLeaked;
-    
+
     summary.markModified('medicinePreparations');
     await summary.save();
 
@@ -228,10 +228,112 @@ const updatePostWeight = async (req, res) => {
   }
 };
 
+// Get all records where leakageDetected is true
+const getAllLeakagesDetected = async (req, res) => {
+  try {
+    const summaries = await MedicinePreparationSummary.find({
+      "medicinePreparations.rawMaterialsUsed.leakageDetected": true
+    });
 
+    const leakedRawMaterials = [];
+
+    summaries.forEach(summary => {
+      summary.medicinePreparations.forEach(prep => {
+        prep.rawMaterialsUsed.forEach(raw => {
+          if (raw.leakageDetected) {
+            leakedRawMaterials.push({
+              prescriptionId: summary.prescriptionId,
+              medicineName: prep.medicineName,
+              materialId: raw.materialId,
+              materialName: raw.materialName,
+              quantityUsed: raw.quantityUsed,
+              quantityLeaked: raw.quantityLeaked,
+              netitemUsed: raw.netitemUsed,
+              preWeight: raw.preWeight,
+              postWeight: raw.postWeight,
+              totalWeight: raw.totalWeight,
+              barcode: raw.barcode,
+              createdAt: summary.createdAt
+            });
+          }
+        });
+      });
+    });
+
+    res.status(200).json(leakedRawMaterials);
+  } catch (error) {
+    console.error('Error in getAllLeakagesDetected:', error);
+    res.status(500).json({ message: 'Internal Server Error' });
+  }
+};
+// Get all records where leakagePercentage > 1 (or dynamic threshold)
+const getLeakagesAboveThreshold = async (req, res) => {
+  try {
+    const threshold = parseFloat(req.query.threshold) || 1;
+
+    const summaries = await MedicinePreparationSummary.find({
+      "medicinePreparations.rawMaterialsUsed.leakagePercentage": { $gt: threshold }
+    });
+
+    const filtered = [];
+
+    summaries.forEach(summary => {
+      summary.medicinePreparations.forEach(prep => {
+        prep.rawMaterialsUsed.forEach(raw => {
+          if (raw.leakagePercentage > threshold) {
+            filtered.push({
+              prescriptionId: summary.prescriptionId,
+              medicineName: prep.medicineName,
+              materialId: raw.materialId,
+              materialName: raw.materialName,
+              quantityUsed: raw.quantityUsed,
+              quantityLeaked: raw.quantityLeaked,
+              leakagePercentage: raw.leakagePercentage,
+              netitemUsed: raw.netitemUsed,
+              preWeight: raw.preWeight,
+              postWeight: raw.postWeight,
+              totalWeight: raw.totalWeight,
+              barcode: raw.barcode,
+              createdAt: summary.createdAt
+            });
+          }
+        });
+      });
+    });
+
+    res.status(200).json(filtered);
+  } catch (error) {
+    console.error('Error in getLeakagesAboveThreshold:', error);
+    res.status(500).json({ message: 'Internal Server Error' });
+  }
+};
+const getAllMedPrepSummaryData = async (req, res) => {
+  try {
+    const summaries = await MedicinePreparationSummary.find();
+
+    const formatted = summaries.flatMap(summary =>
+      summary.medicinePreparations.map(prep => ({
+        medicineName: prep.medicineName,
+        rawMaterials: prep.rawMaterialsUsed.map(material => ({
+          materialId: material.materialId,
+          materialName: material.materialName,
+          quantityUsed: material.quantityUsed
+        }))
+      }))
+    );
+
+    res.json(formatted);
+  } catch (error) {
+    console.error('Error fetching medicine preparations:', error);
+    res.status(500).json({ error: 'Internal Server Error' });
+  }
+};
 module.exports = {
   initializeMedicinePreparation,
   updatePreWeight,
-  updatePostWeight
+  updatePostWeight,
+  getAllLeakagesDetected,
+  getLeakagesAboveThreshold,
+  getAllMedPrepSummaryData 
 };
 

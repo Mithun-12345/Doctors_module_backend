@@ -8,7 +8,7 @@ const rawMaterialUsedSchema = new mongoose.Schema({
   },
   materialName: { type: String, required: true },
   isAlcohol: { type: Boolean, default: false },
-  quantityUsed: { type: Number, required: true, min: 0 },
+  quantityUsed: { type: Number},
   type: { type: String, trim: true },
   category: { type: String, trim: true },
   packageSize: { type: String, trim: true },
