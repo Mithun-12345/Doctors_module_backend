@@ -552,21 +552,8 @@ const getPackagingMaterials = async (req, res) => {
     res.status(500).json({ message: 'Server error while fetching packaging materials.' });
   }
 };
-const getAllMedicinePreparationSummaries = async (req, res) => {
-  try {
-    const summaries = await MedicinePreparationSummary.find()
-      .populate({
-        path: 'prescriptionId',
-        select: 'prescribedQuantity' // only this field
-      })
-      .lean();
 
-    res.status(200).json(summaries);
-  } catch (error) {
-    console.error('Error fetching medicine preparation summaries:', error);
-    res.status(500).json({ message: 'Internal Server Error' });
-  }
-};
+
 
 const getRawMaterialByDispenseQuantity = async (req, res) => {
   try {
@@ -702,6 +689,43 @@ const updateRawMaterialQuantityByAmount = async (req, res) => {
   }
 };
 
+const  getAllMedicinePreparationSummaries = async (req, res) => {
+  try {
+    // Fetch all preparation documents
+    const allPreparations = await MedicinePreparationSummary.find();
+
+    const enrichedPreparations = await Promise.all(
+      allPreparations.map(async (preparation) => {
+        const prescription = await Prescription.findById(preparation.prescriptionId);
+        if (!prescription) {
+          return {
+            ...preparation.toObject(),
+            doctorId: null,
+            doctorName: null,
+            patientId: null,
+            patientName: null
+          };
+        }
+
+        const doctor = await Doctor.findById(prescription.doctorId);
+        const patient = await Patient.findById(prescription.patientId);
+
+        return {
+          ...preparation.toObject(),
+          doctorId: prescription.doctorId || null,
+          doctorName: doctor?.name || null,
+          patientId: prescription.patientId || null,
+          patientName: patient?.name || null
+        };
+      })
+    );
+
+    res.status(200).json(enrichedPreparations);
+  } catch (error) {
+    console.error("Error fetching medicine preparations:", error);
+    res.status(500).json({ message: "Server error while fetching medicine preparations" });
+  }
+};
 
 
 
