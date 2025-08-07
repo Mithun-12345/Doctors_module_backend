@@ -2,6 +2,12 @@ const mongoose = require('mongoose');
 const MedicinePreparationSummary = require('../models/MedicinePreparationSummary');
 const RawMaterial = require('../models/RawMaterial');
 const Prescription = require("../models/Prescription");
+const cloudinary = require('cloudinary').v2;
+const multer = require('multer');
+const streamifier = require('streamifier');
+const { upload } = require('../middlewares/uploadMiddleware');
+
+
 const initializeMedicinePreparation = async (req, res) => {
   try {
     const { prescriptionId, medicineName, prescriptionItemId, rawMaterials } = req.body;
@@ -392,12 +398,82 @@ const getAllMedPrepSummaryData = async (req, res) => {
     res.status(500).json({ error: 'Internal Server Error' });
   }
 };
+
+// Cloudinary config
+cloudinary.config({
+  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+  api_key: process.env.CLOUDINARY_API_KEY,
+  api_secret: process.env.CLOUDINARY_API_SECRET,
+});
+
+
+// Stream upload to Cloudinary
+const uploadToCloudinary = (filePath) => {
+  return cloudinary.uploader.upload(filePath, {
+    resource_type: 'video',
+    folder: 'medicine_preparations'
+  }).then(result => result.secure_url);
+};
+
+
+// API controller
+const uploadPreparationVideo = async (req, res) => {
+  try {
+    const { prescriptionId, medicineName } = req.body;
+    const videoFile = req.file;
+
+    if (!prescriptionId || !medicineName || !videoFile) {
+      return res.status(400).json({ message: 'Required fields missing' });
+    }
+
+    const videoUrl = await uploadToCloudinary(videoFile.path); // using .path
+
+    let summary = await MedicinePreparationSummary.findOne({ prescriptionId });
+
+    if (!summary) {
+      // Create new summary if not found
+      summary = new MedicinePreparationSummary({
+        prescriptionId,
+        medicinePreparations: [{
+          medicineName,
+          preparationVideoUrl: videoUrl
+        }]
+      });
+    } else {
+      // Try to find existing medicine entry
+      const existing = summary.medicinePreparations.find(
+        prep => prep.medicineName.toLowerCase() === medicineName.toLowerCase()
+      );
+
+      if (existing) {
+        // Update the existing one
+        existing.preparationVideoUrl = videoUrl;
+      } else {
+        // If medicine doesn't belong to this prescription, return error
+        return res.status(400).json({
+          message: 'Medicine does not belong to this prescription'
+        });
+      }
+    }
+
+    await summary.save();
+
+    res.status(200).json({ message: 'Video uploaded and data saved', data: summary });
+  } catch (err) {
+    console.error('Error uploading video:', err);
+    res.status(500).json({ message: 'Server error', error: err.message });
+  }
+};
+
+
 module.exports = {
   initializeMedicinePreparation,
   updatePreWeight,
   updatePostWeight,
   getAllLeakagesDetected,
   getLeakagesAboveThreshold,
-  getAllMedPrepSummaryData 
+  getAllMedPrepSummaryData,
+  uploadToCloudinary,
+  uploadPreparationVideo
 };
 
