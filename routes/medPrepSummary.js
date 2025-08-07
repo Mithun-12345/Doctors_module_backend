@@ -10,6 +10,8 @@ const {
   getAllLeakagesDetected,
   getAllMedPrepSummaryData,
   uploadPreparationVideo,
+  getPackagingMaterials,
+  getAllMedicinePreparationSummaries
 } = require('../controllers/medPrepSummary');
 
 
@@ -21,5 +23,7 @@ router.get('/leakages/detected', getAllLeakagesDetected);
 router.get('/leakages/above-threshold', getLeakagesAboveThreshold);
 router.get('/summary', getAllMedPrepSummaryData );
 router.post('/upload-preparation-video', upload.single('video'), uploadPreparationVideo);
+router.get('/packaging', getPackagingMaterials );
+router.get('/medicine-preparation-summaries', getAllMedicinePreparationSummaries);
 
 module.exports = router;

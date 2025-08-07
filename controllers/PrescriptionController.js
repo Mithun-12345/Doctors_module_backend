@@ -281,7 +281,7 @@ const getPrescriptionSummaryById = async (req, res) => {
 const getRawMaterialsForPrescription = async (req, res) => {
   try {
     const { prescriptionId } = req.params;
-    const { medicineName } = req.body; // Get medicineName from payload
+    const { medicineName } = req.body;
 
     if (!mongoose.Types.ObjectId.isValid(prescriptionId)) {
       return res.status(400).json({ message: 'Invalid prescription ID' });
@@ -293,7 +293,6 @@ const getRawMaterialsForPrescription = async (req, res) => {
       return res.status(404).json({ message: "Prescription not found or has no items" });
     }
 
-    // Find the specific prescription item for the given medicineName
     const targetItem = prescription.prescriptionItems.find(
       (item) => item.medicineName === medicineName
     );
@@ -302,18 +301,17 @@ const getRawMaterialsForPrescription = async (req, res) => {
       return res.status(404).json({ message: `Medicine '${medicineName}' not found in this prescription` });
     }
 
-    // Enrich raw material details by matching all materials with same name
     const enrichedRawMaterials = await Promise.all(
       (targetItem.rawMaterialDetails || []).flatMap(async (raw) => {
         const matchingMaterials = await RawMaterial.find({ name: raw.name }).select(
-          '_id barcode currentQuantity expiryDate packageSize category isAlcohol totalWeight'
+          '_id name barcode currentQuantity expiryDate packageSize category isAlcohol totalWeight quantity'
         );
 
-        // Map each matching raw material document to response format
         return matchingMaterials.map(material => ({
           name: raw.name,
-          quantity: raw.quantity,
+          quantity: material.quantity, // <-- ✅ from RawMaterial schema
           pricePerUnit: raw.pricePerUnit,
+          prescribedQuantity: raw.quantity, // <-- ✅ from prescription
           totalPrice: raw.totalPrice,
           rawMaterialId: material._id,
           barcode: material.barcode,
@@ -321,28 +319,24 @@ const getRawMaterialsForPrescription = async (req, res) => {
           expiryDate: material.expiryDate,
           packageSize: material.packageSize,
           category: material.category,
-          isAlcohol:material.isAlcohol,
-          totalWeight:material.totalWeight
+          isAlcohol: material.isAlcohol,
+          totalWeight: material.totalWeight
         }));
       })
     ).then(results => results.flat());
 
-    // Sort enriched raw materials by expiryDate (asc), then currentQuantity (asc)
     enrichedRawMaterials.sort((a, b) => {
       const dateA = new Date(a.expiryDate);
       const dateB = new Date(b.expiryDate);
-
-      if (dateA.getTime() !== dateB.getTime()) {
-        return dateA - dateB; // Earlier expiry first
-      }
-
-      return a.currentQuantity - b.currentQuantity; // Lower quantity first
+      if (dateA.getTime() !== dateB.getTime()) return dateA - dateB;
+      return a.currentQuantity - b.currentQuantity;
     });
 
     const result = {
       prescriptionId,
       medicineName: targetItem.medicineName,
       prescriptionItemId: targetItem._id,
+      dispenseQuantity: targetItem.dispenseQuantity || null,
       rawMaterials: enrichedRawMaterials
     };
 
@@ -352,6 +346,7 @@ const getRawMaterialsForPrescription = async (req, res) => {
     res.status(500).json({ message: "Server error" });
   }
 };
+
 
 module.exports = {
   getPrescriptionSummaryById,
