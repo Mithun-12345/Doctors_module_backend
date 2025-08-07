@@ -416,59 +416,68 @@ const getLeakagesAboveThreshold = async (req, res) => {
 };
 
 
-const getAllMedPrepSummaryData = async (req, res) => {
+const getAllMedPrepSummaryData= async (req, res) => {
   try {
-    const summaries = await MedicinePreparationSummary.find();
+    const { prescriptionId } = req.body;
+
+    if (!prescriptionId) {
+      return res.status(400).json({ error: 'prescriptionId is required in the request body' });
+    }
+
+    const summary = await MedicinePreparationSummary.findOne({ prescriptionId });
+
+    if (!summary) {
+      return res.status(404).json({ error: 'No summary found for the given prescriptionId' });
+    }
 
     const formatted = [];
 
-    for (const summary of summaries) {
-      for (const prep of summary.medicinePreparations) {
-        const rawMaterialsWithPrescribedQty = [];
+    for (const prep of summary.medicinePreparations) {
+      const rawMaterialsWithPrescribedQty = [];
 
-        for (const material of prep.rawMaterialsUsed) {
-          // Fetch prescribed quantity from Prescription schema
-          let prescribedQuantity = null;
-          try {
-            const prescription = await Prescription.findById(summary.prescriptionId);
-            if (prescription) {
-              const prescriptionItem = prescription.prescriptionItems.find(
-                (item) => item.medicineName === prep.medicineName
+      for (const material of prep.rawMaterialsUsed) {
+        let prescribedQuantity = null;
+
+        try {
+          const prescription = await Prescription.findById(summary.prescriptionId);
+          if (prescription) {
+            const prescriptionItem = prescription.prescriptionItems.find(
+              (item) => item.medicineName === prep.medicineName
+            );
+
+            if (prescriptionItem) {
+              const rawMaterialDetail = prescriptionItem.rawMaterialDetails.find(
+                (rm) => rm._id.toString() === material.materialId.toString()
               );
 
-              if (prescriptionItem) {
-                const rawMaterialDetail = prescriptionItem.rawMaterialDetails.find(
-                  (rm) => rm._id.toString() === material.materialId.toString()
-                );
-
-                prescribedQuantity = rawMaterialDetail?.quantity ?? null;
-              }
+              prescribedQuantity = rawMaterialDetail?.quantity ?? null;
             }
-          } catch (err) {
-            console.error('Error fetching prescribed quantity:', err);
           }
-
-          rawMaterialsWithPrescribedQty.push({
-            materialId: material.materialId,
-            materialName: material.materialName,
-            quantityUsed: material.quantityUsed,
-            prescribedQuantity
-          });
+        } catch (err) {
+          console.error('Error fetching prescribed quantity:', err);
         }
 
-        formatted.push({
-          medicineName: prep.medicineName,
-          rawMaterials: rawMaterialsWithPrescribedQty
+        rawMaterialsWithPrescribedQty.push({
+          materialId: material.materialId,
+          materialName: material.materialName,
+          quantityUsed: material.quantityUsed,
+          prescribedQuantity
         });
       }
+
+      formatted.push({
+        medicineName: prep.medicineName,
+        rawMaterials: rawMaterialsWithPrescribedQty
+      });
     }
 
     res.status(200).json(formatted);
   } catch (error) {
-    console.error('Error fetching medicine preparations:', error);
+    console.error('Error fetching medicine preparation summary:', error);
     res.status(500).json({ error: 'Internal Server Error' });
   }
 };
+
 
 // Cloudinary config
 cloudinary.config({

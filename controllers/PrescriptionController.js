@@ -304,7 +304,7 @@ const getRawMaterialsForPrescription = async (req, res) => {
     const enrichedRawMaterials = await Promise.all(
       (targetItem.rawMaterialDetails || []).flatMap(async (raw) => {
         const matchingMaterials = await RawMaterial.find({ name: raw.name }).select(
-          '_id name barcode currentQuantity expiryDate packageSize category isAlcohol totalWeight quantity'
+          '_id name barcode currentQuantity expiryDate uom packageSize category isAlcohol totalWeight quantity'
         );
 
         return matchingMaterials.map(material => ({
@@ -315,6 +315,7 @@ const getRawMaterialsForPrescription = async (req, res) => {
           totalPrice: raw.totalPrice,
           rawMaterialId: material._id,
           barcode: material.barcode,
+          uom: material.uom,
           currentQuantity: material.currentQuantity,
           expiryDate: material.expiryDate,
           packageSize: material.packageSize,

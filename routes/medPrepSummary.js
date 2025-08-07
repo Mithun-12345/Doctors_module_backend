@@ -25,7 +25,7 @@ router.patch("/update-preweight", updatePreWeight);
 router.patch("/update-postweight", updatePostWeight);
 router.get('/leakages/detected', getAllLeakagesDetected);
 router.get('/leakages/above-threshold', getLeakagesAboveThreshold);
-router.get('/summary', getAllMedPrepSummaryData );
+router.patch('/summary', getAllMedPrepSummaryData );
 router.post('/upload-preparation-video', upload.single('video'), uploadPreparationVideo);
 router.get('/packaging', getPackagingMaterials );
 router.get('/medicine-preparation-summaries', getAllMedicinePreparationSummaries);
