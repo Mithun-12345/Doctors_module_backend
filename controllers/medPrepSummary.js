@@ -6,6 +6,7 @@ const cloudinary = require('cloudinary').v2;
 const multer = require('multer');
 const streamifier = require('streamifier');
 const { upload } = require('../middlewares/uploadMiddleware');
+const fs = require('fs');
 
 
 const initializeMedicinePreparation = async (req, res) => {
@@ -427,6 +428,9 @@ const uploadPreparationVideo = async (req, res) => {
     }
 
     const videoUrl = await uploadToCloudinary(videoFile.path); // using .path
+    fs.unlink(videoFile.path, (err) => {
+    if (err) console.error('Failed to delete local video:', err);
+             });
 
     let summary = await MedicinePreparationSummary.findOne({ prescriptionId });
 
