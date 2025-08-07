@@ -7,6 +7,8 @@ const multer = require('multer');
 const streamifier = require('streamifier');
 const { upload } = require('../middlewares/uploadMiddleware');
 const fs = require('fs');
+const Doctor = require('../models/doctorModel');
+const Patient = require('../models/patientModel');
 
 
 const initializeMedicinePreparation = async (req, res) => {
@@ -247,11 +249,19 @@ const getAllLeakagesDetected = async (req, res) => {
       for (const prep of summary.medicinePreparations) {
         for (const raw of prep.rawMaterialsUsed) {
           if (raw.leakageDetected) {
-            // Fetch prescribed quantity from Prescription schema
+            // Fetch prescription + doctorId + patientId + doctorName + patientName
             let prescribedQuantity = null;
+            let doctorId = null;
+            let patientId = null;
+            let doctorName = null;
+            let patientName = null;
+
             try {
               const prescription = await Prescription.findById(summary.prescriptionId);
               if (prescription) {
+                doctorId = prescription.doctorId;
+                patientId = prescription.patientId;
+
                 const prescriptionItem = prescription.prescriptionItems.find(
                   (item) => item.medicineName === prep.medicineName
                 );
@@ -261,24 +271,38 @@ const getAllLeakagesDetected = async (req, res) => {
                   );
                   prescribedQuantity = rawMaterialDetail?.quantity ?? null;
                 }
+
+                // Fetch doctor name
+                const doctor = await Doctor.findById(doctorId);
+                doctorName = doctor?.name ?? null;
+
+                // Fetch patient name
+                const patient = await Patient.findById(patientId);
+                patientName = patient?.name ?? null;
               }
             } catch (err) {
-              console.error('Error fetching prescribed quantity:', err);
+              console.error('Error fetching prescription/doctor/patient info:', err);
             }
 
-            // Fetch currentQuantity from RawMaterial schema
+            // Fetch current quantity & uom from RawMaterial
             let currentQuantity = null;
+            let uom = null;
             try {
               const rawMat = await RawMaterial.findById(raw.materialId);
               currentQuantity = rawMat?.currentQuantity ?? null;
+              uom = rawMat?.uom ?? null;
             } catch (err) {
-              console.error('Error fetching raw material quantity:', err);
+              console.error('Error fetching raw material info:', err);
             }
 
             leakedRawMaterials.push({
               prescriptionId: summary.prescriptionId,
+              doctorId,
+              doctorName, // ✅ added
+              patientId,
+              patientName, // ✅ added
               medicineName: prep.medicineName,
-              preparationVideoUrl: prep.preparationVideoUrl, // ✅ Added here
+              preparationVideoUrl: prep.preparationVideoUrl,
               materialId: raw.materialId,
               materialName: raw.materialName,
               quantityUsed: raw.quantityUsed,
@@ -290,7 +314,8 @@ const getAllLeakagesDetected = async (req, res) => {
               barcode: raw.barcode,
               createdAt: summary.createdAt,
               prescribedQuantity,
-              currentQuantity
+              currentQuantity,
+              uom
             });
           }
         }
@@ -303,8 +328,6 @@ const getAllLeakagesDetected = async (req, res) => {
     res.status(500).json({ message: 'Internal Server Error' });
   }
 };
-
-// Get all records where leakagePercentage > 1 (or dynamic threshold)
 const getLeakagesAboveThreshold = async (req, res) => {
   try {
     const thresholdPercentage = parseFloat(req.query.threshold) || 1;
@@ -319,6 +342,8 @@ const getLeakagesAboveThreshold = async (req, res) => {
           if (raw.quantityLeaked && raw.quantityLeaked > 0) {
             let prescribedQuantity = null;
             let currentRawMaterialQty = null;
+            let doctorName = null;
+            let patientName = null;
 
             try {
               const prescription = await Prescription.findById(summary.prescriptionId);
@@ -332,9 +357,17 @@ const getLeakagesAboveThreshold = async (req, res) => {
                   );
                   prescribedQuantity = rawMaterialDetail?.quantity ?? null;
                 }
+
+                // Fetch doctor name
+                const doctor = await Doctor.findById(prescription.doctorId);
+                doctorName = doctor?.name ?? null;
+
+                // Fetch patient name
+                const patient = await Patient.findById(prescription.patientId);
+                patientName = patient?.name ?? null;
               }
             } catch (err) {
-              console.error('Error fetching prescribed quantity:', err);
+              console.error('Error fetching prescribed quantity or doctor/patient name:', err);
             }
 
             try {
@@ -350,8 +383,10 @@ const getLeakagesAboveThreshold = async (req, res) => {
               if (leakagePercentage >= thresholdPercentage) {
                 leakages.push({
                   prescriptionId: summary.prescriptionId,
+                  doctorName,     // ✅ added
+                  patientName,    // ✅ added
                   medicineName: prep.medicineName,
-                  preparationVideoUrl: prep.preparationVideoUrl, // ✅ Added here
+                  preparationVideoUrl: prep.preparationVideoUrl,
                   materialId: raw.materialId,
                   materialName: raw.materialName,
                   quantityUsed: raw.quantityUsed,
@@ -541,6 +576,7 @@ const getRawMaterialByDispenseQuantity = async (req, res) => {
       return res.status(400).json({ message: 'dispenseQuantity is required in query' });
     }
 
+    // Find a matching material with category = Packaging and type = Bottle
     const matchedMaterial = await RawMaterial.findOne({
       type: 'Packaging',
       category: 'Bottle'
@@ -550,14 +586,27 @@ const getRawMaterialByDispenseQuantity = async (req, res) => {
       return res.status(404).json({ message: 'No matching packaging bottle found' });
     }
 
-    // Extract trimmed name (first word)
-    const trimmedName = matchedMaterial.name.split(' ')[0].trim(); // e.g., "15ml"
+    // Extract trimmed name (first word like "15ml")
+    const trimmedName = matchedMaterial.name.split(' ')[0].trim();
 
     if (trimmedName === quantity) {
-      return res.status(200).json({
-        matched: true,
-        rawMaterial: matchedMaterial
-      });
+      // Decrease currentQuantity by 1 (only if currentQuantity is at least 1)
+      if (matchedMaterial.currentQuantity > 0) {
+        matchedMaterial.currentQuantity -= 1;
+        await matchedMaterial.save();
+
+        return res.status(200).json({
+          matched: true,
+          rawMaterial: matchedMaterial,
+          message: 'Quantity decremented by 1'
+        });
+      } else {
+        return res.status(400).json({
+          matched: true,
+          rawMaterial: matchedMaterial,
+          message: 'Insufficient quantity to decrement'
+        });
+      }
     } else {
       return res.status(404).json({
         matched: false,

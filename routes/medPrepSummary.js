@@ -32,6 +32,6 @@ router.get('/medicine-preparation-summaries', getAllMedicinePreparationSummaries
 router.get('/dispense-check', getRawMaterialByDispenseQuantity);
 router.get('/non-bottle-packing',  getNonBottlePackagingMaterials);
 router.patch('/dispense', updateRawMaterialDispenseQuantity);
-router.get('/non-bottle-packing-amount',updateRawMaterialQuantityByAmount);
+router.patch('/non-bottle-packing-amount',updateRawMaterialQuantityByAmount);
 
 module.exports = router;
