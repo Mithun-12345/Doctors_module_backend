@@ -11,7 +11,11 @@ const {
   getAllMedPrepSummaryData,
   uploadPreparationVideo,
   getPackagingMaterials,
-  getAllMedicinePreparationSummaries
+  getAllMedicinePreparationSummaries,
+  getRawMaterialByDispenseQuantity,
+  updateRawMaterialDispenseQuantity,
+  getNonBottlePackagingMaterials,
+  updateRawMaterialQuantityByAmount
 } = require('../controllers/medPrepSummary');
 
 
@@ -25,5 +29,9 @@ router.get('/summary', getAllMedPrepSummaryData );
 router.post('/upload-preparation-video', upload.single('video'), uploadPreparationVideo);
 router.get('/packaging', getPackagingMaterials );
 router.get('/medicine-preparation-summaries', getAllMedicinePreparationSummaries);
+router.get('/dispense-check', getRawMaterialByDispenseQuantity);
+router.get('/non-bottle-packing',  getNonBottlePackagingMaterials);
+router.patch('/dispense', updateRawMaterialDispenseQuantity);
+router.get('/non-bottle-packing-amount',updateRawMaterialQuantityByAmount);
 
 module.exports = router;

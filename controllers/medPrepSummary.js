@@ -533,6 +533,129 @@ const getAllMedicinePreparationSummaries = async (req, res) => {
   }
 };
 
+const getRawMaterialByDispenseQuantity = async (req, res) => {
+  try {
+    const { quantity } = req.query; // e.g., "15ml"
+
+    if (!quantity) {
+      return res.status(400).json({ message: 'dispenseQuantity is required in query' });
+    }
+
+    const matchedMaterial = await RawMaterial.findOne({
+      type: 'Packaging',
+      category: 'Bottle'
+    });
+
+    if (!matchedMaterial) {
+      return res.status(404).json({ message: 'No matching packaging bottle found' });
+    }
+
+    // Extract trimmed name (first word)
+    const trimmedName = matchedMaterial.name.split(' ')[0].trim(); // e.g., "15ml"
+
+    if (trimmedName === quantity) {
+      return res.status(200).json({
+        matched: true,
+        rawMaterial: matchedMaterial
+      });
+    } else {
+      return res.status(404).json({
+        matched: false,
+        message: 'No raw material matches the given dispense quantity'
+      });
+    }
+
+  } catch (error) {
+    console.error('Error fetching raw material:', error);
+    res.status(500).json({ message: 'Server error while fetching raw material' });
+  }
+};
+const updateRawMaterialDispenseQuantity = async (req, res) => {
+  try {
+    const { rawMaterialId, dispenseAmount } = req.body;
+
+    if (!rawMaterialId || typeof dispenseAmount !== 'number') {
+      return res.status(400).json({ message: 'rawMaterialId and dispenseAmount (number) are required' });
+    }
+
+    const rawMaterial = await RawMaterial.findById(rawMaterialId);
+    if (!rawMaterial) {
+      return res.status(404).json({ message: 'Raw material not found' });
+    }
+
+    if (dispenseAmount > rawMaterial.currentQuantity) {
+      return res.status(400).json({ message: 'Not enough quantity available to dispense' });
+    }
+
+    rawMaterial.currentQuantity -= dispenseAmount;
+    rawMaterial.updatedAt = new Date();
+
+    await rawMaterial.save();
+
+    res.status(200).json({
+      message: 'Raw material quantity updated successfully',
+      updatedMaterial: rawMaterial
+    });
+  } catch (error) {
+    console.error('Error updating quantity:', error);
+    res.status(500).json({ message: 'Server error while updating quantity' });
+  }
+};
+const getNonBottlePackagingMaterials = async (req, res) => {
+  try {
+    const materials = await RawMaterial.find({
+      type: 'Packaging',
+      category: { $ne: 'Bottle' } // Not equal to "Bottle"
+    });
+
+    if (!materials.length) {
+      return res.status(404).json({ message: 'No non-bottle packaging materials found.' });
+    }
+
+    res.status(200).json(materials);
+  } catch (error) {
+    console.error('Error fetching non-bottle packaging materials:', error);
+    res.status(500).json({ message: 'Server error while fetching data.' });
+  }
+};
+
+// PATCH /api/rawmaterials/update-quantity
+const updateRawMaterialQuantityByAmount = async (req, res) => {
+  try {
+    const { rawMaterialId, packageAmount } = req.body;
+
+    if (!rawMaterialId || typeof packageAmount !== 'number') {
+      return res.status(400).json({ message: 'rawMaterialId and packageAmount (number) are required' });
+    }
+
+    const rawMaterial = await RawMaterial.findById(rawMaterialId);
+    if (!rawMaterial) {
+      return res.status(404).json({ message: 'Raw material not found' });
+    }
+
+    if (packageAmount > rawMaterial.currentQuantity) {
+      return res.status(400).json({ message: 'Insufficient quantity available to subtract' });
+    }
+
+    rawMaterial.currentQuantity -= packageAmount;
+    rawMaterial.updatedAt = new Date();
+
+    await rawMaterial.save();
+
+    res.status(200).json({
+      message: 'Raw material quantity updated successfully',
+      updatedMaterial: rawMaterial
+    });
+
+  } catch (error) {
+    console.error('Error updating raw material quantity:', error);
+    res.status(500).json({ message: 'Server error while updating raw material' });
+  }
+};
+
+
+
+
 module.exports = {
   initializeMedicinePreparation,
   updatePreWeight,
@@ -543,6 +666,10 @@ module.exports = {
   uploadToCloudinary,
   getPackagingMaterials,
   getAllMedicinePreparationSummaries,
-  uploadPreparationVideo
+  uploadPreparationVideo,
+  getRawMaterialByDispenseQuantity,
+  updateRawMaterialDispenseQuantity,
+  getNonBottlePackagingMaterials,
+  updateRawMaterialQuantityByAmount
 };
 
