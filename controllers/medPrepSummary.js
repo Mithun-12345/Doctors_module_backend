@@ -155,21 +155,40 @@ const updatePostWeight = async (req, res) => {
     const preWeight = parseFloat(rawMaterialUsed.preWeight || 0);
     const parsedPostWeight = parseFloat(postWeight);
 
+    if (isNaN(parsedPostWeight)) {
+      return res.status(400).json({ message: "Invalid postWeight. Must be a number." });
+    }
+
     const { quantity, currentQuantity, category, isAlcohol, totalWeight } = rawMaterial;
 
-    // Bottle cap weight = empty bottle (total) - actual quantity
+    // Bottle cap or tare weight = full bottle weight - usable quantity
     const bottleCapWeight = parseFloat((totalWeight - quantity).toFixed(2));
 
-    // Actual used = preWeight - postWeight - bottle cap
-    let netLiquidWeightUsed = parseFloat((preWeight - parsedPostWeight - bottleCapWeight).toFixed(2));
+    // Net liquid used = (pre - post - cap). Clamp to zero to avoid negative usage
+    let netLiquidWeightUsed = parseFloat((preWeight -bottleCapWeight) -(parsedPostWeight - bottleCapWeight)).toFixed(2);
+    netLiquidWeightUsed = Math.max(0, netLiquidWeightUsed); // ✅ Clamp negative values
+
     let quantityUsed = 0;
 
     if (category === "Liquid") {
-      const density = isAlcohol ? 0.789 : 1; // Density for alcohol
+      const density = isAlcohol ? 0.789 : 1;
+
+      // ✅ Prevent division by 0 or invalid density
+      if (density <= 0 || isNaN(density)) {
+        return res.status(400).json({ message: "Invalid density value for liquid material." });
+      }
+
       quantityUsed = parseFloat((netLiquidWeightUsed / density).toFixed(2));
     } else {
+      // For solids, no bottle cap or density logic
       quantityUsed = parseFloat((preWeight - parsedPostWeight).toFixed(2));
-      netLiquidWeightUsed = quantityUsed; // For solids, they’re equal
+      quantityUsed = Math.max(0, quantityUsed); // ✅ Clamp negative values
+      netLiquidWeightUsed = quantityUsed;
+    }
+
+    // Validate result numbers
+    if ([quantityUsed, netLiquidWeightUsed].some(val => isNaN(val))) {
+      return res.status(400).json({ message: "Calculated quantity is invalid (NaN). Check weights and data." });
     }
 
     const updatedQuantity = parseFloat((currentQuantity - quantityUsed).toFixed(2));
@@ -194,8 +213,7 @@ const updatePostWeight = async (req, res) => {
 
         if (prescribedRawMaterial) {
           const prescribedQuantity = parseFloat(prescribedRawMaterial.quantity || 0);
-
-          if (quantityUsed > prescribedQuantity) {
+          if (!isNaN(prescribedQuantity) && quantityUsed > prescribedQuantity) {
             leakageDetected = true;
             quantityLeaked = parseFloat((quantityUsed - prescribedQuantity).toFixed(2));
           }
@@ -203,21 +221,21 @@ const updatePostWeight = async (req, res) => {
       }
     }
 
-    // Update embedded document values
+    // ✅ Save updates to embedded document
     rawMaterialUsed.postWeight = parsedPostWeight;
     rawMaterialUsed.quantityUsed = quantityUsed;
     rawMaterialUsed.netitemUsed = netLiquidWeightUsed;
     rawMaterialUsed.leakageDetected = leakageDetected;
     rawMaterialUsed.quantityLeaked = quantityLeaked;
 
-    // Ensure Mongoose knows this nested array has been modified
-    summary.markModified('medicinePreparations');
+    summary.markModified("medicinePreparations");
     await summary.save();
 
+    // ✅ Update master stock
     rawMaterial.currentQuantity = updatedQuantity;
     await rawMaterial.save();
 
-    res.status(200).json({
+    return res.status(200).json({
       message: "Post-weight and quantity updated successfully.",
       updatedMaterial: rawMaterialUsed,
       updatedRawMaterialQuantity: updatedQuantity,
@@ -228,7 +246,7 @@ const updatePostWeight = async (req, res) => {
 
   } catch (error) {
     console.error("❌ Error updating post weight:", error);
-    res.status(500).json({ message: "Server error", error });
+    return res.status(500).json({ message: "Server error", error });
   }
 };
 
