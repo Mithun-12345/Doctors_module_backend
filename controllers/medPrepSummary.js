@@ -78,47 +78,6 @@ const initializeMedicinePreparation = async (req, res) => {
   }
 };
 
-const updatePreWeight = async (req, res) => {
-  try {
-    const { prescriptionId, medicineName, rawMaterialId, preWeight } = req.body;
-
-    if (!prescriptionId || !medicineName || !rawMaterialId || preWeight === undefined) {
-      return res.status(400).json({ message: "All fields are required" });
-    }
-
-    // Fetch the raw material document
-    const rawMaterial = await RawMaterial.findById(rawMaterialId);
-    if (!rawMaterial) {
-      return res.status(404).json({ message: "Raw material not found" });
-    }
-
-    const { totalWeight, quantity, currentQuantity, storageLeakedQuantity } = rawMaterial;
-
-    // Calculate bottlecapWeight
-    const bottlecapWeight = totalWeight - quantity;
-
-    // Expected quantity after removing bottlecap
-    const expectedQuantity = preWeight - bottlecapWeight;
-
-    // If mismatch, adjust storageLeakedQuantity
-    if (expectedQuantity !== currentQuantity) {
-      const leakageDiff = Math.abs(expectedQuantity - currentQuantity);
-      rawMaterial.storageLeakedQuantity = (storageLeakedQuantity || 0) + leakageDiff;
-    }
-
-    await rawMaterial.save();
-
-    res.status(200).json({
-      message: "Pre-weight updated successfully",
-      updatedRawMaterial: rawMaterial
-    });
-
-  } catch (error) {
-    console.error("Error updating preWeight:", error);
-    res.status(500).json({ message: "Server error", error: error.message });
-  }
-};
-
 const updatePostWeight = async (req, res) => {
   try {
     const { prescriptionId, medicineName, rawMaterialId, postWeight } = req.body;
@@ -261,6 +220,69 @@ const updatePostWeight = async (req, res) => {
     return res.status(500).json({ message: "Server error", error });
   }
 };
+const updatePreWeight = async (req, res) => {
+  try {
+    const { prescriptionId, medicineName, rawMaterialId, preWeight } = req.body;
+
+    if (!prescriptionId || !medicineName || !rawMaterialId || preWeight === undefined) {
+      return res.status(400).json({ message: "All fields are required" });
+    }
+
+    // ✅ Step 1: Find the summary and update preWeight in the correct nested location
+    const summary = await MedicinePreparationSummary.findOne({ prescriptionId });
+    if (!summary) {
+      return res.status(404).json({ message: "Medicine preparation summary not found" });
+    }
+
+    let found = false;
+    for (const prep of summary.medicinePreparations) {
+      if (prep.medicineName === medicineName) {
+        for (const raw of prep.rawMaterialsUsed) {
+          if (raw.materialId.toString() === rawMaterialId.toString()) {
+            raw.preWeight = preWeight; // ✅ update here
+            found = true;
+            break;
+          }
+        }
+      }
+    }
+
+    if (!found) {
+      return res.status(404).json({ message: "Raw material in preparation not found" });
+    }
+
+    await summary.save(); // save the updated preWeight
+
+    // ✅ Step 2: Fetch the raw material for leakage calculation
+    const rawMaterial = await RawMaterial.findById(rawMaterialId);
+    if (!rawMaterial) {
+      return res.status(404).json({ message: "Raw material not found" });
+    }
+
+    const { totalWeight, quantity, currentQuantity, storageLeakedQuantity } = rawMaterial;
+
+    // ✅ Step 3: Do your existing calculation logic
+    const bottlecapWeight = totalWeight - quantity;
+    const expectedQuantity = preWeight - bottlecapWeight;
+
+    if (expectedQuantity !== currentQuantity) {
+      const leakageDiff = Math.abs(expectedQuantity - currentQuantity);
+      rawMaterial.storageLeakedQuantity = (storageLeakedQuantity || 0) + leakageDiff;
+    }
+
+    await rawMaterial.save();
+
+    res.status(200).json({
+      message: "Pre-weight updated successfully",
+      updatedSummary: summary,
+      updatedRawMaterial: rawMaterial
+    });
+
+  } catch (error) {
+    console.error("Error updating preWeight:", error);
+    res.status(500).json({ message: "Server error", error: error.message });
+  }
+};
 
 const getAllLeakagesDetected = async (req, res) => {
   try {
@@ -280,6 +302,7 @@ const getAllLeakagesDetected = async (req, res) => {
             let patientId = null;
             let doctorName = null;
             let patientName = null;
+            let rawMat = null;
 
             try {
               const prescription = await Prescription.findById(summary.prescriptionId);
@@ -313,7 +336,7 @@ const getAllLeakagesDetected = async (req, res) => {
             let currentQuantity = null;
             let uom = null;
             try {
-              const rawMat = await RawMaterial.findById(raw.materialId);
+              rawMat = await RawMaterial.findById(raw.materialId);
               currentQuantity = rawMat?.currentQuantity ?? null;
               uom = rawMat?.uom ?? null;
             } catch (err) {
@@ -323,9 +346,9 @@ const getAllLeakagesDetected = async (req, res) => {
             leakedRawMaterials.push({
               prescriptionId: summary.prescriptionId,
               doctorId,
-              doctorName, // ✅ added
+              doctorName,
               patientId,
-              patientName, // ✅ added
+              patientName,
               medicineName: prep.medicineName,
               preparationVideoUrl: prep.preparationVideoUrl,
               materialId: raw.materialId,
@@ -340,6 +363,8 @@ const getAllLeakagesDetected = async (req, res) => {
               createdAt: summary.createdAt,
               prescribedQuantity,
               currentQuantity,
+              LeakedByUsage: rawMat?.totalLeakedQuantity ?? null,
+              LeakedByStorage: rawMat?.storageLeakedQuantity ?? null,
               uom
             });
           }
@@ -353,6 +378,7 @@ const getAllLeakagesDetected = async (req, res) => {
     res.status(500).json({ message: 'Internal Server Error' });
   }
 };
+
 const getLeakagesAboveThreshold = async (req, res) => {
   try {
     const thresholdPercentage = parseFloat(req.query.threshold) || 1;
@@ -369,6 +395,7 @@ const getLeakagesAboveThreshold = async (req, res) => {
             let currentRawMaterialQty = null;
             let doctorName = null;
             let patientName = null;
+            let rawMat = null; // ✅ declared here
 
             try {
               const prescription = await Prescription.findById(summary.prescriptionId);
@@ -396,7 +423,7 @@ const getLeakagesAboveThreshold = async (req, res) => {
             }
 
             try {
-              const rawMat = await RawMaterial.findById(raw.materialId);
+              rawMat = await RawMaterial.findById(raw.materialId); // ✅ assigned here
               currentRawMaterialQty = rawMat?.currentQuantity ?? null;
             } catch (err) {
               console.error('Error fetching raw material quantity:', err);
@@ -408,8 +435,8 @@ const getLeakagesAboveThreshold = async (req, res) => {
               if (leakagePercentage >= thresholdPercentage) {
                 leakages.push({
                   prescriptionId: summary.prescriptionId,
-                  doctorName,     // ✅ added
-                  patientName,    // ✅ added
+                  doctorName,
+                  patientName,
                   medicineName: prep.medicineName,
                   preparationVideoUrl: prep.preparationVideoUrl,
                   materialId: raw.materialId,
@@ -424,6 +451,8 @@ const getLeakagesAboveThreshold = async (req, res) => {
                   barcode: raw.barcode,
                   prescriptionQuantity: prescribedQuantity,
                   currentQuantity: currentRawMaterialQty,
+                  LeakedByUsage: rawMat?.totalLeakedQuantity ?? null,   // ✅ fixed access
+                  LeakedByStorage: rawMat?.storageLeakedQuantity ?? null, // ✅ fixed access
                   createdAt: summary.createdAt
                 });
               }
@@ -439,7 +468,6 @@ const getLeakagesAboveThreshold = async (req, res) => {
     res.status(500).json({ message: 'Internal Server Error' });
   }
 };
-
 
 const getAllMedPrepSummaryData= async (req, res) => {
   try {
