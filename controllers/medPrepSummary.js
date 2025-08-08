@@ -9,6 +9,7 @@ const { upload } = require('../middlewares/uploadMiddleware');
 const fs = require('fs');
 const Doctor = require('../models/doctorModel');
 const Patient = require('../models/patientModel');
+const Appointment = require("../models/appointmentModel");
 
 
 const initializeMedicinePreparation = async (req, res) => {
@@ -748,7 +749,35 @@ const  getAllMedicinePreparationSummaries = async (req, res) => {
     res.status(500).json({ message: "Server error while fetching medicine preparations" });
   }
 };
+const updateMedicinePrepared = async (req, res) => {
+  try {
+    const { prescriptionId, medicinePrepared } = req.body;
 
+    if (!prescriptionId || typeof medicinePrepared !== "boolean") {
+      return res.status(400).json({
+        message: "prescriptionId and medicinePrepared(boolean) are required",
+      });
+    }
+
+    const appointment = await Appointment.findOneAndUpdate(
+      { prescriptionID: prescriptionId }, // DB field name
+      { medicinePrepared },
+      { new: true }
+    );
+
+    if (!appointment) {
+      return res.status(404).json({ message: "Appointment not found" });
+    }
+
+    res.status(200).json({
+      message: "medicinePrepared status updated successfully",
+      appointment,
+    });
+  } catch (error) {
+    console.error("❌ Error updating medicinePrepared:", error);
+    res.status(500).json({ message: "Server error", error: error.message });
+  }
+};
 
 
 module.exports = {
@@ -765,6 +794,7 @@ module.exports = {
   getRawMaterialByDispenseQuantity,
   updateRawMaterialDispenseQuantity,
   getNonBottlePackagingMaterials,
-  updateRawMaterialQuantityByAmount
+  updateRawMaterialQuantityByAmount,
+  updateMedicinePrepared 
 };
 

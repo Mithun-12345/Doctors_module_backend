@@ -15,7 +15,8 @@ const {
   getRawMaterialByDispenseQuantity,
   updateRawMaterialDispenseQuantity,
   getNonBottlePackagingMaterials,
-  updateRawMaterialQuantityByAmount
+  updateRawMaterialQuantityByAmount,
+  updateMedicinePrepared
 } = require('../controllers/medPrepSummary');
 
 
@@ -33,5 +34,6 @@ router.get('/dispense-check', getRawMaterialByDispenseQuantity);
 router.get('/non-bottle-packing',  getNonBottlePackagingMaterials);
 router.patch('/dispense', updateRawMaterialDispenseQuantity);
 router.patch('/non-bottle-packing-amount',updateRawMaterialQuantityByAmount);
+router.patch('/update-medicine-prepared',updateMedicinePrepared);
 
 module.exports = router;

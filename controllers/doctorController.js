@@ -475,7 +475,8 @@ exports.getAllAppointmentsWithPatientData = async (req, res) => {
             meetLink: appointment.meetLink,
             drafts: appointment.notes,
             prescriptionCreated: appointment.prescriptionCreated,
-            prescription_id: appointment.prescriptionID
+            prescription_id: appointment.prescriptionID,
+            medicinePrepared:appointment.medicinePrepared
           },
         });
       });

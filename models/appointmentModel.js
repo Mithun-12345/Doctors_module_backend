@@ -97,6 +97,10 @@ const appointmentSchema = new mongoose.Schema(
       type: Boolean,
       default: false,
     },
+    medicinePrepared:{
+      type:Boolean,
+      default: false,
+    },
     prescriptionID: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Prescription",
