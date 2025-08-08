@@ -267,7 +267,8 @@ const updatePreWeight = async (req, res) => {
 
     if (expectedQuantity !== currentQuantity) {
       const leakageDiff = Math.abs(expectedQuantity - currentQuantity);
-      rawMaterial.storageLeakedQuantity = (storageLeakedQuantity || 0) + leakageDiff;
+      rawMaterial.storageLeakedQuantity = leakageDiff;
+      rawMaterial.totalLeakedQuantity=(rawMaterial.totalLeakedQuantity)+leakageDiff;
     }
 
     await rawMaterial.save();
