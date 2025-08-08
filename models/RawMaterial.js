@@ -12,6 +12,8 @@ const rawMaterialSchema = new mongoose.Schema({
   expiryDate: { type: Date, required: true },
   totalWeight:{type: Number},
   isAlcohol:{type:Boolean,default:false},
+  totalLeakedQuantity:{type:Number,default:0},
+  storageLeakedQuantity:{type:Number,default:0},
 
   // Unique barcode
   barcode: { type: String, required: true, unique: true },

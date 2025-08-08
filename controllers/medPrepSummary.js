@@ -77,50 +77,48 @@ const initializeMedicinePreparation = async (req, res) => {
     return res.status(500).json({ message: 'Server error' });
   }
 };
+
 const updatePreWeight = async (req, res) => {
   try {
     const { prescriptionId, medicineName, rawMaterialId, preWeight } = req.body;
 
-    if (!mongoose.Types.ObjectId.isValid(prescriptionId)) {
-      return res.status(400).json({ message: "Invalid prescription ID" });
+    if (!prescriptionId || !medicineName || !rawMaterialId || preWeight === undefined) {
+      return res.status(400).json({ message: "All fields are required" });
     }
 
-    const summary = await MedicinePreparationSummary.findOne({ prescriptionId });
-
-    if (!summary) {
-      return res.status(404).json({ message: "Prescription summary not found" });
-    }
-
-    const medicine = summary.medicinePreparations.find(
-      (med) => med.medicineName === medicineName
-    );
-
-    if (!medicine) {
-      return res.status(404).json({ message: "Medicine not found in preparation summary" });
-    }
-
-    const rawMaterial = medicine.rawMaterialsUsed.find(
-      (rm) => rm.materialId.toString() === rawMaterialId
-    );
-
+    // Fetch the raw material document
+    const rawMaterial = await RawMaterial.findById(rawMaterialId);
     if (!rawMaterial) {
-      return res.status(404).json({ message: "Raw material not found in this medicine" });
+      return res.status(404).json({ message: "Raw material not found" });
     }
 
-    rawMaterial.preWeight = preWeight;
+    const { totalWeight, quantity, currentQuantity, storageLeakedQuantity } = rawMaterial;
 
-    await summary.save();
+    // Calculate bottlecapWeight
+    const bottlecapWeight = totalWeight - quantity;
 
-    return res.status(200).json({
-      message: "preWeight updated successfully",
-      updatedMaterial: rawMaterial
+    // Expected quantity after removing bottlecap
+    const expectedQuantity = preWeight - bottlecapWeight;
+
+    // If mismatch, adjust storageLeakedQuantity
+    if (expectedQuantity !== currentQuantity) {
+      const leakageDiff = Math.abs(expectedQuantity - currentQuantity);
+      rawMaterial.storageLeakedQuantity = (storageLeakedQuantity || 0) + leakageDiff;
+    }
+
+    await rawMaterial.save();
+
+    res.status(200).json({
+      message: "Pre-weight updated successfully",
+      updatedRawMaterial: rawMaterial
     });
 
   } catch (error) {
     console.error("Error updating preWeight:", error);
-    return res.status(500).json({ message: "Internal server error" });
+    res.status(500).json({ message: "Server error", error: error.message });
   }
 };
+
 const updatePostWeight = async (req, res) => {
   try {
     const { prescriptionId, medicineName, rawMaterialId, postWeight } = req.body;
@@ -166,7 +164,7 @@ const updatePostWeight = async (req, res) => {
     const bottleCapWeight = parseFloat((totalWeight - quantity).toFixed(2));
 
     // Net liquid used = (pre - post - cap). Clamp to zero to avoid negative usage
-    let netLiquidWeightUsed = parseFloat((preWeight -bottleCapWeight) -(parsedPostWeight - bottleCapWeight)).toFixed(2);
+    let netLiquidWeightUsed = parseFloat((preWeight - bottleCapWeight) - (parsedPostWeight - bottleCapWeight)).toFixed(2);
     netLiquidWeightUsed = Math.max(0, netLiquidWeightUsed); // ✅ Clamp negative values
 
     let quantityUsed = 0;
@@ -197,7 +195,7 @@ const updatePostWeight = async (req, res) => {
       return res.status(400).json({ message: "Insufficient quantity in stock" });
     }
 
-    // LEAKAGE DETECTION
+    // LEAKAGE DETECTION (UPDATED FOR LIQUID DROP → ML CONVERSION)
     let leakageDetected = false;
     let quantityLeaked = 0;
 
@@ -213,10 +211,19 @@ const updatePostWeight = async (req, res) => {
         );
 
         if (prescribedRawMaterial) {
-          const prescribedQuantity = parseFloat(prescribedRawMaterial.quantity || 0);
-          if (!isNaN(prescribedQuantity) && quantityUsed > prescribedQuantity) {
-            leakageDetected = true;
-            quantityLeaked = parseFloat((quantityUsed - prescribedQuantity).toFixed(2));
+          let prescribedQuantity = parseFloat(prescribedRawMaterial.quantity || 0);
+
+          if (!isNaN(prescribedQuantity)) {
+            // ✅ If liquid, convert prescribed drops to ml (5 drops = 2ml)
+            let prescribedQuantityInMl = prescribedQuantity;
+            if (category === "Liquid") {
+              prescribedQuantityInMl = (prescribedQuantity / 5) * 2;
+            }
+
+            if (quantityUsed > prescribedQuantityInMl) {
+              leakageDetected = true;
+              quantityLeaked = parseFloat((quantityUsed - prescribedQuantityInMl).toFixed(2));
+            }
           }
         }
       }
@@ -234,6 +241,9 @@ const updatePostWeight = async (req, res) => {
 
     // ✅ Update master stock
     rawMaterial.currentQuantity = updatedQuantity;
+    if (!isNaN(quantityLeaked) && quantityLeaked > 0) {
+      rawMaterial.totalLeakedQuantity = (rawMaterial.totalLeakedQuantity || 0) + quantityLeaked;
+    }
     await rawMaterial.save();
 
     return res.status(200).json({
@@ -241,6 +251,7 @@ const updatePostWeight = async (req, res) => {
       updatedMaterial: rawMaterialUsed,
       updatedRawMaterialQuantity: updatedQuantity,
       netitemUsed: netLiquidWeightUsed,
+      TotalLeakage: rawMaterial.totalLeakedQuantity,
       leakageDetected,
       quantityLeaked,
     });
