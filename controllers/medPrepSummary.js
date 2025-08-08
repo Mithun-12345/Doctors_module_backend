@@ -515,7 +515,8 @@ const getAllMedPrepSummaryData= async (req, res) => {
           materialId: material.materialId,
           materialName: material.materialName,
           quantityUsed: material.quantityUsed,
-          prescribedQuantity
+          prescribedQuantity,
+          QuantityLeaked:material.quantityLeaked
         });
       }
 
