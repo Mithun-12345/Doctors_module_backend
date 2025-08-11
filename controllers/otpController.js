@@ -4,6 +4,7 @@ const jwt = require("jsonwebtoken");
 const bcrypt = require("bcryptjs");
 //const Chronic = require("../models/chronicModel");
 require("dotenv").config({ path: "./config/.env" });
+const MedPrep = require("../models/medPrepUserDetails");
 
 const OTP = require("../models/otpModel");
 const regForm = require("../models/patientModel");
@@ -246,6 +247,8 @@ exports.loginWithPassword = asyncHandler(async (req, res) => {
     user = await Doctor.findOne({ phone });
   } else if (role === "Patient") {
     user = await regForm.findOne({ phone });
+  } else if (role === "Med-Prep") {
+    user = await MedPrep.findOne({ phone });
   } else {
     return res
       .status(400)
@@ -270,8 +273,9 @@ exports.loginWithPassword = asyncHandler(async (req, res) => {
 
   // Extract user fields
   const name = user.name || "";
-  const email = user.email || "";
-  const roleFromDB = user.role || ""; // for Doctor
+  const email =
+    role === "Med-Prep" ? user.personalEmail || "" : user.email || "";
+  const roleFromDB = user.role || "";
 
   // Create JWT tokens
   const accessToken = jwt.sign(
@@ -304,13 +308,6 @@ exports.loginWithPassword = asyncHandler(async (req, res) => {
     { expiresIn: "7d" }
   );
 
-  console.log("Sending response:");
-  console.log("accessToken:", accessToken);
-  console.log("refreshToken:", refreshToken);
-  console.log("userId:", user._id);
-  console.log("userType:", role);
-  console.log("role:", roleFromDB);
-
   // Send user data to frontend
   return res.status(200).json({
     success: true,
@@ -324,6 +321,7 @@ exports.loginWithPassword = asyncHandler(async (req, res) => {
     role: roleFromDB,
   });
 });
+
 
 //works along with resetPassword
 exports.forgotPassword = asyncHandler(async (req, res) => {
