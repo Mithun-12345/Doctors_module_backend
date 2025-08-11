@@ -878,6 +878,53 @@ const logWastage = async (req, res) => {
     res.status(500).json({ message: 'An error occurred while logging wastage.', error: error.message });
   }
 };
+const uploadPreparationPhoto = async (req, res) => {
+  try {
+    const { prescriptionId, medicineName } = req.body;
+
+    if (!prescriptionId || !medicineName || !req.file) {
+      return res.status(400).json({ message: "Prescription ID, medicine name, and photo are required" });
+    }
+
+    // Step 1: Upload file to Cloudinary
+    const cloudinaryRes = await cloudinary.uploader.upload(req.file.path, {
+      folder: "preparation_photos",
+    });
+
+    // Step 2: Remove local file
+    fs.unlinkSync(req.file.path);
+
+    // Step 3: Find the summary and update preparationPhoto
+    const summary = await MedicinePreparationSummary.findOne({ prescriptionId });
+    if (!summary) {
+      return res.status(404).json({ message: "Medicine preparation summary not found" });
+    }
+
+    let found = false;
+    for (const prep of summary.medicinePreparations) {
+      if (prep.medicineName === medicineName) {
+        prep.preparationPhoto = cloudinaryRes.secure_url;
+        found = true;
+        break;
+      }
+    }
+
+    if (!found) {
+      return res.status(404).json({ message: "Medicine preparation not found" });
+    }
+    summary.markModified('medicinePreparations');
+
+    await summary.save();
+
+    res.status(200).json({
+      message: "Preparation photo uploaded successfully",
+      preparationPhoto: cloudinaryRes.secure_url,
+    });
+  } catch (error) {
+    console.error("Error uploading preparation photo:", error);
+    res.status(500).json({ message: "Server error", error: error.message });
+  }
+};
 
 module.exports = {
   initializeMedicinePreparation,
@@ -895,6 +942,7 @@ module.exports = {
   updateRawMaterialDispenseQuantity,
   getNonBottlePackagingMaterials,
   updateRawMaterialQuantityByAmount,
-  updateMedicinePrepared 
+  updateMedicinePrepared ,
+  uploadPreparationPhoto 
 };
 

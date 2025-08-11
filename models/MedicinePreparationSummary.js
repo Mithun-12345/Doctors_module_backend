@@ -30,6 +30,7 @@ const medicinePreparationDetailSchema = new mongoose.Schema({
   preparationVideoUrl: { type: String, trim: true }, // Optional video link
   medPrepStartTime:{type:Date,default:Date.now},
   rawMaterialsUsed: [rawMaterialUsedSchema],
+  preparationPhoto:{type:String,trim:true},
   attempt:{type:String,default:0},
 }, { _id: false });
 
