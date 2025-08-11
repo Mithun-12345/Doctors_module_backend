@@ -857,6 +857,7 @@ const logWastage = async (req, res) => {
           medPrepStartTime: medicinePreparation.medPrepStartTime,
           rawMaterialsUsed: medicinePreparation.rawMaterialsUsed,
           attempt: Number(medicinePreparation.attempt) + 1,
+          preparationPhoto:medicinePreparation.preparationPhoto
         },
       ],
       createdAt: new Date(),
