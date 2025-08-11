@@ -29,11 +29,12 @@ const medicinePreparationDetailSchema = new mongoose.Schema({
   medicineName: { type: String, required: true },
   preparationVideoUrl: { type: String, trim: true }, // Optional video link
   medPrepStartTime:{type:Date,default:Date.now},
+  imageUrl:{type:String,trim:true},
   rawMaterialsUsed: [rawMaterialUsedSchema],
   attempt:{type:String,default:0},
 }, { _id: false });
 
-const medicinePreparationSummarySchema = new mongoose.Schema({
+const WastageLog = new mongoose.Schema({
   prescriptionId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Prescription',
@@ -43,5 +44,4 @@ const medicinePreparationSummarySchema = new mongoose.Schema({
   createdAt: { type: Date, default: Date.now }
 });
 
-module.exports = mongoose.model('MedicinePreparationSummary', medicinePreparationSummarySchema);
-
+module.exports = mongoose.model('WastageLog', WastageLog);

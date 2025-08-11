@@ -16,7 +16,8 @@ const {
   updateRawMaterialDispenseQuantity,
   getNonBottlePackagingMaterials,
   updateRawMaterialQuantityByAmount,
-  updateMedicinePrepared
+  updateMedicinePrepared,
+  logWastage
 } = require('../controllers/medPrepSummary');
 
 
@@ -35,5 +36,7 @@ router.get('/non-bottle-packing',  getNonBottlePackagingMaterials);
 router.patch('/dispense', updateRawMaterialDispenseQuantity);
 router.patch('/non-bottle-packing-amount',updateRawMaterialQuantityByAmount);
 router.patch('/update-medicine-prepared',updateMedicinePrepared);
+router.post('/log-wastage',logWastage);
+
 
 module.exports = router;

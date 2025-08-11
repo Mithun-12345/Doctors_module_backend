@@ -10,6 +10,7 @@ const fs = require('fs');
 const Doctor = require('../models/doctorModel');
 const Patient = require('../models/patientModel');
 const Appointment = require("../models/appointmentModel");
+const WastageLog = require('../models/wastageSchema');
 
 
 const initializeMedicinePreparation = async (req, res) => {
@@ -40,8 +41,9 @@ const initializeMedicinePreparation = async (req, res) => {
 
     const newMedicinePrep = {
       medicineName,
-      preparationVideoUrl: null, // can be updated later
-      rawMaterialsUsed: formattedRawMaterials
+      preparationVideoUrl: null, // can be updated later,
+      medPrepStartTime: new Date(),
+      rawMaterialsUsed: formattedRawMaterials,
     };
 
     let summary = await MedicinePreparationSummary.findOne({ prescriptionId });
@@ -213,6 +215,7 @@ const updatePostWeight = async (req, res) => {
       TotalLeakage: rawMaterial.totalLeakedQuantity,
       leakageDetected,
       quantityLeaked,
+      bottleCapWeight
     });
 
   } catch (error) {
@@ -276,7 +279,8 @@ const updatePreWeight = async (req, res) => {
     res.status(200).json({
       message: "Pre-weight updated successfully",
       updatedSummary: summary,
-      updatedRawMaterial: rawMaterial
+      updatedRawMaterial: rawMaterial,
+      bottlecapWeight
     });
 
   } catch (error) {
@@ -820,10 +824,65 @@ const updateMedicinePrepared = async (req, res) => {
   }
 };
 
+const logWastage = async (req, res) => {
+  try {
+    const { prescriptionId, medicineName } = req.body;
+
+    if (!prescriptionId || !medicineName) {
+      return res.status(400).json({ message: 'prescriptionId and medicineName are required.' });
+    }
+
+    const preparationSummary = await MedicinePreparationSummary.findOne({
+      prescriptionId: new mongoose.Types.ObjectId(prescriptionId),
+    });
+
+    if (!preparationSummary) {
+      return res.status(404).json({ message: 'Preparation summary not found for the given prescription ID.' });
+    }
+
+    const medicinePreparation = preparationSummary.medicinePreparations.find(
+      (prep) => prep.medicineName === medicineName
+    );
+
+    if (!medicinePreparation) {
+      return res.status(404).json({ message: 'Medicine preparation not found with the given name.' });
+    }
+
+    const wastageLogData = {
+      prescriptionId: preparationSummary.prescriptionId,
+      medicinePreparations: [
+        {
+          medicineName: medicinePreparation.medicineName,
+          preparationVideoUrl: medicinePreparation.preparationVideoUrl,
+          medPrepStartTime: medicinePreparation.medPrepStartTime,
+          rawMaterialsUsed: medicinePreparation.rawMaterialsUsed,
+          attempt: Number(medicinePreparation.attempt) + 1,
+        },
+      ],
+      createdAt: new Date(),
+    };
+
+    const newWastageLog = new WastageLog(wastageLogData);
+    await newWastageLog.save();
+
+    medicinePreparation.attempt = String(Number(medicinePreparation.attempt) + 1);
+    await preparationSummary.save();
+
+    res.status(200).json({
+      message: 'Wastage logged and attempt count incremented successfully.',
+      wastageLog: newWastageLog,
+      updatedPreparationSummary: preparationSummary,
+    });
+  } catch (error) {
+    console.error('Error logging wastage:', error);
+    res.status(500).json({ message: 'An error occurred while logging wastage.', error: error.message });
+  }
+};
 
 module.exports = {
   initializeMedicinePreparation,
   updatePreWeight,
+  logWastage,
   updatePostWeight,
   getAllLeakagesDetected,
   getLeakagesAboveThreshold,
