@@ -4,6 +4,8 @@ const {
   patientDetails,
   sendChronicForm,
   bookAppointment,
+  deleteAppointment,
+  editAppointmentOnce,
   // updateAppointment,
   // getAppointmentsByDate,
   // getAppointmentById,
@@ -64,6 +66,9 @@ router.post(
   uploadProfilePicture
 );
 router.post("/bookAppointment", validateToken, bookAppointment);
+router.post("/deleteAppointment/:appointmentId",validateToken,  deleteAppointment);
+router.put("/editAppointment/:appointmentId",validateToken, editAppointmentOnce);
+
 router.put("/updateProfile", validateToken, updateProfile);
 router.post("/finalizeAppointment", validateToken, finalizeAppointment);
 // router.patch("/updateAppointment/:id", validateToken, updateAppointment);

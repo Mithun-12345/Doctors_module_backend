@@ -133,6 +133,10 @@ const medicinePreparationSummarySchema = new mongoose.Schema({
     type: String,
     default: ''
   },
+  videoUrl : {
+    type: String,
+    default : ''
+  },
   
   // Security & Audit Information
   preparedBy: preparedBySchema,

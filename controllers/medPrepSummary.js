@@ -1,4 +1,7 @@
 const MedicinePreparationSummary = require('../models/MedicinePreparationSummary');
+const cloudinary = require("../configs/cloudinaryConfig");
+const streamifier = require('streamifier');
+const mongoose = require('mongoose');
 
 exports.createSummary = async (req, res) => {
   try {
@@ -145,3 +148,63 @@ exports.getSummariesByPatient = async (req, res) => {
     });
   }
 };
+
+exports.saveRecordedVideo = async (req,res)=>{
+
+try {
+  const { prescriptionId } = req.body;
+
+  if (!prescriptionId || !req.file) {
+    return res.status(400).json({ error: 'prescriptionId and video file are required' });
+  }
+
+
+  let objectIdPrescription;
+  try {
+    objectIdPrescription = new mongoose.Types.ObjectId(prescriptionId);
+  } catch (err) {
+    return res.status(400).json({ error: 'Invalid prescriptionId format' });
+  }
+
+  // Cloudinary Upload Handler
+  const uploadStream = (buffer, folder = 'medprep_videos') =>
+    new Promise((resolve, reject) => {
+      const stream = cloudinary.uploader.upload_stream(
+        { resource_type: 'video', folder },
+        (error, result) => {
+          if (result) resolve(result);
+          else reject(error);
+        }
+      );
+      streamifier.createReadStream(buffer).pipe(stream);
+    });
+
+  const uploadResult = await uploadStream(req.file.buffer);
+  console.log("prescription id : ", objectIdPrescription);
+  console.log("url : ", uploadResult.secure_url);
+
+  //  Use the converted ObjectId in the query
+  const updatedDoc = await MedicinePreparationSummary.findOneAndUpdate(
+    { prescriptionId: objectIdPrescription },
+    {
+      videoUrl: uploadResult.secure_url,
+      updatedAt: new Date()
+    },
+    { new: true }
+  );
+
+  if (!updatedDoc) {
+    return res.status(404).json({ error: 'Document with the specified prescriptionId not found.' });
+  }
+
+  return res.json({
+    message: 'Video uploaded and URL updated successfully!',
+    videoUrl: uploadResult.secure_url,
+    updatedDocument: updatedDoc
+  });
+} catch (error) {
+  console.error('Upload/update error:', error);
+  return res.status(500).json({ error: 'Upload and update failed', details: error.message });
+}
+
+}

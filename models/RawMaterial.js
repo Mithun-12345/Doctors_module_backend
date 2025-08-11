@@ -1,4 +1,4 @@
-// models/RawMaterial.js
+
 const mongoose = require('mongoose');
 
 const rawMaterialSchema = new mongoose.Schema({
@@ -6,14 +6,15 @@ const rawMaterialSchema = new mongoose.Schema({
   type: { type: String, trim: true },
   category: { type: String, trim: true },
   packageSize: { type: String, trim: true },
-  uom: { type: String, trim: true },
-  quantity: { type: Number, required: true, min: 0 },
+  uom: { type: String, trim: true }, // e.g., 'g', 'ml', 'sheets'
   currentQuantity: { type: Number, required: true, min: 0 },
   thresholdQuantity: { type: Number, required: true, min: 0 },
   expiryDate: { type: Date, required: true },
-  barcode: { type: String, trim: true },
-  productImage: { type: String, trim: true }, // or Buffer if storing file data
+  barcode: { type: String, required: true, unique: true },
+  barcodeImageUrl: { type: String, trim: true }, // Cloudinary URL
+  productImage: { type: String, trim: true },
   costPerUnit: { type: Number, required: true, min: 0 },
+  Ammendment: { type: Boolean, required: false },
   createdAt: { type: Date, default: Date.now },
   updatedAt: { type: Date, default: Date.now }
 });
