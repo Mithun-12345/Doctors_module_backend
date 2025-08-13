@@ -18,7 +18,10 @@ const {
   updateRawMaterialQuantityByAmount,
   updateMedicinePrepared,
   uploadPreparationPhoto ,
-  logWastage
+  logWastage,
+  addInstructionsToMedicine,
+  updateInstructionStatus,
+  getPatientAddressFromPrescription
 } = require('../controllers/medPrepSummary');
 
 
@@ -39,6 +42,9 @@ router.patch('/non-bottle-packing-amount',updateRawMaterialQuantityByAmount);
 router.patch('/update-medicine-prepared',updateMedicinePrepared);
 router.post('/log-wastage',logWastage);
 router.post("/upload-preparation-photo", upload.single("photo"), uploadPreparationPhoto);
+router.post('/add-instructions', addInstructionsToMedicine);
+router.patch('/update-instructions', updateInstructionStatus);
+router.get('/:prescriptionId/patient-address', getPatientAddressFromPrescription);
 
 
 module.exports = router;

@@ -837,7 +837,7 @@ const logWastage = async (req, res) => {
     });
 
     if (!preparationSummary) {
-      return res.status(404).json({ message: 'Preparation summary not found for the given prescription ID.' });
+      return res.status(404).json({ message: 'Preparation summary not found.' });
     }
 
     const medicinePreparation = preparationSummary.medicinePreparations.find(
@@ -845,9 +845,10 @@ const logWastage = async (req, res) => {
     );
 
     if (!medicinePreparation) {
-      return res.status(404).json({ message: 'Medicine preparation not found with the given name.' });
+      return res.status(404).json({ message: 'Medicine preparation not found.' });
     }
 
+    // Create the wastage snapshot BEFORE modifying the original data
     const wastageLogData = {
       prescriptionId: preparationSummary.prescriptionId,
       medicinePreparations: [
@@ -855,9 +856,9 @@ const logWastage = async (req, res) => {
           medicineName: medicinePreparation.medicineName,
           preparationVideoUrl: medicinePreparation.preparationVideoUrl,
           medPrepStartTime: medicinePreparation.medPrepStartTime,
-          rawMaterialsUsed: medicinePreparation.rawMaterialsUsed,
+          rawMaterialsUsed: medicinePreparation.rawMaterialsUsed, // Logs the used amounts before reset
           attempt: Number(medicinePreparation.attempt) + 1,
-          preparationPhoto:medicinePreparation.preparationPhoto
+          preparationPhoto: medicinePreparation.preparationPhoto
         },
       ],
       createdAt: new Date(),
@@ -866,7 +867,26 @@ const logWastage = async (req, res) => {
     const newWastageLog = new WastageLog(wastageLogData);
     await newWastageLog.save();
 
+    // --- NEW LOGIC STARTS HERE ---
+
+    // 1. Loop through each raw material from the failed attempt
+    medicinePreparation.rawMaterialsUsed.forEach((material) => {
+      if (material.quantityUsed && material.quantityUsed > 0) {
+        // 2. Add the used quantity to the leaked quantity.
+        // The '|| 0' handles cases where quantityLeaked might not exist yet.
+        material.quantityLeaked = (material.quantityLeaked || 0) + material.quantityUsed;
+
+        // 3. Reset the quantityUsed to 0 for the next attempt.
+        material.quantityUsed = 0;
+      }
+    });
+
+    // --- NEW LOGIC ENDS HERE ---
+
+    // Increment the attempt counter for the next try
     medicinePreparation.attempt = String(Number(medicinePreparation.attempt) + 1);
+    
+    // Save the updated original summary document
     await preparationSummary.save();
 
     res.status(200).json({
@@ -927,6 +947,140 @@ const uploadPreparationPhoto = async (req, res) => {
   }
 };
 
+const addInstructionsToMedicine = async (req, res) => {
+  // 1. Get the payload from the request body
+  const { prescriptionId, medicineName, instructionStrings } = req.body;
+
+  // 2. Basic validation
+  if (!prescriptionId || !medicineName || !Array.isArray(instructionStrings)) {
+    return res.status(400).json({ 
+      message: 'Missing required fields: prescriptionId, medicineName, and instructionStrings (must be an array).' 
+    });
+  }
+
+  try {
+    // 3. Transform the array of strings into the Map object for the schema
+    const instructionsMap = instructionStrings.reduce((acc, instruction) => {
+      acc[instruction] = false; // Initialize all as 'false' (a pending task)
+      return acc;
+    }, {});
+
+    // 4. Find the summary and update the specific medicine's instructions
+    const result = await MedicinePreparationSummary.updateOne(
+      {
+        prescriptionId: prescriptionId,
+        'medicinePreparations.medicineName': medicineName,
+      },
+      {
+        $set: { 'medicinePreparations.$.instructions': instructionsMap },
+      }
+    );
+
+    // 5. Check if the document was found and updated
+    if (result.matchedCount === 0) {
+      return res.status(404).json({ message: 'No matching prescription and medicine found.' });
+    }
+
+    if (result.modifiedCount === 0) {
+      // This can happen if the instructions sent are identical to what's already in the DB
+      return res.status(200).json({ message: 'Instructions are already set to the provided values.' });
+    }
+    
+    // 6. Send a success response
+    res.status(200).json({
+      message: 'Instructions added successfully!',
+      updatedInstructions: instructionsMap,
+    });
+
+  } catch (error) {
+    console.error('Error adding instructions:', error);
+    res.status(500).json({ message: 'Server error while adding instructions.' });
+  }
+};
+const updateInstructionStatus = async (req, res) => {
+  // 1. Get the payload from the request body
+  const { prescriptionId, medicineName, instructions } = req.body;
+
+  // 2. Basic validation
+  if (!prescriptionId || !medicineName || typeof instructions !== 'object' || instructions === null) {
+    return res.status(400).json({ 
+      message: 'Missing required fields: prescriptionId, medicineName, and instructions (must be an object).' 
+    });
+  }
+
+  try {
+    // 3. Dynamically build the update object using dot notation for the nested map.
+    // This allows us to update multiple key-value pairs in the 'instructions' map in one go.
+    const updateFields = {};
+    for (const key in instructions) {
+      if (Object.prototype.hasOwnProperty.call(instructions, key)) {
+        // The key here is the instruction string, e.g., "Wear gloves during preparation"
+        // The value is the boolean, e.g., true
+        updateFields[`medicinePreparations.$.instructions.${key}`] = instructions[key];
+      }
+    }
+
+    // If the instructions object is empty, there's nothing to update.
+    if (Object.keys(updateFields).length === 0) {
+      return res.status(400).json({ message: 'Instructions object cannot be empty.' });
+    }
+
+    // 4. Find the document and apply the updates atomically.
+    const result = await MedicinePreparationSummary.updateOne(
+      {
+        prescriptionId: prescriptionId,
+        'medicinePreparations.medicineName': medicineName
+      },
+      {
+        $set: updateFields 
+      }
+    );
+    
+    // 5. Check if the document was found and updated
+    if (result.matchedCount === 0) {
+      return res.status(404).json({ message: 'No matching prescription and medicine found.' });
+    }
+    
+    res.status(200).json({ message: 'Instruction status updated successfully.' });
+
+  } catch (error) {
+    console.error('Error updating instruction status:', error);
+    res.status(500).json({ message: 'Server error while updating instructions.' });
+  }
+};
+
+const getPatientAddressFromPrescription = async (req, res) => {
+  try {
+    // 1. Get the prescriptionId from the URL parameters
+    const { prescriptionId } = req.params;
+
+    // 2. Validate the ID format
+    if (!mongoose.Types.ObjectId.isValid(prescriptionId)) {
+      return res.status(400).json({ message: 'Invalid Prescription ID format.' });
+    }
+
+    // 3. Find the prescription and use .populate() to automatically fetch related patient data
+    // The second argument to populate specifies which fields to include.
+    const prescription = await Prescription.findById(prescriptionId)
+      .populate('patientId', 'name address phone');
+
+    // 4. Handle cases where the prescription or patient is not found
+    if (!prescription) {
+      return res.status(404).json({ message: 'Prescription not found.' });
+    }
+    if (!prescription.patientId) {
+        return res.status(404).json({ message: 'Patient not found for this prescription.' });
+    }
+
+    // 5. Send the populated patient data as the response
+    res.status(200).json(prescription.patientId);
+
+  } catch (error) {
+    console.error('Error fetching patient details:', error);
+    res.status(500).json({ message: 'Server error while fetching patient details.' });
+  }
+};
+
 module.exports = {
   initializeMedicinePreparation,
   updatePreWeight,
@@ -943,7 +1097,10 @@ module.exports = {
   updateRawMaterialDispenseQuantity,
   getNonBottlePackagingMaterials,
   updateRawMaterialQuantityByAmount,
-  updateMedicinePrepared ,
-  uploadPreparationPhoto 
+  updateMedicinePrepared,
+  uploadPreparationPhoto,
+  addInstructionsToMedicine,
+  updateInstructionStatus,
+  getPatientAddressFromPrescription
 };
 

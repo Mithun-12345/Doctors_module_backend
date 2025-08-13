@@ -32,6 +32,11 @@ const medicinePreparationDetailSchema = new mongoose.Schema({
   rawMaterialsUsed: [rawMaterialUsedSchema],
   preparationPhoto:{type:String,trim:true},
   attempt:{type:String,default:0},
+  instructions: {
+    type: Map,
+    of: Boolean,
+    default: {}
+  },
 }, { _id: false });
 
 const medicinePreparationSummarySchema = new mongoose.Schema({

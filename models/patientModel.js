@@ -22,6 +22,10 @@ const patientSchema = new mongoose.Schema(
       required: true,
       unique: true,
     },
+    address: {
+      type: String,
+      required: false,
+    },
     whatsappNumber: {
       type: String,
       required: false,
