@@ -23,6 +23,7 @@ const appointmentSchema = new mongoose.Schema(
       ref: "Patient",
       required: false,
     },
+    
     price: { type: String, required: false },
     appointmentDate: {
       type: Date,

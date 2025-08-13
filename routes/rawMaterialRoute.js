@@ -50,4 +50,19 @@ router.put('/status-flags/:barcode', rawMaterialController.updateRawMaterialStat
 
 
 
+// for threshold
+router.get('/threshold',rawMaterialController.thresholdcalculator);
+
+// particular raw material 
+router.get('/particularRawmaterial',rawMaterialController.particularRawmaterial);
+
+// amendment log editor
+router.patch('/amendmentLogEdit',rawMaterialController.ammendmentlogupdation);
+
+// get all the updated values where ammendent = true 
+
+router.get('/getupdateddocument',rawMaterialController.getAllUpdateddocument);
+
+
+
 module.exports = router;
