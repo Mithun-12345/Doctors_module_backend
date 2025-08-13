@@ -297,6 +297,7 @@ const getAllLeakagesDetected = async (req, res) => {
     });
 
     const leakedRawMaterials = [];
+    let totalLostCost = 0; // ✅ 1. Initialize total counter
 
     for (const summary of summaries) {
       for (const prep of summary.medicinePreparations) {
@@ -341,7 +342,6 @@ const getAllLeakagesDetected = async (req, res) => {
               console.error('Error fetching raw material info:', err);
             }
 
-            // --- NEW LOGIC TO CALCULATE LOST COST ---
             let lostCost = 0;
             if (rawMat && rawMat.costPerUnit > 0) {
               if (rawMat.storageLeakedQuantity > 0) {
@@ -351,7 +351,8 @@ const getAllLeakagesDetected = async (req, res) => {
                 lostCost += rawMat.totalLeakedQuantity * rawMat.costPerUnit;
               }
             }
-            // --- END OF NEW LOGIC ---
+            
+            totalLostCost += lostCost; // ✅ 2. Add individual cost to the running total
 
             leakedRawMaterials.push({
               prescriptionId: summary.prescriptionId,
@@ -376,7 +377,6 @@ const getAllLeakagesDetected = async (req, res) => {
               LeakedByUsage: rawMat?.totalLeakedQuantity ?? null,
               LeakedByStorage: rawMat?.storageLeakedQuantity ?? null,
               uom,
-              // ✅ ADDED FIELDS HERE
               costPerUnit: rawMat?.costPerUnit ?? null,
               lostCost: parseFloat(lostCost.toFixed(2)),
             });
@@ -384,8 +384,13 @@ const getAllLeakagesDetected = async (req, res) => {
         }
       }
     }
+    
+    // ✅ 3. Return the total sum along with the original array of leakages
+    res.status(200).json({
+      totalLostCost: parseFloat(totalLostCost.toFixed(2)),
+      leakages: leakedRawMaterials
+    });
 
-    res.status(200).json(leakedRawMaterials);
   } catch (error) {
     console.error('Error in getAllLeakagesDetected:', error);
     res.status(500).json({ message: 'Internal Server Error' });
@@ -401,6 +406,7 @@ const getLeakagesAboveThreshold = async (req, res) => {
     });
 
     const leakages = [];
+    let totalLostCost = 0; // ✅ 1. Initialize total counter
 
     for (const summary of summaries) {
       for (const prep of summary.medicinePreparations) {
@@ -441,6 +447,8 @@ const getLeakagesAboveThreshold = async (req, res) => {
                   }
                 }
 
+                totalLostCost += lostCost; // ✅ 2. Add individual cost to total
+
                 leakages.push({
                   prescriptionId: summary.prescriptionId._id,
                   doctorName: summary.prescriptionId?.doctorId?.name ?? null,
@@ -461,7 +469,7 @@ const getLeakagesAboveThreshold = async (req, res) => {
                   currentQuantity: currentRawMaterialQty,
                   LeakedByUsage: rawMat?.totalLeakedQuantity ?? null,
                   LeakedByStorage: rawMat?.storageLeakedQuantity ?? null,
-                  costPerUnit: rawMat?.costPerUnit ?? null, // ✅ ADDED costPerUnit HERE
+                  costPerUnit: rawMat?.costPerUnit ?? null,
                   lostCost: parseFloat(lostCost.toFixed(2)),
                   createdAt: summary.createdAt
                 });
@@ -471,8 +479,13 @@ const getLeakagesAboveThreshold = async (req, res) => {
         }
       }
     }
+    
+    // ✅ 3. Return the total along with the array of leakages
+    res.status(200).json({ 
+      totalLostCost: parseFloat(totalLostCost.toFixed(2)),
+      leakages: leakages 
+    });
 
-    res.status(200).json({ leakages });
   } catch (error) {
     console.error('Error in getLeakagesAboveThreshold:', error);
     res.status(500).json({ message: 'Internal Server Error' });
