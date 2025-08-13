@@ -11,6 +11,7 @@ const Doctor = require('../models/doctorModel');
 const Patient = require('../models/patientModel');
 const Appointment = require("../models/appointmentModel");
 const WastageLog = require('../models/wastageSchema');
+const MasterInstructions = require('../models/medPrepSettings');
 
 
 const initializeMedicinePreparation = async (req, res) => {
@@ -301,19 +302,22 @@ const getAllLeakagesDetected = async (req, res) => {
       for (const prep of summary.medicinePreparations) {
         for (const raw of prep.rawMaterialsUsed) {
           if (raw.leakageDetected) {
-            // Fetch prescription + doctorId + patientId + doctorName + patientName
             let prescribedQuantity = null;
             let doctorId = null;
             let patientId = null;
             let doctorName = null;
             let patientName = null;
             let rawMat = null;
+            let currentQuantity = null;
+            let uom = null;
 
             try {
-              const prescription = await Prescription.findById(summary.prescriptionId);
+              const prescription = await Prescription.findById(summary.prescriptionId).populate('doctorId', 'name').populate('patientId', 'name');
               if (prescription) {
-                doctorId = prescription.doctorId;
-                patientId = prescription.patientId;
+                doctorId = prescription.doctorId?._id;
+                doctorName = prescription.doctorId?.name ?? null;
+                patientId = prescription.patientId?._id;
+                patientName = prescription.patientId?.name ?? null;
 
                 const prescriptionItem = prescription.prescriptionItems.find(
                   (item) => item.medicineName === prep.medicineName
@@ -324,22 +328,11 @@ const getAllLeakagesDetected = async (req, res) => {
                   );
                   prescribedQuantity = rawMaterialDetail?.quantity ?? null;
                 }
-
-                // Fetch doctor name
-                const doctor = await Doctor.findById(doctorId);
-                doctorName = doctor?.name ?? null;
-
-                // Fetch patient name
-                const patient = await Patient.findById(patientId);
-                patientName = patient?.name ?? null;
               }
             } catch (err) {
               console.error('Error fetching prescription/doctor/patient info:', err);
             }
 
-            // Fetch current quantity & uom from RawMaterial
-            let currentQuantity = null;
-            let uom = null;
             try {
               rawMat = await RawMaterial.findById(raw.materialId);
               currentQuantity = rawMat?.currentQuantity ?? null;
@@ -347,6 +340,18 @@ const getAllLeakagesDetected = async (req, res) => {
             } catch (err) {
               console.error('Error fetching raw material info:', err);
             }
+
+            // --- NEW LOGIC TO CALCULATE LOST COST ---
+            let lostCost = 0;
+            if (rawMat && rawMat.costPerUnit > 0) {
+              if (rawMat.storageLeakedQuantity > 0) {
+                lostCost += rawMat.storageLeakedQuantity * rawMat.costPerUnit;
+              }
+              if (rawMat.totalLeakedQuantity > 0) {
+                lostCost += rawMat.totalLeakedQuantity * rawMat.costPerUnit;
+              }
+            }
+            // --- END OF NEW LOGIC ---
 
             leakedRawMaterials.push({
               prescriptionId: summary.prescriptionId,
@@ -370,7 +375,10 @@ const getAllLeakagesDetected = async (req, res) => {
               currentQuantity,
               LeakedByUsage: rawMat?.totalLeakedQuantity ?? null,
               LeakedByStorage: rawMat?.storageLeakedQuantity ?? null,
-              uom
+              uom,
+              // ✅ ADDED FIELDS HERE
+              costPerUnit: rawMat?.costPerUnit ?? null,
+              lostCost: parseFloat(lostCost.toFixed(2)),
             });
           }
         }
@@ -387,8 +395,10 @@ const getAllLeakagesDetected = async (req, res) => {
 const getLeakagesAboveThreshold = async (req, res) => {
   try {
     const thresholdPercentage = parseFloat(req.query.threshold) || 1;
-
-    const summaries = await MedicinePreparationSummary.find({});
+    const summaries = await MedicinePreparationSummary.find({}).populate({
+        path: 'prescriptionId',
+        populate: [{ path: 'doctorId', select: 'name' }, { path: 'patientId', select: 'name' }]
+    });
 
     const leakages = [];
 
@@ -398,37 +408,20 @@ const getLeakagesAboveThreshold = async (req, res) => {
           if (raw.quantityLeaked && raw.quantityLeaked > 0) {
             let prescribedQuantity = null;
             let currentRawMaterialQty = null;
-            let doctorName = null;
-            let patientName = null;
-            let rawMat = null; // ✅ declared here
+            let rawMat = null; 
 
-            try {
-              const prescription = await Prescription.findById(summary.prescriptionId);
-              if (prescription) {
-                const prescriptionItem = prescription.prescriptionItems.find(
-                  (item) => item.medicineName === prep.medicineName
-                );
-                if (prescriptionItem) {
-                  const rawMaterialDetail = prescriptionItem.rawMaterialDetails.find(
-                    (rm) => rm._id.toString() === raw.materialId.toString()
-                  );
-                  prescribedQuantity = rawMaterialDetail?.quantity ?? null;
-                }
-
-                // Fetch doctor name
-                const doctor = await Doctor.findById(prescription.doctorId);
-                doctorName = doctor?.name ?? null;
-
-                // Fetch patient name
-                const patient = await Patient.findById(prescription.patientId);
-                patientName = patient?.name ?? null;
-              }
-            } catch (err) {
-              console.error('Error fetching prescribed quantity or doctor/patient name:', err);
+            const prescriptionItem = summary.prescriptionId?.prescriptionItems.find(
+              (item) => item.medicineName === prep.medicineName
+            );
+            if (prescriptionItem) {
+              const rawMaterialDetail = prescriptionItem.rawMaterialDetails.find(
+                (rm) => rm._id.toString() === raw.materialId.toString()
+              );
+              prescribedQuantity = rawMaterialDetail?.quantity ?? null;
             }
 
             try {
-              rawMat = await RawMaterial.findById(raw.materialId); // ✅ assigned here
+              rawMat = await RawMaterial.findById(raw.materialId);
               currentRawMaterialQty = rawMat?.currentQuantity ?? null;
             } catch (err) {
               console.error('Error fetching raw material quantity:', err);
@@ -438,10 +431,20 @@ const getLeakagesAboveThreshold = async (req, res) => {
               const leakagePercentage = (raw.quantityLeaked / prescribedQuantity) * 100;
 
               if (leakagePercentage >= thresholdPercentage) {
+                let lostCost = 0;
+                if (rawMat && rawMat.costPerUnit > 0) {
+                  if (rawMat.storageLeakedQuantity > 0) {
+                    lostCost += rawMat.storageLeakedQuantity * rawMat.costPerUnit;
+                  }
+                  if (rawMat.totalLeakedQuantity > 0) {
+                    lostCost += rawMat.totalLeakedQuantity * rawMat.costPerUnit;
+                  }
+                }
+
                 leakages.push({
-                  prescriptionId: summary.prescriptionId,
-                  doctorName,
-                  patientName,
+                  prescriptionId: summary.prescriptionId._id,
+                  doctorName: summary.prescriptionId?.doctorId?.name ?? null,
+                  patientName: summary.prescriptionId?.patientId?.name ?? null,
                   medicineName: prep.medicineName,
                   preparationVideoUrl: prep.preparationVideoUrl,
                   materialId: raw.materialId,
@@ -456,8 +459,10 @@ const getLeakagesAboveThreshold = async (req, res) => {
                   barcode: raw.barcode,
                   prescriptionQuantity: prescribedQuantity,
                   currentQuantity: currentRawMaterialQty,
-                  LeakedByUsage: rawMat?.totalLeakedQuantity ?? null,   // ✅ fixed access
-                  LeakedByStorage: rawMat?.storageLeakedQuantity ?? null, // ✅ fixed access
+                  LeakedByUsage: rawMat?.totalLeakedQuantity ?? null,
+                  LeakedByStorage: rawMat?.storageLeakedQuantity ?? null,
+                  costPerUnit: rawMat?.costPerUnit ?? null, // ✅ ADDED costPerUnit HERE
+                  lostCost: parseFloat(lostCost.toFixed(2)),
                   createdAt: summary.createdAt
                 });
               }
@@ -473,7 +478,6 @@ const getLeakagesAboveThreshold = async (req, res) => {
     res.status(500).json({ message: 'Internal Server Error' });
   }
 };
-
 const getAllMedPrepSummaryData= async (req, res) => {
   try {
     const { prescriptionId } = req.body;
@@ -1160,6 +1164,62 @@ const addPackagingDetails = async (req, res) => {
   }
 };
 
+
+const updateMasterInstructions = async (req, res) =>{
+  const instructionsToAppend = req.body;
+
+  if (Object.keys(instructionsToAppend).length === 0) {
+    return res.status(400).json({ message: 'Request body cannot be empty.' });
+  }
+
+  try {
+    // --- THIS IS THE KEY CHANGE ---
+    // Dynamically build the update object with the $push operator.
+    const updateFields = {};
+    for (const key in instructionsToAppend) {
+      // For each step (e.g., "step-2"), create a command to push
+      // the new strings into its existing array.
+      updateFields[`steps.${key}`] = { $each: instructionsToAppend[key] };
+    }
+
+    const updateOperation = { $push: updateFields };
+    // The final command will look like:
+    // { $push: { "steps.step-2": { $each: ["New string 1", "New string 2"] } } }
+    
+    const updatedInstructions = await MasterInstructions.findOneAndUpdate(
+      { name: 'default_instructions' },
+      updateOperation, // Use the new $push command
+      { new: true, upsert: true }
+    );
+
+    res.status(200).json({
+      message: 'Master instructions appended successfully.',
+      data: updatedInstructions
+    });
+
+  } catch (error) {
+    console.error("Error patching master instructions:", error);
+    res.status(500).json({ message: 'An error occurred.', error: error.message });
+  }
+};
+const getAllMasterInstructions = async (req, res) => {
+  try {
+    // Find the single document where all instructions are stored
+    const instructionDoc = await MasterInstructions.findOne({ name: 'default_instructions' });
+
+    // If no instructions have been saved yet, return an empty object
+    if (!instructionDoc) {
+      return res.status(200).json({});
+    }
+
+    // Return only the 'steps' object from the document
+    res.status(200).json(instructionDoc.steps);
+
+  } catch (error) {
+    console.error("Error fetching master instructions:", error);
+    res.status(500).json({ message: 'An error occurred while fetching instructions.' });
+  }
+};
 module.exports = {
   initializeMedicinePreparation,
   updatePreWeight,
@@ -1181,6 +1241,8 @@ module.exports = {
   addInstructionsToMedicine,
   updateInstructionStatus,
   getPatientAddressFromPrescription,
-  addPackagingDetails
+  addPackagingDetails,
+  updateMasterInstructions,
+  getAllMasterInstructions
 };
 

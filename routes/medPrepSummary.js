@@ -22,7 +22,9 @@ const {
   addInstructionsToMedicine,
   updateInstructionStatus,
   getPatientAddressFromPrescription,
-  addPackagingDetails
+  addPackagingDetails,
+  updateMasterInstructions,
+  getAllMasterInstructions
 } = require('../controllers/medPrepSummary');
 
 
@@ -47,6 +49,8 @@ router.post('/add-instructions', addInstructionsToMedicine);
 router.patch('/update-instructions', updateInstructionStatus);
 router.get('/:prescriptionId/patient-address', getPatientAddressFromPrescription);
 router.post('/add-packaging', upload.single('packedImage'), addPackagingDetails);
+router.patch('/update-instructions-settings', updateMasterInstructions);
+router.get('/get-all-instructions', getAllMasterInstructions);
 
 
 module.exports = router;
