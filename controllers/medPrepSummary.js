@@ -533,11 +533,8 @@ const getAllMedPrepSummaryData= async (req, res) => {
         }
 
         rawMaterialsWithPrescribedQty.push({
-          materialId: material.materialId,
           materialName: material.materialName,
-          quantityUsed: material.quantityUsed,
-          prescribedQuantity,
-          QuantityLeaked:material.quantityLeaked
+          expiryDate:material.expiryDate
         });
       }
 
@@ -1079,7 +1076,7 @@ const getPatientAddressFromPrescription = async (req, res) => {
     // 3. Find the prescription and use .populate() to automatically fetch related patient data
     // The second argument to populate specifies which fields to include.
     const prescription = await Prescription.findById(prescriptionId)
-      .populate('patientId', 'name address phone');
+      .populate('patientId', 'name address phone currentLocation');
 
     // 4. Handle cases where the prescription or patient is not found
     if (!prescription) {
