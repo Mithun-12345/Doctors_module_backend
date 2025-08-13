@@ -1080,6 +1080,85 @@ const getPatientAddressFromPrescription = async (req, res) => {
     res.status(500).json({ message: 'Server error while fetching patient details.' });
   }
 };
+const addPackagingDetails = async (req, res) => {
+  // 1. Get data from the multipart form
+  const { prescriptionId, packagingData } = req.body;
+  const packedImageFile = req.file;
+
+  if (!prescriptionId || !packagingData) {
+    return res.status(400).json({ message: 'prescriptionId and packagingData are required.' });
+  }
+
+  try {
+    const packagingDetails = JSON.parse(packagingData);
+
+    // --- NEW LOGIC STARTS HERE ---
+
+    // Loop through each packaging item to fetch and update its stock
+    for (const item of packagingDetails) {
+      // 1. Find the corresponding raw material in your inventory
+      const rawMaterial = await RawMaterial.findById(item.materialId);
+
+      if (!rawMaterial) {
+        // If any material is not found, stop the process immediately
+        throw new Error(`Packaging material with ID ${item.materialId} not found.`);
+      }
+
+      // 2. Store its current quantity as 'presentQuantity' for the log
+      item.presentQuantity = rawMaterial.currentQuantity;
+
+      // 3. Decrement the stock in the RawMaterial collection
+      rawMaterial.currentQuantity -= item.quantityUsed;
+      
+      // Ensure stock doesn't go below zero
+      if (rawMaterial.currentQuantity < 0) {
+        throw new Error(`Not enough stock for material: ${rawMaterial.name}.`);
+      }
+
+      // 4. Save the updated raw material document
+      await rawMaterial.save();
+    }
+
+    // --- NEW LOGIC ENDS HERE ---
+
+    // Upload the packed image to Cloudinary if it exists
+    let packedImageUrl = '';
+    if (packedImageFile) {
+      const result = await cloudinary.uploader.upload(packedImageFile.path, {
+        folder: 'packed_medicines'
+      });
+      packedImageUrl = result.secure_url;
+      fs.unlinkSync(packedImageFile.path);
+    }
+
+    // Add the uploaded image URL to the first packaging item
+    if (packedImageUrl && packagingDetails.length > 0) {
+      packagingDetails[0].packedImageUrl = packedImageUrl;
+    }
+
+    // Find the summary and push the fully prepared packaging details into the array
+    const result = await MedicinePreparationSummary.updateOne(
+      { prescriptionId: prescriptionId },
+      {
+        $push: { packagingUsed: { $each: packagingDetails } }
+      }
+    );
+
+    if (result.matchedCount === 0) {
+      throw new Error('Preparation summary not found.');
+    }
+
+    res.status(200).json({ message: 'Packaging details added and stock updated successfully.' });
+
+  } catch (error) {
+    console.error("Error adding packaging details:", error);
+    if (error instanceof SyntaxError) {
+      return res.status(400).json({ message: 'Invalid format for packagingData. It must be a valid JSON string.' });
+    }
+    // Send a more specific error message back to the client
+    res.status(500).json({ message: error.message || 'Server error while adding packaging details.' });
+  }
+};
 
 module.exports = {
   initializeMedicinePreparation,
@@ -1101,6 +1180,7 @@ module.exports = {
   uploadPreparationPhoto,
   addInstructionsToMedicine,
   updateInstructionStatus,
-  getPatientAddressFromPrescription
+  getPatientAddressFromPrescription,
+  addPackagingDetails
 };
 

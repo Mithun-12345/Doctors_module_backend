@@ -38,6 +38,20 @@ const medicinePreparationDetailSchema = new mongoose.Schema({
     default: {}
   },
 }, { _id: false });
+const packagingDetailSchema = new mongoose.Schema({
+  materialId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'RawMaterial', // Links to the packaging item in your RawMaterial inventory
+    required: true
+  },
+  materialName: { type: String, required: true },
+  packageSize: { type: String, trim: true },
+  presentQuantity: { type: Number }, // Optional: Quantity on hand before use
+  quantityUsed: { type: Number, required: true, default: 1 },
+  label: { type: String, trim: true }, // e.g., 'Main Label', 'Cautionary Label'
+  packedImageUrl: { type: String, trim: true }, // Optional URL to a photo of the final packed item
+  deliveryPartner:{type:String,trim:true},
+}, { _id: false });
 
 const medicinePreparationSummarySchema = new mongoose.Schema({
   prescriptionId: {
@@ -46,8 +60,11 @@ const medicinePreparationSummarySchema = new mongoose.Schema({
     required: true
   },
   medicinePreparations: [medicinePreparationDetailSchema],
-  createdAt: { type: Date, default: Date.now }
+  createdAt: { type: Date, default: Date.now },
+  packagingUsed: [packagingDetailSchema],
 });
+// New schema for tracking a single packaging item used
+
 
 module.exports = mongoose.model('MedicinePreparationSummary', medicinePreparationSummarySchema);
 

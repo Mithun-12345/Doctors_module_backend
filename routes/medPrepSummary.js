@@ -21,7 +21,8 @@ const {
   logWastage,
   addInstructionsToMedicine,
   updateInstructionStatus,
-  getPatientAddressFromPrescription
+  getPatientAddressFromPrescription,
+  addPackagingDetails
 } = require('../controllers/medPrepSummary');
 
 
@@ -45,6 +46,7 @@ router.post("/upload-preparation-photo", upload.single("photo"), uploadPreparati
 router.post('/add-instructions', addInstructionsToMedicine);
 router.patch('/update-instructions', updateInstructionStatus);
 router.get('/:prescriptionId/patient-address', getPatientAddressFromPrescription);
+router.post('/add-packaging', upload.single('packedImage'), addPackagingDetails);
 
 
 module.exports = router;
