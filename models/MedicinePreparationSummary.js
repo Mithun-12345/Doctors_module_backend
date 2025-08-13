@@ -37,6 +37,7 @@ const medicinePreparationDetailSchema = new mongoose.Schema({
     of: Boolean,
     default: {}
   },
+  medicineExpiryDate:{type:String,trim:true},
 }, { _id: false });
 const packagingDetailSchema = new mongoose.Schema({
   materialId: {

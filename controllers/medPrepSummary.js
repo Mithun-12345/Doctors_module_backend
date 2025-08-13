@@ -1230,6 +1230,43 @@ const getAllMasterInstructions = async (req, res) => {
     res.status(500).json({ message: 'An error occurred while fetching instructions.' });
   }
 };
+const setMedicineExpiryDate = async (req, res) => {
+  const { prescriptionId, medicineName, medicineExpiryDate } = req.body;
+
+  // 1. Validate the input
+  if (!prescriptionId || !medicineName || !medicineExpiryDate) {
+    return res.status(400).json({ message: 'prescriptionId, medicineName, and medicineExpiryDate are required.' });
+  }
+
+  try {
+    // 2. Find the summary and update the nested medicine preparation in one step
+    // The positional operator '$' updates the specific element that was matched in the query.
+    const result = await MedicinePreparationSummary.updateOne(
+      { 
+        "prescriptionId": prescriptionId, 
+        "medicinePreparations.medicineName": medicineName 
+      },
+      { 
+        $set: { "medicinePreparations.$.medicineExpiryDate": medicineExpiryDate }
+      }
+    );
+
+    // 3. Check if a document was found and updated
+    if (result.matchedCount === 0) {
+      return res.status(404).json({ message: 'No matching prescription and medicine found.' });
+    }
+    
+    if (result.modifiedCount === 0) {
+        return res.status(200).json({ message: 'Expiry date was already set to this value.' });
+    }
+
+    res.status(200).json({ message: 'Medicine expiry date updated successfully.' });
+
+  } catch (error) {
+    console.error("Error setting medicine expiry date:", error);
+    res.status(500).json({ message: 'Server error while updating expiry date.' });
+  }
+};
 module.exports = {
   initializeMedicinePreparation,
   updatePreWeight,
@@ -1253,6 +1290,7 @@ module.exports = {
   getPatientAddressFromPrescription,
   addPackagingDetails,
   updateMasterInstructions,
-  getAllMasterInstructions
+  getAllMasterInstructions,
+  setMedicineExpiryDate
 };
 
