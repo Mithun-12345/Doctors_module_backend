@@ -1,5 +1,6 @@
 const express = require("express");
 const validateToken = require("../middlewares/validateTokenHandler");
+const {createAppointmentTimings} = require("../controllers/doctorAppointmentSettingsController");
 const {
   addDoctor,
   getAvailableSlots,
@@ -110,5 +111,9 @@ router.post(
 );
 router.put("/updateProfile", validateToken, updateProfile);
 router.get("/doctor/me", validateToken, getDoctorByFollow);
+
+
+
+router.post("/createAppointmentTimingsAndPrice",validateToken,createAppointmentTimings);
 
 module.exports = router;

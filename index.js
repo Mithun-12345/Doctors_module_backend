@@ -45,6 +45,8 @@ const consumptionRoutes = require("./routes/consumptionRoutes");
 const scheduleRoutes = require('./routes/generateMedicationScheduleRoutes.js');
 const medicationRoutes = require('./routes/generateMedicationScheduleRoutes');
 
+const doctorFeedbackRoutes = require("./routes/doctorFeedback.js");
+
 
 
 
@@ -98,6 +100,8 @@ app.use("/api/posts", require("./routes/postRoutes"));
 app.use('/api', scheduleRoutes);
 app.use('/api/medication', medicationRoutes);
 
+// messaging module 
+app.use("/api/doctorFeedback",doctorFeedbackRoutes);
 
 const options = {
   key: fs.readFileSync("server.key"),
