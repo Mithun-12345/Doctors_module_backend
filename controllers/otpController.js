@@ -246,6 +246,7 @@ exports.loginWithPassword = asyncHandler(async (req, res) => {
     user = await Doctor.findOne({ phone });
   } else if (role === "Patient") {
     user = await regForm.findOne({ phone });
+    // user = await Patient.findOne({phone});
   } else {
     return res
       .status(400)

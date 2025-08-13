@@ -23,10 +23,7 @@ const appointmentSchema = new mongoose.Schema(
       ref: "Patient",
       required: false,
     },
-    isEdited: {
-      type: Boolean,
-      default: false
-    },
+    
     price: { type: String, required: false },
     appointmentDate: {
       type: Date,

@@ -1107,18 +1107,21 @@ exports.bookAppointment = asyncHandler(async (req, res) => {
 
 exports.deleteAppointment = asyncHandler(async (req, res) => {
   let { appointmentId } = req.params;
-  let patientId = req.user.userId;
+  let patientId = req.user._id;
+  console.log(" inside delete appointement user : ",req.user);
+  console.log("Patient id : ",patientId);
 
   // let {appointmentId , patientId} = req.body;
   appointmentId = new mongoose.Types.ObjectId(appointmentId);
-  patientId = new mongoose.Types.ObjectId(patientId);
-
+  // patientId = new mongoose.Types.ObjectId(patientId);
+  console.log("appointment id : ",appointmentId);
   try {
 
     // Find the specific appointment with both patientId and appointmentId match
     const appointment = await Appointment.findOne({
       _id: appointmentId,
       patient: patientId
+      // doctor : patientId
     });
 
     if (!appointment) {
@@ -1130,6 +1133,7 @@ exports.deleteAppointment = asyncHandler(async (req, res) => {
 
     // Delete only this appointment
     await Appointment.deleteOne({ _id: appointmentId, patient: patientId });
+    // await Appointment.deleteOne({_id: appointmentId,doctor : patientId});
 
     res.status(200).json({
       success: true,
@@ -1149,20 +1153,24 @@ exports.deleteAppointment = asyncHandler(async (req, res) => {
 
 exports.editAppointmentOnce = asyncHandler(async (req, res) => {
   const { appointmentId} = req.params;
-  const patientId = req.user.userId;
+  const patientId = req.user._id;
 
   //  Validate IDs
   if (
-    !mongoose.Types.ObjectId.isValid(appointmentId) ||
-    !mongoose.Types.ObjectId.isValid(patientId)
+    !mongoose.Types.ObjectId.isValid(appointmentId) 
+    // !mongoose.Types.ObjectId.isValid(patientId)
+    // !isValid(patientId)
   ) {
     return res.status(400).json({ success: false, message: "Invalid ID format" });
   }
 
+  console.log("Appointment id : ",appointmentId);
+  console.log("patient Id : ",patientId);
+
   //  Fetch appointment by _id and patient
   const appointment = await Appointment.findOne({
     _id: new mongoose.Types.ObjectId(appointmentId),
-    patient: new mongoose.Types.ObjectId(patientId)
+    patient: patientId
   });
 
   if (!appointment) {
@@ -1170,26 +1178,57 @@ exports.editAppointmentOnce = asyncHandler(async (req, res) => {
   }
 
   //  Rule 1: Already edited before
-  if (appointment.isEdited) {
+  if (appointment.diseaseType.edit) {
     return res.status(400).json({
       success: false,
       message: "You can only edit an appointment once."
     });
   }
 
-  //  Rule 2: Check 3-hour cutoff
-  const [hour, minute] = appointment.timeSlot.split(":").map(Number);
-  const appointmentDateTime = new Date(appointment.appointmentDate);
-  appointmentDateTime.setHours(hour, minute, 0, 0);
+  // //  Rule 2: Check 3-hour cutoff
+  // const [hour, minute] = appointment.timeSlot.split(":").map(Number);
+  // const appointmentDateTime = new Date(appointment.appointmentDate);
+  // appointmentDateTime.setHours(hour, minute, 0, 0);
 
-  const now = new Date();
-  const threeHoursMs = 3 * 60 * 60 * 1000;
-  if (appointmentDateTime - now <= threeHoursMs) {
-    return res.status(400).json({
-      success: false,
-      message: "Edits are not allowed within 3 hours of the appointment time."
-    });
-  }
+  // const now = new Date();
+  // const threeHoursMs = 3 * 60 * 60 * 1000;
+  // if (appointmentDateTime - now <= threeHoursMs) {
+  //   return res.status(400).json({
+  //     success: false,
+  //     message: "Edits are not allowed within 3 hours of the appointment time."
+  //   });
+  // }
+
+
+// Rule: Block edits if we are within 3 hours of today's appointment time
+const [hour, minute] = appointment.timeSlot.split(":").map(Number);
+
+// Create the full DateTime for appointment
+const appointmentDateTime = new Date(appointment.appointmentDate);
+appointmentDateTime.setHours(hour, minute, 0, 0);
+
+const now = new Date();
+const threeHoursBefore = new Date(appointmentDateTime.getTime() - (3 * 60 * 60 * 1000));
+
+// If appointment is today, and now is after 3-hour-before cutoff => block
+if (
+  now.toDateString() === appointmentDateTime.toDateString() && // same day
+  now >= threeHoursBefore
+) {
+  return res.status(400).json({
+    success: false,
+    message: "Edits are not allowed within 3 hours of today's appointment time."
+  });
+}
+
+// If appointment date is in the past => block
+if (now > appointmentDateTime && now.toDateString() !== appointmentDateTime.toDateString()) {
+  return res.status(400).json({
+    success: false,
+    message: "Cannot edit past appointments."
+  });
+}
+
 
   // Rule 3: New timeSlot validation - must be between 10:00 and 17:00
   if (req.body.timeSlot) {
@@ -1212,7 +1251,7 @@ exports.editAppointmentOnce = asyncHandler(async (req, res) => {
   });
 
   //  Mark as edited
-  appointment.isEdited = true;
+  appointment.diseaseType.edit = true;
 
   await appointment.save();
 
