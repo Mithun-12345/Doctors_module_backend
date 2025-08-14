@@ -26,7 +26,8 @@ const {
   updateMasterInstructions,
   getAllMasterInstructions,
   setMedicineExpiryDate,
-  updateShipmentStatus
+  updateShipmentStatus,
+  getFollowUpAppointmentsPrescriptions
 } = require('../controllers/medPrepSummary');
 
 
@@ -55,5 +56,6 @@ router.patch('/update-instructions-settings', updateMasterInstructions);
 router.get('/get-all-instructions', getAllMasterInstructions);
 router.patch('/set-expiry', setMedicineExpiryDate);
 router.patch('/:prescriptionId/update-shipment-status', updateShipmentStatus);
+router.get('/follow-up-mp', getFollowUpAppointmentsPrescriptions);
 
 module.exports = router;

@@ -43,12 +43,12 @@ const packagingDetailSchema = new mongoose.Schema({
   materialId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'RawMaterial', // Links to the packaging item in your RawMaterial inventory
-    required: true
+    required: false
   },
-  materialName: { type: String, required: true },
+  materialName: { type: String, required: false},
   packageSize: { type: String, trim: true },
   presentQuantity: { type: Number }, // Optional: Quantity on hand before use
-  quantityUsed: { type: Number, required: true, default: 1 },
+  quantityUsed: { type: Number, required: false, default: 1 },
   label: { type: String, trim: true }, // e.g., 'Main Label', 'Cautionary Label'
   packedImageUrl: { type: String, trim: true }, // Optional URL to a photo of the final packed item
   deliveryPartner:{type:String,trim:true},

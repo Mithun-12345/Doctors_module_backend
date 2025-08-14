@@ -1310,6 +1310,57 @@ const updateShipmentStatus = async (req, res) => {
     res.status(500).json({ message: 'Server error while updating shipment status.' });
   }
 };
+const   getFollowUpAppointmentsPrescriptions = async (req, res) => {
+  try {
+    // 1. Find all appointments with the specific follow-up status
+    const appointments = await Appointment.find({ 
+        follow: 'Follow up-MP' 
+    }).select('prescriptionID medicinePrepared');
+
+    if (!appointments.length) {
+      return res.status(404).json({ message: "No appointments with 'Follow up-MP' status found." });
+    }
+
+    // 2. Extract all prescription IDs from the found appointments
+    const prescriptionIds = appointments
+      .map(app => app.prescriptionID)
+      .filter(id => id); 
+
+    // 3. Fetch all relevant preparation summaries in a single query
+    const summaries = await MedicinePreparationSummary.find({
+      prescriptionId: { $in: prescriptionIds }
+    }).select('prescriptionId packagingUsed');
+
+    // 4. Create a lookup map for quick access to shipment statuses
+    const summaryMap = new Map();
+    summaries.forEach(summary => {
+      const status = summary.packagingUsed?.[0]?.shipmentStatus ?? false;
+      summaryMap.set(summary.prescriptionId.toString(), status);
+    });
+
+    // 5. Build the final response by combining the data
+    const results = appointments.map(appointment => {
+      // ✅ --- THIS IS THE CORRECTED LOGIC ---
+      const presId = appointment.prescriptionID;
+      // Check if presId exists before using it
+      const shipmentStatus = presId ? summaryMap.get(presId.toString()) : false;
+
+      return {
+        appointmentId: appointment._id,
+        prescriptionId: presId,
+        medicinePrepared: appointment.medicinePrepared,
+        // Use the safely retrieved status
+        shipmentStatus: shipmentStatus || false,
+      };
+    });
+
+    res.status(200).json(results);
+
+  } catch (error) {
+    console.error("Error fetching follow-up appointments:", error);
+    res.status(500).json({ message: "Internal server error" });
+  }
+};
 module.exports = {
   initializeMedicinePreparation,
   updatePreWeight,
@@ -1335,6 +1386,7 @@ module.exports = {
   updateMasterInstructions,
   getAllMasterInstructions,
   updateShipmentStatus,
-  setMedicineExpiryDate
+  setMedicineExpiryDate,
+  getFollowUpAppointmentsPrescriptions
 };
 
