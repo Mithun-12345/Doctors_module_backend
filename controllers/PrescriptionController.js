@@ -6,6 +6,7 @@ const Doctor = require("../models/doctorModel");
 const Patient = require("../models/patientModel");
 const PatientDetails = require("../models/patientDetails");
 const RawMaterial = require('../models/RawMaterial');
+const MedicinePreparationSummary = require('../models/MedicinePreparationSummary');
 
 // this function is to be removed in order to migrate to getPrescriptionByAppointmentId fn
 // const getPrescriptionByAppointmentId = async (req, res) => {
@@ -76,6 +77,29 @@ const getPrescriptionByAppointmentId = async (req, res) => {
       });
     }
 
+    // --- NEW LOGIC TO FETCH ATTEMPT COUNT ---
+
+    // 1. Fetch the corresponding medicine preparation summary
+    const summary = await MedicinePreparationSummary.findOne({ 
+        prescriptionId: prescription._id 
+    }).select('medicinePreparations.medicineName medicinePreparations.attempt');
+
+    // 2. Map the attempt count to each prescription item
+    const itemsWithAttemptCount = prescription.prescriptionItems.map(item => {
+      // Find the matching medicine preparation in the summary
+      const prepDetail = summary ? summary.medicinePreparations.find(
+        p => p.medicineName === item.medicineName
+      ) : null;
+
+      // Return the original item details plus the attempt count
+      return {
+        ...item.toObject(), // Keep all original item fields
+        attempt: prepDetail ? prepDetail.attempt : '0' // Add the attempt field
+      };
+    });
+    // --- END OF NEW LOGIC ---
+
+
     // Format the response
     const formattedPrescription = {
       _id: prescription._id,
@@ -86,7 +110,8 @@ const getPrescriptionByAppointmentId = async (req, res) => {
       doctorLicense: prescription.doctorId.licenseNumber,
       patientId: prescription.patientId._id,
       patientName: prescription.patientId.name,
-      prescriptionItems: prescription.prescriptionItems,
+      // Use the new array that includes the attempt count
+      prescriptionItems: itemsWithAttemptCount, 
       createdAt: prescription.createdAt,
       updatedAt: prescription.updatedAt,
     };
@@ -101,7 +126,6 @@ const getPrescriptionByAppointmentId = async (req, res) => {
     });
   }
 };
-
 
 const getMyPrescribedAppointments = async (req, res) => {
   try {

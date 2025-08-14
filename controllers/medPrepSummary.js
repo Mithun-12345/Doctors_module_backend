@@ -376,6 +376,8 @@ const getAllLeakagesDetected = async (req, res) => {
               currentQuantity,
               LeakedByUsage: rawMat?.totalLeakedQuantity ?? null,
               LeakedByStorage: rawMat?.storageLeakedQuantity ?? null,
+              category:rawMat.category,
+              type:rawMat.type,
               uom,
               costPerUnit: rawMat?.costPerUnit ?? null,
               lostCost: parseFloat(lostCost.toFixed(2)),
@@ -469,6 +471,8 @@ const getLeakagesAboveThreshold = async (req, res) => {
                   currentQuantity: currentRawMaterialQty,
                   LeakedByUsage: rawMat?.totalLeakedQuantity ?? null,
                   LeakedByStorage: rawMat?.storageLeakedQuantity ?? null,
+                  category:rawMat.category,
+                  type:rawMat.type,
                   costPerUnit: rawMat?.costPerUnit ?? null,
                   lostCost: parseFloat(lostCost.toFixed(2)),
                   createdAt: summary.createdAt
@@ -1267,6 +1271,45 @@ const setMedicineExpiryDate = async (req, res) => {
     res.status(500).json({ message: 'Server error while updating expiry date.' });
   }
 };
+
+const updateShipmentStatus = async (req, res) => {
+  const { prescriptionId } = req.params;
+  // Get only the new status from the request body
+  const { shipmentStatus } = req.body;
+
+  // 1. Validate inputs
+  if (!mongoose.Types.ObjectId.isValid(prescriptionId)) {
+    return res.status(400).json({ message: 'Invalid Prescription ID format.' });
+  }
+  if (typeof shipmentStatus !== 'boolean') {
+    return res.status(400).json({ message: 'A boolean shipmentStatus is required.' });
+  }
+
+  try {
+    // 2. Find the summary and update the first nested packaging item
+    const result = await MedicinePreparationSummary.updateOne(
+      { "prescriptionId": prescriptionId },
+      { 
+        // Use "packagingUsed.0" to directly target the FIRST item in the array
+        $set: { "packagingUsed.0.shipmentStatus": shipmentStatus } 
+      }
+    );
+
+    // 3. Check if a document was found and updated
+    if (result.matchedCount === 0) {
+      return res.status(404).json({ message: 'Preparation summary not found for this prescription.' });
+    }
+    if (result.modifiedCount === 0) {
+      return res.status(200).json({ message: 'Shipment status is already set to this value.' });
+    }
+
+    res.status(200).json({ message: 'Shipment status updated successfully.' });
+
+  } catch (error) {
+    console.error("Error updating shipment status:", error);
+    res.status(500).json({ message: 'Server error while updating shipment status.' });
+  }
+};
 module.exports = {
   initializeMedicinePreparation,
   updatePreWeight,
@@ -1291,6 +1334,7 @@ module.exports = {
   addPackagingDetails,
   updateMasterInstructions,
   getAllMasterInstructions,
+  updateShipmentStatus,
   setMedicineExpiryDate
 };
 

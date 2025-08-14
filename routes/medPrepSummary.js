@@ -25,7 +25,8 @@ const {
   addPackagingDetails,
   updateMasterInstructions,
   getAllMasterInstructions,
-  setMedicineExpiryDate
+  setMedicineExpiryDate,
+  updateShipmentStatus
 } = require('../controllers/medPrepSummary');
 
 
@@ -53,5 +54,6 @@ router.post('/add-packaging', upload.single('packedImage'), addPackagingDetails)
 router.patch('/update-instructions-settings', updateMasterInstructions);
 router.get('/get-all-instructions', getAllMasterInstructions);
 router.patch('/set-expiry', setMedicineExpiryDate);
+router.patch('/:prescriptionId/update-shipment-status', updateShipmentStatus);
 
 module.exports = router;

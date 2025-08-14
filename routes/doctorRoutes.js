@@ -83,7 +83,6 @@ router.post(
 );
 router.get(
   "/prescriptions/delivery-status/:patientId",
-  validateToken,
   getDeliveryStatusByPatient
 );
 

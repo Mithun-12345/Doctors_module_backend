@@ -836,7 +836,6 @@ exports.getDeliveryStatusByPatient = async (req, res) => {
   try {
     const { patientId } = req.params;
     const objectId = new mongoose.Types.ObjectId(patientId);
-    console.log(req.params.patientId);
 
     const prescriptions = await Prescription.find({
       patientId: objectId,
@@ -848,17 +847,30 @@ exports.getDeliveryStatusByPatient = async (req, res) => {
         .json({ message: "No prescriptions found for this patient." });
     }
 
-    const simplified = prescriptions.map((prescription) => ({
-      id: prescription._id,
-      trackingId: prescription.trackingId,
-      shippedDate: prescription.shippedDate || null,
-      isProductReceived: prescription.isProductReceived,
-      items: prescription.prescriptionItems.map((item) => ({
-        name: item.medicineName,
-        qty: item.dispenseQuantity,
-        uom: item.uom,
-      })),
-    }));
+    // ✅ 1. Use Promise.all to handle the async call inside the map
+    const simplified = await Promise.all(
+      prescriptions.map(async (prescription) => {
+        // ✅ 2. Fetch the corresponding packaging details
+        const summary = await MedicinePreparationSummary.findOne(
+            { prescriptionId: prescription._id }
+        ).select("packagingUsed");
+
+        // Prepare the object with all the required data
+        return {
+          id: prescription._id,
+          trackingId: prescription.trackingId,
+          shippedDate: prescription.shippedDate || null,
+          isProductReceived: prescription.isProductReceived,
+          items: prescription.prescriptionItems.map((item) => ({
+            name: item.medicineName,
+            qty: item.dispenseQuantity,
+            uom: item.uom,
+          })),
+          // ✅ 3. Add the packaging details to the response
+          packagingDetails: summary?.packagingUsed || [],
+        };
+      })
+    );
 
     res.json(simplified);
   } catch (error) {
@@ -866,7 +878,6 @@ exports.getDeliveryStatusByPatient = async (req, res) => {
     res.status(500).json({ message: "Internal server error" });
   }
 };
-
 //To check he is appointed with consultation or not
 exports.getDoctorByFollow = async (req, res) => {
   try {
