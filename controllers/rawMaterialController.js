@@ -103,7 +103,10 @@ exports.createRawMaterial = async (req, res) => {
       expiryDate,
       costPerUnit,
       totalWeight,
-      isAlcohol
+      isAlcohol,
+      vendorName,      // Already destructured
+      vendorPhone,     // Already destructured
+      vendorLocation   // Already destructured
     } = req.body;
 
     // Step 1: Upload product image to Cloudinary if file exists
@@ -150,6 +153,10 @@ exports.createRawMaterial = async (req, res) => {
       totalWeight,
       isAlcohol,
       barcodeImageUrl,
+      // ✅ --- ADDED FIELDS HERE ---
+      vendorName,
+      vendorPhone,
+      vendorLocation
     });
 
     const savedRawMaterial = await newRawMaterial.save();

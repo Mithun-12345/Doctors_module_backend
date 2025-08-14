@@ -14,7 +14,9 @@ const rawMaterialSchema = new mongoose.Schema({
   isAlcohol:{type:Boolean,default:false},
   totalLeakedQuantity:{type:Number,default:0},
   storageLeakedQuantity:{type:Number,default:0},
-
+  vendorName:{type:String},
+  vendorLocation:{type:String},
+  vendorPhone:{type:Number},
   // Unique barcode
   barcode: { type: String, required: true, unique: true },
   barcodeImageUrl: { type: String, trim: true }, // Cloudinary URL
