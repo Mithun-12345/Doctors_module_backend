@@ -52,6 +52,9 @@ const packagingDetailSchema = new mongoose.Schema({
   label: { type: String, trim: true }, // e.g., 'Main Label', 'Cautionary Label'
   packedImageUrl: { type: String, trim: true }, // Optional URL to a photo of the final packed item
   deliveryPartner:{type:String,trim:true},
+  shippedDate:{type:String},
+  arrivalDate:{type:String},
+  shipmentId:{type:String,trim:true},
 }, { _id: false });
 
 const medicinePreparationSummarySchema = new mongoose.Schema({

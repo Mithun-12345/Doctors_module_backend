@@ -8,6 +8,7 @@ const cloudinary = require("cloudinary").v2;
 const Prescription = require("../models/Prescription.js");
 const fs = require("fs");
 const NotificationReminderSettings = require("../models/NotificationReminderSettings");
+const MedicinePreparationSummary = require('../models/MedicinePreparationSummary');
 
 exports.addDoctor = async (req, res) => {
   const { name, age, gender, photo, specialization, bio, phone, role } =
@@ -634,12 +635,14 @@ exports.uploadProfilePicture = async (req, res) => {
 exports.updateTrackingId = async (req, res) => {
   try {
     const { prescriptionId } = req.params;
-    const { trackingId } = req.body;
+    // ✅ 1. Get all shipping details from the request body
+    const { trackingId, deliveryPartner, shippedDate, arrivalDate } = req.body;
 
     if (!trackingId) {
       return res.status(400).json({ message: "Tracking ID is required." });
     }
 
+    // --- EXISTING LOGIC to update the Prescription (Core logic is unchanged) ---
     const prescription = await Prescription.findById(prescriptionId);
     if (!prescription) {
       return res.status(404).json({ message: "Prescription not found." });
@@ -647,11 +650,32 @@ exports.updateTrackingId = async (req, res) => {
 
     prescription.trackingId = trackingId;
     prescription.isProductShipped = true;
-    prescription.shippedDate = new Date();
-
+    // Use the shippedDate from the payload for consistency
+    prescription.shippedDate = new Date(shippedDate); 
+    
     await prescription.save({ validateBeforeSave: false });
+    // --- END OF EXISTING LOGIC ---
 
-    res.json({ message: "Tracking ID updated successfully." });
+
+    // --- NEW LOGIC ADDED HERE to update the MedicinePreparationSummary ---
+    // This second, separate update adds the details to the packaging information.
+    await MedicinePreparationSummary.updateOne(
+      { prescriptionId: prescriptionId },
+      { 
+        // Using "packagingUsed.0" to target the FIRST item in the array,
+        // which is assumed to be the main shipping container.
+        $set: { 
+          "packagingUsed.0.shipmentId": trackingId, // As you said, trackingId and shipmentId are the same
+          "packagingUsed.0.deliveryPartner": deliveryPartner,
+          "packagingUsed.0.shippedDate": shippedDate,
+          "packagingUsed.0.arrivalDate": arrivalDate
+        } 
+      }
+    );
+    // --- END OF NEW LOGIC ---
+
+    res.json({ message: "Tracking ID and shipping details updated successfully." });
+    
   } catch (err) {
     console.error("Error updating tracking ID:", err);
     res.status(500).json({ message: "Internal server error" });
