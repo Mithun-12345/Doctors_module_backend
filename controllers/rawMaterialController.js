@@ -104,9 +104,9 @@ exports.createRawMaterial = async (req, res) => {
       costPerUnit,
       totalWeight,
       isAlcohol,
-      vendorName,      // Already destructured
-      vendorPhone,     // Already destructured
-      vendorLocation   // Already destructured
+      vendorName,
+      vendorPhone,
+      vendorLocation
     } = req.body;
 
     // Step 1: Upload product image to Cloudinary if file exists
@@ -135,6 +135,14 @@ exports.createRawMaterial = async (req, res) => {
     // Step 3: Generate barcode image and upload to Cloudinary
     const barcodeBuffer = await generateBarcodeBuffer(barcode);
     const barcodeImageUrl = await uploadToCloudinary(barcodeBuffer);
+    
+    // ✅ --- NEW LOGIC ADDED HERE ---
+    // Calculate bottle weight before creating the document
+    let bottleWeight = 0;
+    if (totalWeight && quantity) { // Ensure both values exist to avoid errors
+      bottleWeight = Number(totalWeight) - Number(quantity);
+    }
+    // ✅ ---------------------------
 
     // Step 4: Create and save raw material
     const newRawMaterial = new RawMaterial({
@@ -150,10 +158,10 @@ exports.createRawMaterial = async (req, res) => {
       productImage: productImageUrl,
       costPerUnit: Number(costPerUnit),
       barcode,
-      totalWeight,
+      totalWeight: Number(totalWeight), // Consistent type casting
       isAlcohol,
       barcodeImageUrl,
-      // ✅ --- ADDED FIELDS HERE ---
+      bottleWeight, // ✅ Store the calculated bottle weight
       vendorName,
       vendorPhone,
       vendorLocation
