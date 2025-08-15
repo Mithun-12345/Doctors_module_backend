@@ -21,7 +21,7 @@ const rawMaterialSchema = new mongoose.Schema({
   barcode: { type: String, required: true, unique: true },
   barcodeImageUrl: { type: String, trim: true }, // Cloudinary URL
   productImage: { type: String, trim: true },
-
+  bottleWeight:{type:Number},
   costPerUnit: { type: Number, required: true, min: 0 },
 
   // Amendment status
