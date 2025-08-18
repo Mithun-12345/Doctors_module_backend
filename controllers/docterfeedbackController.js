@@ -75,6 +75,26 @@ exports.createDoctorForFeedbackOption = async(req,res)=>{
 
 }
 
+exports.getDoctorFeedbackOption = async (req,res)=>{
+    const doctorId = req.user._id;
+
+    try{
+        const result = await DoctorfeedbackSettings.findOne({doctorId : doctorId});
+
+        if(!result){
+            console.log("doctor id not present in database");
+            return res.json({message : "doctorid not present in database"});
+        }
+
+        console.log("successfully fetched");
+        return res.status(200).json({message : "success",result : result});
+    }
+    catch(error){
+        console.log("error in fetching data");
+        return res.status(500).json({message : "error in fetching data "});
+    }
+}
+
 exports.editDoctorFeedbackOption = async (req, res) => {
     const doctorId = req.user._id;
     const queryId = new mongoose.Types.ObjectId(req.params.queryId); // ensure ObjectId

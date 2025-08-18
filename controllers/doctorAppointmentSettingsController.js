@@ -1,4 +1,5 @@
 
+const { read } = require("pdfkit");
 const {ClinicOperationHours,AppointmentSlotTypes,ConsultationPriorityMapping} = require("../models/DoctorAppointmentSettings");
 
 exports.createClinicOperationalHours = async (req,res)=>{
@@ -23,7 +24,23 @@ exports.createClinicOperationalHours = async (req,res)=>{
     }
 
 }
+exports.getClinicOperationalHours = async (req,res)=>{
+    const doctorId = req.user._id;
+    try{
+        const result = await ClinicOperationHours.findOne({doctorId : doctorId});
+        if(!result){
+            console.log("doctor id not present in database");
+            return res.json({message : "doctorid not present in database"});
+        }
 
+        console.log("successfully fetched");
+        return res.status(200).json({message : "success",result : result});
+    }
+    catch(error){
+        console.log("error in fetching");
+        return res.status(500).json({message : "error in fetching"});
+    }
+}
 // const { ClinicOperationHours } = require("../models/DoctorAppointmentSettings");
 
 exports.updateClinicOperationalHours = async (req, res) => {
@@ -100,6 +117,23 @@ exports.createAppointmentSlotTypes = async (req,res)=>{
     }
 };
 
+exports.getAppointmentSlottypes = async (req,res)=>{
+    const doctorId = req.user._id;
+    try{
+        const result = await AppointmentSlotTypes.findOne({doctorId : doctorId});
+        if(!result){
+            console.log("doctor id not present in database");
+            return res.json({message : "doctorid not present in database"});
+        }
+
+        console.log("successfully fetched");
+        return res.status(200).json({message : "success",result : result});
+    }
+    catch(error){
+        console.log("error in fetching ");
+        return res.status(500).json({message : "error in fetching"});
+    }
+}
 
 
 exports.updateSlotType = async (req, res) => {
@@ -205,4 +239,5 @@ exports.createConsulationPriorityMapping = async(req,res)=>{
         return res.status(500).json({message : "error in database insertion "})
     }
 };
+
 
