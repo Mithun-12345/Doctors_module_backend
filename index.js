@@ -46,8 +46,8 @@ const scheduleRoutes = require('./routes/generateMedicationScheduleRoutes.js');
 const medicationRoutes = require('./routes/generateMedicationScheduleRoutes');
 
 const doctorFeedbackRoutes = require("./routes/doctorFeedback.js");
-
-
+const doctorAppointmentSettingsRoutes = require("./routes/doctorappointmentsettingsRoutes.js");
+const pushNotificationRouter = require("./routes/pushNotificationRouter.js");
 
 
 
@@ -102,6 +102,10 @@ app.use('/api/medication', medicationRoutes);
 
 // messaging module 
 app.use("/api/doctorFeedback",doctorFeedbackRoutes);
+app.use("/api/doctorAppointmentSettings",doctorAppointmentSettingsRoutes);
+
+// push notification 
+app.use("/api/notification",pushNotificationRouter);
 
 const options = {
   key: fs.readFileSync("server.key"),

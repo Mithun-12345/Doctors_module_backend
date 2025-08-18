@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "419213015077",
+    "project_id": "exponotification-fcf08",
+    "storage_bucket": "exponotification-fcf08.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:419213015077:android:bab0799950d194baf7a7cc",
+        "android_client_info": {
+          "package_name": "com.bragadeesh_710.rn_push_notification"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAOaJr7zYADQZoNQ2f8pMYdcYVQdQIe24A"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

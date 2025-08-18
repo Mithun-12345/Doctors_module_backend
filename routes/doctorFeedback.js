@@ -1,12 +1,15 @@
 const express = require("express");
 const validateToken = require("../middlewares/validateTokenHandler");
-const {createFeedback,editFeedback,viewFeedback } = require("../controllers/docterfeedbackController")
+const { editFeedbackParticularQuestion,viewFeedbackQuestions, editDoctorFeedbackOption,createDoctorForFeedbackOption ,createDoctorFeedback} = require("../controllers/docterfeedbackController")
 
 const router = express.Router();
 
+router.post("/createDoctorForFeedbackOption",validateToken,createDoctorForFeedbackOption);
+router.put("/editDoctorFeedbackOption/:queryId",validateToken,editDoctorFeedbackOption);
 
-router.post("/createfeedback",validateToken,createFeedback);
-router.put("/editFeedback",validateToken,editFeedback);
-router.get("/viewfeedback",validateToken,viewFeedback);
+
+router.post("/createDoctorFeedback",validateToken,createDoctorFeedback);
+router.put("/editFeedbackParticularQuestion",validateToken,editFeedbackParticularQuestion);
+router.get("/viewFeedbackQuestions",validateToken,viewFeedbackQuestions);
 
 module.exports = router;
