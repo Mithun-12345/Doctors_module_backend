@@ -240,4 +240,50 @@ exports.createConsulationPriorityMapping = async(req,res)=>{
     }
 };
 
+exports.editConsultationPriorityMapping = async (req, res) => {
+    const { str } = req.body;
+    const id = req.params.id;
+
+    try {
+        // Find current document
+        const data = await ConsultationPriorityMapping.findById(id);
+        if (!data) {
+            return res.status(404).json({ message: 'Document not found' });
+        }
+
+        if (str === "AllowRescheduling") {
+            data.AllowRescheduling = !data.AllowRescheduling;
+        } else if (str === "RefundAdjustmentOnRescheduling") {
+            data.RefundAdjustmentOnRescheduling = !data.RefundAdjustmentOnRescheduling;
+        } else {
+            return res.status(400).json({ message: 'Invalid field option' });
+        }
+
+        await data.save();
+
+        return res.status(200).json({ message: 'modified successfully', data });
+    } catch (error) {
+        console.log("Error in database operations", error);
+        return res.status(500).json({ message: "error in database operations" });
+    }
+};
+
+
+exports.getConsultationPriorityMapping = async (req,res) =>{
+    try{
+        const result = await ConsultationPriorityMapping.find({});
+        if(!result){
+            console.log("doctor id not present in database");
+            return res.json({message : "doctorid not present in database"});
+        }
+
+        console.log("successfully fetched");
+        return res.status(200).json({message : "success",result : result});
+    }
+    catch(error){
+        console.log("error in the database fetching ");
+        return res.status(500).json({message : "error in the database fetching"});
+    }
+}
+
 
