@@ -248,13 +248,10 @@ exports.getMedicationStockStatus = async (req, res) => {
       return res.status(400).json({ message: 'Patient ID is required' });
     }
 
-    // Use an aggregation pipeline to group medicines and sum consumption
     const stockStatus = await NotificationReminderSettings.aggregate([
-      // Step 1: Filter by the specified patient
       {
         $match: { patientId: new mongoose.Types.ObjectId(patientId) }
       },
-      // Step 2: Group by unique medicine name and dispense quantity
       {
         $group: {
           _id: {
@@ -262,11 +259,9 @@ exports.getMedicationStockStatus = async (req, res) => {
             dispenseQuantity: "$dispenseQuantity",
             form: "$form"
           },
-          // Sum up the quantity consumed for each group
           totalQuantityConsumed: { $sum: "$quantityConsumed" }
         }
       },
-      // Step 3: Reshape the output for a cleaner response
       {
         $project: {
           _id: 0,
@@ -278,15 +273,12 @@ exports.getMedicationStockStatus = async (req, res) => {
       }
     ]);
 
-    // Step 4: Calculate the status for each medicine in the result
     const finalReport = stockStatus.map(med => {
-      // Use regex to extract the first number from strings like "50ml" or "100 grams"
       const match = med.dispenseQuantity ? med.dispenseQuantity.match(/(\d+(\.\d+)?)/) : null;
       const numericDispenseQty = match ? parseFloat(match[0]) : 0;
 
       let medicineStatus = "Available";
 
-      // Avoid division by zero and perform the 80% check
       if (numericDispenseQty > 0) {
         const percentageUsed = (med.totalQuantityConsumed / numericDispenseQty) * 100;
         if (percentageUsed > 80) {
@@ -294,9 +286,13 @@ exports.getMedicationStockStatus = async (req, res) => {
         }
       }
 
+      // ✅ **Calculate the remaining quantity**
+      const quantityRemaining = numericDispenseQty - med.totalQuantityConsumed;
+
       return {
         ...med,
-        medicineStatus
+        medicineStatus,
+        quantityRemaining // ✅ Add it to the response**
       };
     });
 
@@ -304,6 +300,95 @@ exports.getMedicationStockStatus = async (req, res) => {
 
   } catch (err) {
     console.error('🔥 Error getting medication stock status:', err);
+    return res.status(500).json({ message: 'Internal server error', error: err.message });
+  }
+};
+exports.getMedicationStockStatusByDoctor = async (req, res) => {
+  try {
+    const { doctorId } = req.params;
+
+    if (!doctorId) {
+      return res.status(400).json({ message: 'Doctor ID is required' });
+    }
+
+    // This pipeline is multi-stage to achieve the desired grouping and data lookup
+    let patientReports = await NotificationReminderSettings.aggregate([
+      // Step 1: Find all reminders for the given doctor
+      {
+        $match: { doctorId: new mongoose.Types.ObjectId(doctorId) }
+      },
+      // Step 2: Group by patient and their unique medicine stock to sum consumption
+      {
+        $group: {
+          _id: {
+            patientId: "$patientId",
+            medicineName: "$medicineName",
+            dispenseQuantity: "$dispenseQuantity",
+            form: "$form"
+          },
+          totalQuantityConsumed: { $sum: "$quantityConsumed" }
+        }
+      },
+      // Step 3: Join with the 'patients' collection to get each patient's name
+      {
+        $lookup: {
+          from: 'patients', // The name of your patients collection
+          localField: '_id.patientId',
+          foreignField: '_id',
+          as: 'patientInfo'
+        }
+      },
+      { $unwind: "$patientInfo" }, // Unpack the patientInfo array created by $lookup
+      // Step 4: Group again, this time by patient, to create the nested structure
+      {
+        $group: {
+          _id: "$_id.patientId",
+          patientName: { $first: "$patientInfo.name" },
+          medicationStock: {
+            $push: { // Push each medicine's details into a 'medicationStock' array
+              medicineName: "$_id.medicineName",
+              dispenseQuantity: "$_id.dispenseQuantity",
+              form: "$_id.form",
+              totalQuantityConsumed: "$totalQuantityConsumed"
+            }
+          }
+        }
+      },
+      // Step 5: Final projection for a clean output
+      {
+        $project: {
+          _id: 0,
+          patientId: "$_id",
+          patientName: 1,
+          medicationStock: 1
+        }
+      }
+    ]);
+
+    // Step 6: Loop through the results to calculate status and remaining quantity
+    patientReports.forEach(report => {
+      report.medicationStock = report.medicationStock.map(med => {
+        const match = med.dispenseQuantity ? med.dispenseQuantity.match(/(\d+(\.\d+)?)/) : null;
+        const numericDispenseQty = match ? parseFloat(match[0]) : 0;
+
+        let medicineStatus = "Available";
+        if (numericDispenseQty > 0) {
+          const percentageUsed = (med.totalQuantityConsumed / numericDispenseQty) * 100;
+          if (percentageUsed > 80) {
+            medicineStatus = "Low Stock";
+          }
+        }
+
+        const quantityRemaining = numericDispenseQty - med.totalQuantityConsumed;
+
+        return { ...med, medicineStatus, quantityRemaining };
+      });
+    });
+
+    return res.status(200).json(patientReports);
+
+  } catch (err) {
+    console.error('🔥 Error getting medication stock status by doctor:', err);
     return res.status(500).json({ message: 'Internal server error', error: err.message });
   }
 };
