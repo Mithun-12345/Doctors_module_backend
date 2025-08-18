@@ -683,154 +683,167 @@ exports.updateTrackingId = async (req, res) => {
 };
 
 exports.startPrescription = async (req, res) => {
-  try {
-    const { prescriptionId } = req.params;
-    const { startDate: startDatePayload } = req.body;
+  try {
+    const { prescriptionId } = req.params;
+    const { startDate: startDatePayload } = req.body;
 
-    if (!prescriptionId || !startDatePayload) {
-      return res.status(400).json({ message: "Missing prescriptionId or startDate in request" });
-    }
+    if (!prescriptionId || !startDatePayload) {
+      return res.status(400).json({ message: "Missing prescriptionId or startDate in request" });
+    }
 
-    const prescription = await Prescription.findById(prescriptionId);
-    if (!prescription) {
-      return res.status(404).json({ message: "Prescription not found" });
-    }
+    const prescription = await Prescription.findById(prescriptionId);
+    if (!prescription) {
+      return res.status(404).json({ message: "Prescription not found" });
+    }
 
-    const startDate = moment.utc(startDatePayload).startOf("day");
-    const duration = parseInt(prescription.medicineCourse, 10) || 0;
-    const endDate = moment(startDate).add(duration - 1, "days");
+    const startDate = moment.utc(startDatePayload).startOf("day");
+    const duration = parseInt(prescription.medicineCourse, 10) || 0;
+    const endDate = moment(startDate).add(duration - 1, "days");
 
-    prescription.startDate = startDate.toDate();
-    prescription.endDate = endDate.toDate();
-    await prescription.save();
+    prescription.startDate = startDate.toDate();
+    prescription.endDate = endDate.toDate();
+    await prescription.save();
 
-    const remindersToInsert = [];
+    const remindersToInsert = [];
 
-    for (const [index, med] of (prescription.prescriptionItems || []).entries()) {
-      const {
-        medicineName = `Unnamed Medicine #${index}`,
-        medicineConsumption: dosage = "",
-        additionalComments: instructions = "",
-        standardSchedule = [],
-        frequentSchedule = [],
-        parallelConsumption = null,
-      } = med || {};
+    for (const [index, med] of (prescription.prescriptionItems || []).entries()) {
+      const {
+        medicineName = `Unnamed Medicine #${index}`,
+        form, // ✅ Get the form here**
+        dispenseQuantity,
+        medicineConsumption: dosage = "",
+        additionalComments: instructions = "",
+        standardSchedule = [],
+        frequentSchedule = [],
+        parallelConsumption = null,
+      } = med || {};
 
-      // Standard Schedule
-for (const sched of standardSchedule) {
-  const { day, timing = {} } = sched;
-  if (!day || !timing || typeof timing !== "object") continue;
+      // Standard Schedule
+      for (const sched of standardSchedule) {
+        const { day, timing = {} } = sched;
+        if (!day || !timing || typeof timing !== "object") continue;
 
-  const doseDate = moment(startDate).add(day - 1, "days").format("YYYY-MM-DD");
+        const doseDate = moment(startDate).add(day - 1, "days").format("YYYY-MM-DD");
 
-  // Extract all time strings like timing.morning.time, timing.night.time etc.
-  const timeSlots = Object.values(timing)
-    .map(slot => slot?.time)
-    .filter(Boolean); // skip null/undefined
+        const timeSlots = Object.values(timing)
+          .map(slot => slot?.time)
+          .filter(Boolean); 
 
-  for (const time of timeSlots) {
-    remindersToInsert.push({
-      patientId: prescription.patientId,
-      doctorId: prescription.doctorId,
-      prescriptionId,
-      medicineName,
-      dosage,
-      instructions,
-      date: doseDate,
-      doseTime: time,
-      taken: false,
-      notificationType: "reminder",
-    });
-  }
-}
+        for (const time of timeSlots) {
+          remindersToInsert.push({
+            patientId: prescription.patientId,
+            doctorId: prescription.doctorId,
+            prescriptionId,
+            medicineName,
+            form, // ✅ Add the form to the reminder**
+            dispenseQuantity,
+            medicineConsumption: dosage,
+            dosage,
+            instructions,
+            date: doseDate,
+            doseTime: time,
+            taken: false,
+            notificationType: "reminder",
+          });
+        }
+      }
 
-      // Frequent Schedule
-      for (const sched of frequentSchedule) {
-        const { day, frequentFrequency } = sched;
-        if (!day || !frequentFrequency) continue;
+      // Frequent Schedule
+      for (const sched of frequentSchedule) {
+        const { day, frequentFrequency } = sched;
+        if (!day || !frequentFrequency) continue;
 
-        const { doses = 0, hours = 0, minutes = 0 } = frequentFrequency;
-        const baseDate = moment(startDate).add(day - 1, "days");
-        const baseTime = moment(baseDate).hour(8).minute(0);
+        const { doses = 0, hours = 0, minutes = 0 } = frequentFrequency;
+        const baseDate = moment(startDate).add(day - 1, "days");
+        const baseTime = moment(baseDate).hour(8).minute(0);
 
-        for (let i = 0; i < doses; i++) {
-          const doseTime = baseTime.clone().add(i * (hours * 60 + minutes), "minutes");
-          remindersToInsert.push({
-            patientId: prescription.patientId,
-            doctorId: prescription.doctorId,
-            prescriptionId,
-            medicineName,
-            dosage,
-            instructions,
-            date: doseTime.format("YYYY-MM-DD"),
-            doseTime: doseTime.format("HH:mm"),
-            taken: false,
-            notificationType: "reminder",
-          });
-        }
-      }
+        for (let i = 0; i < doses; i++) {
+          const doseTime = baseTime.clone().add(i * (hours * 60 + minutes), "minutes");
+          remindersToInsert.push({
+            patientId: prescription.patientId,
+            doctorId: prescription.doctorId,
+            prescriptionId,
+            medicineName,
+            form, // ✅ Add the form to the reminder**
+            dispenseQuantity,
+            medicineConsumption: dosage,
+            dosage,
+            instructions,
+            date: doseTime.format("YYYY-MM-DD"),
+            doseTime: doseTime.format("HH:mm"),
+            taken: false,
+            notificationType: "reminder",
+          });
+        }
+      }
 
-      // Parallel Consumption
-      if (parallelConsumption) {
-        const { schedule = [], startTime = "08:00", intervalHours = 0, intervalMinutes = 0, totalDoses = 0 } = parallelConsumption;
+      // Parallel Consumption
+      if (parallelConsumption) {
+        const { schedule = [], startTime = "08:00", intervalHours = 0, intervalMinutes = 0, totalDoses = 0 } = parallelConsumption;
 
-        if (schedule.length > 0) {
-          for (const { day, time } of schedule) {
-            const doseDate = moment(startDate).add(day - 1, "days").format("YYYY-MM-DD");
-            remindersToInsert.push({
-              patientId: prescription.patientId,
-              doctorId: prescription.doctorId,
-              prescriptionId,
-              medicineName,
-              dosage,
-              instructions,
-              date: doseDate,
-              doseTime: time,
-              taken: false,
-              notificationType: "reminder",
-            });
-          }
-        } else if (totalDoses > 0) {
-          const [sh, sm] = startTime.split(":").map(Number);
-          const baseTime = moment(startDate).hour(sh || 8).minute(sm || 0);
+        if (schedule.length > 0) {
+          for (const { day, time } of schedule) {
+            const doseDate = moment(startDate).add(day - 1, "days").format("YYYY-MM-DD");
+            remindersToInsert.push({
+              patientId: prescription.patientId,
+              doctorId: prescription.doctorId,
+              prescriptionId,
+              medicineName,
+              form, // ✅ Add the form to the reminder**
+              dispenseQuantity,
+              medicineConsumption: dosage,
+              dosage,
+              instructions,
+              date: doseDate,
+              doseTime: time,
+              taken: false,
+              notificationType: "reminder",
+            });
+          }
+        } else if (totalDoses > 0) {
+          const [sh, sm] = startTime.split(":").map(Number);
+          const baseTime = moment(startDate).hour(sh || 8).minute(sm || 0);
 
-          for (let i = 0; i < totalDoses; i++) {
-            const doseTime = baseTime.clone().add(i * (intervalHours * 60 + intervalMinutes), "minutes");
-            remindersToInsert.push({
-              patientId: prescription.patientId,
-              doctorId: prescription.doctorId,
-              prescriptionId,
-              medicineName,
-              dosage,
-              instructions,
-              date: doseTime.format("YYYY-MM-DD"),
-              doseTime: doseTime.format("HH:mm"),
-              taken: false,
-              notificationType: "reminder",
-            });
-          }
-        }
-      }
-    }
+          for (let i = 0; i < totalDoses; i++) {
+            const doseTime = baseTime.clone().add(i * (intervalHours * 60 + intervalMinutes), "minutes");
+            remindersToInsert.push({
+              patientId: prescription.patientId,
+              doctorId: prescription.doctorId,
+              prescriptionId,
+              medicineName,
+              form, // ✅ Add the form to the reminder**
+              dispenseQuantity,
+              medicineConsumption: dosage,
+              dosage,
+              instructions,
+              date: doseTime.format("YYYY-MM-DD"),
+              doseTime: doseTime.format("HH:mm"),
+              taken: false,
+              notificationType: "reminder",
+            });
+          }
+        }
+      }
+    }
 
-    if (remindersToInsert.length > 0) {
-      try {
-        await NotificationReminderSettings.insertMany(remindersToInsert, { ordered: false });
-      } catch (insertErr) {
-        console.error("Reminder Insert Error:", insertErr.message);
-      }
-    }
+    if (remindersToInsert.length > 0) {
+      try {
+        await NotificationReminderSettings.insertMany(remindersToInsert, { ordered: false });
+      } catch (insertErr) {
+        console.error("Reminder Insert Error:", insertErr.message);
+      }
+    }
 
-    res.status(200).json({
-      message: "Prescription started. Reminders created where possible."
-    });
-  } catch (error) {
-    console.error("Unhandled Error in startPrescription:", error.message);
-    res.status(500).json({
-      message: "Something went wrong while starting the prescription",
-      error: error.message,
-    });
-  }
+    res.status(200).json({
+      message: "Prescription started. Reminders created where possible."
+    });
+  } catch (error) {
+    console.error("Unhandled Error in startPrescription:", error.message);
+    res.status(500).json({
+      message: "Something went wrong while starting the prescription",
+      error: error.message,
+    });
+  }
 };
 exports.getDeliveryStatusByPatient = async (req, res) => {
   try {

@@ -89,7 +89,6 @@ router.get(
 router.put("/updateProfile", validateToken, updateProfile);
 router.patch(
   "/prescriptions/:prescriptionId/start",
-  validateToken,
   startPrescription
 );
 router.patch(

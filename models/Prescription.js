@@ -117,7 +117,7 @@ const prescriptionItemSchema = new mongoose.Schema({
   },
   uom: {
     type: String,
-    enum: ["Graam", "Dram", "ML", "Pieces"],
+    enum: ["Gram", "Dram", "ML", "Pieces"],
     required: false,
   },
   dispenseQuantity: {

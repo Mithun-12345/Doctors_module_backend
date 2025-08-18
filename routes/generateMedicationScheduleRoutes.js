@@ -4,13 +4,15 @@ const {
   getTodaysMedicationSchedule,
   updateMedicationStatus,
   getMedicationForDailyIntake,
-  notifyDoctorOfMissedDoses
+  notifyDoctorOfMissedDoses,
+  getMedicationStockStatus
 } = require('../controllers/generateMedicationSchedule');
 
 router.get("/schedule/today/:patientId", getTodaysMedicationSchedule);
 router.patch("/schedule/status/:patientId", updateMedicationStatus);
 router.get("/schedule/daily/:patientId", getMedicationForDailyIntake);
 router.get('/schedule/notify-doctor/:doctorId', notifyDoctorOfMissedDoses);
+router.get('/medication-stock/:patientId', getMedicationStockStatus);
 
 module.exports = router;
 

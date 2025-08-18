@@ -32,6 +32,14 @@ doseTime: {
 type: String,
 required: true // Ensure time is specified
 },
+form: { 
+    type: String 
+  },
+dispenseQuantity: {
+    type: String,
+    required: false,
+    min: 0.1,
+  },
 reminderSetting: {
 type: Number,
 enum: [5, 10, 15, 20, 25, 30],
@@ -56,6 +64,14 @@ default: false
 acknowledged: {
 type: Boolean,
 default: false // Optional: can mirror status or be removed if redundant
+},
+medicineConsumption: {
+    type: String,
+    required: true,
+  },
+quantityConsumed:{
+    type:Number,
+    default:0,
 }
 }, {
 timestamps: true
