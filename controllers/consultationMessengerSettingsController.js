@@ -1,7 +1,7 @@
 
 const { default: mongoose } = require("mongoose");
 const {generateFeedbackQuestions,regenerateSingleQuestion} = require("./grokFunction");
-const {DoctorQuestionMapWithQuery,DoctorfeedbackSettings,ClinicOperationHours,AppointmentSlotTypes,ConsultationPriorityMapping,ShipmentPanelSettings,PaymentIntimationPanel} = require("../models/consultationMessengerSettings");
+const {RescheduleAndRefund,DoctorQuestionMapWithQuery,DoctorfeedbackSettings,ClinicOperationHours,AppointmentSlotTypes,ConsultationPriorityMapping,ShipmentPanelSettings,PaymentIntimationPanel} = require("../models/consultationMessengerSettings");
 
 // feed back panel
 
@@ -68,40 +68,30 @@ exports.editFeedbackPanel = async (req, res) => {
 
 // feedback panel questions
 
+exports.generateDoctorFeedbackQuestions = async (req,res)=>{
+
+    const {messengerUsecase,purpose,totalQuestions} = req.body;
+
+    const response = await generateFeedbackQuestions(messengerUsecase,purpose,totalQuestions,0,0);
+    console.log("ouput from grok  : ",response);
+
+    res.json({output : response});
+}
+
+
 exports.createDoctorFeedback = async (req,res) => {
 
     
     // call that gork api and save questions in this area
     const doctorId = req.user._id;
 
-    const {messengerUsecase,purpose,totalQuestions,afterXhours} = req.body;
+    const {messengerUsecase,purpose,totalQuestions,afterXhours,feedbackName,questionsinput} = req.body;
 
-    const response = await generateFeedbackQuestions(messengerUsecase,purpose,totalQuestions,0,0);
-    console.log("ouput from grok  : ",response);
-    const questions = response.questions;
-    const questionsName = response.feedbackName;
+    const questions = questionsinput;
+    const questionsName = feedbackName;
 
     const output = await DoctorfeedbackSettings.findOne({doctorId : doctorId , msgUseCase : messengerUsecase});
 
-    // const generalQueryId = output.generalQuery._id;
-    // const newConsultationId = output.newConsultation._id;
-    // const existingConsultationId = output.existingConsultation._id;
-    // const opinionConsultationId = output.opinionConsultation._id;
-
-    // let queryId;
-    // // find the true query 0    
-    // if(messengerUsecase == "generalQuery"){
-    //     queryId = generalQueryId;
-    // }
-    // else if(messengerUsecase == "newConsultation"){
-    //     queryId = newConsultationId;
-    // }
-    // else if(messengerUsecase == "opinionConsultation"){
-    //     queryId = opinionConsultationId;
-    // }
-    // else if(messengerUsecase == "existingConsultation"){
-    //     queryId = existingConsultationId;
-    // }
     const queryId = output._id;
 
     createdAt = Date.now();
@@ -162,22 +152,48 @@ exports.viewFeedbackQuestionsofParticularQuery = async (req, res) => {
     }
 };
 
+exports.regenerateParticularQuestion = async (req,res) =>{
+    //
+    // const doctorId = req.user._id;
+    const { oldQuestion,messengerUseCase, feedbackPurpose,questionId } = req.body;
 
-exports.createClinicOperationalHours = async (req,res)=>{
-    const doctorId = req.user._id;
+    if(!oldQuestion || !messengerUseCase || !feedbackPurpose || !questionId){
+        console.log("give the input from frontend correctly");
+        return res.status(404).json({message : "invalid input from frontend"});
+    }
+
+    const newQuestion = await regenerateSingleQuestion(
+        oldQuestion,
+        messengerUseCase,
+        feedbackPurpose
+        );
+    console.log("new question : ",newQuestion);
 
     try{
 
-        const result = await ClinicOperationHours.findOne({doctorId : doctorId});
-        
-        if(!result){
-            await ClinicOperationHours.create({doctorId:doctorId,createdAt : Date.now() });
-            console.log("intially inserted successfully ");
-            return res.json({message : "initially inserted successfully"});
-        }
+        return res.json({
+            message: "Question updated successfully",
+            regeneratedQuestions : newQuestion
+        });
 
-        console.log("already data  inserted ",result);
-        return res.status(201).json({message : " already data inserted successfully"});
+
+    }
+    catch(error){
+        console.log("error in database insertion ");
+        return res.status(500).json({message: "error in database insertion"});
+    }
+}
+
+
+// operational hours
+
+exports.createClinicOperationalHours = async (req,res)=>{
+    const {day, startingTime, endingTime} = req.body;
+
+    try{
+        await ClinicOperationHours.create({day : day ,startingTime : startingTime,endingTime : endingTime,createdAt : Date.now() });
+        console.log("intially inserted successfully ");
+        return res.json({message : "initially inserted successfully"});
     }
     catch(error){
         console.log("error in database insertion  ",error);
@@ -186,9 +202,9 @@ exports.createClinicOperationalHours = async (req,res)=>{
 
 }
 exports.getClinicOperationalHours = async (req,res)=>{
-    const doctorId = req.user._id;
+    
     try{
-        const result = await ClinicOperationHours.findOne({doctorId : doctorId});
+        const result = await ClinicOperationHours.find();
         if(!result){
             console.log("doctor id not present in database");
             return res.json({message : "doctorid not present in database"});
@@ -204,88 +220,59 @@ exports.getClinicOperationalHours = async (req,res)=>{
 }
 // const { ClinicOperationHours } = require("../models/DoctorAppointmentSettings");
 
-exports.updateClinicOperationalHours = async (req, res) => {
-    const doctorId = req.user._id;
+exports.editOperationalHours = async (req,res)=>{
+    const { id } = req.params;      // document _id from params 
+    const {startingTime,endingTime,status} = req.body;
+
     try {
-        const { day, day_id, startTime, endTime } = req.body;
+        // Find document that matches both _id and doctorId
+        const panel = await ClinicOperationHours.findOneAndUpdate(
+            { _id: new mongoose.Types.ObjectId(id)},
+            [{ $set: { status :status, startingTime:startingTime, endingTime:endingTime }}], // toggle
+            { new: true } // return updated doc
+        );
 
-        if (!doctorId || !day || !day_id || !startTime || !endTime) {
-            return res.status(400).json({
-                message: "doctorId, day, day_id, startTime, and endTime are required"
-            });
+        if (!panel) {
+            return res.status(404).json({ message: "Panel not found or unauthorized" });
         }
 
-        // Validate day name
-        const validDays = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"];
-        if (!validDays.includes(day.toLowerCase())) {
-            return res.status(400).json({ message: "Invalid day name" });
-        }
-
-        // Find the doctor's schedule
-        const doc = await ClinicOperationHours.findOne({ doctorId });
-        if (!doc) {
-            return res.status(404).json({ message: "Doctor schedule not found" });
-        }
-
-        // Get the specific day object
-        const dayData = doc[day.toLowerCase()];
-        if (!dayData || dayData._id.toString() !== day_id) {
-            return res.status(404).json({ message: "Day record not found" });
-        }
-
-        // Update start and end times
-        dayData.startTime = startTime;
-        dayData.endTime = endTime;
-
-        // Toggle isAvailable
-        dayData.isAvailable = !dayData.isAvailable;
-
-        // Update timestamp
-        doc.updatedAt = new Date.now();
-
-        await doc.save();
-
-        return res.json({
-            message: `${day} working hours updated & availability toggled successfully`,
-            updatedDoc: doc
+        return res.status(200).json({
+            message: "Availability toggled successfully",
+            data: panel
         });
-
     } catch (error) {
-        console.error("Error updating working hours:", error);
-        return res.status(500).json({
-            message: "Server error while updating working hours"
-        });
+        console.error("Error toggling availability:", error.message);
+        return res.status(500).json({ message: "Error updating availability" });
     }
 };
 
+// appointment slottypes
+
 exports.createAppointmentSlotTypes = async (req,res)=>{
-    const doctorId = req.user._id;
+    const {slotType,startingTime,endingTime,price,allowBooking} = req.body;
 
     try{
-        const result = await AppointmentSlotTypes.findOne({doctorId : doctorId});
-        if(!result){
-            await AppointmentSlotTypes.create({doctorId : doctorId , createdAt : Date.now()});
-            console.log("intial appointment slottypes created");
-            return res.status(201).json({message : "initial appointment slottypes created"});
-        }
-
-        console.log("initial appointment already created");
-        return res.status(400).json({message:"initial appointment already created"});
+        const data = {
+            slotType : slotType,
+            startingTime : startingTime,
+            endingTime : endingTime,
+            price : price,
+            allowBooking : allowBooking,
+            createdAt : new Date()
+        };
+        await AppointmentSlotTypes.create(data);
+        console.log("intial appointment slottypes created");
+        return res.status(201).json({message : "initial appointment slottypes created"});
     }
     catch(error){
-        console.log("error in database");
+        console.log("error in database",error);
         return res.status(500).json({message : "error in database"});
     }
 };
 
 exports.getAppointmentSlottypes = async (req,res)=>{
-    const doctorId = req.user._id;
     try{
-        const result = await AppointmentSlotTypes.findOne({doctorId : doctorId});
-        if(!result){
-            console.log("doctor id not present in database");
-            return res.json({message : "doctorid not present in database"});
-        }
+        const result = await AppointmentSlotTypes.find({});
 
         console.log("successfully fetched");
         return res.status(200).json({message : "success",result : result});
@@ -298,57 +285,21 @@ exports.getAppointmentSlottypes = async (req,res)=>{
 
 
 exports.updateSlotType = async (req, res) => {
+    const {id} = req.params;
+    const {startingTime,endingTime ,price,allowBooking} = req.body;
     try {
-        const { type, startTime, endTime, price, days } = req.body;
-
-        const doctorId = req.user._id;
-
-        if (!doctorId || !type || !startTime || !endTime || price === undefined) {
-            return res.status(400).json({ message: "Missing required fields" });
-        }
-
-        // Fetch current doc
-        const doc = await AppointmentSlotTypes.findOne({ doctorId: doctorId });
-
-        if (!doc) {
-            return res.status(404).json({ message: "Doctor slot settings not found" });
-        }
-
-        // Check if type exists in doc
-        if (!doc[type]) {
-            return res.status(400).json({ message: `Invalid type: ${type}` });
-        }
-
-        // Toggle isAvailable
-        const currentAvailability = doc[type].isAvailable;
-        const updatedAvailability = !currentAvailability;
-
-        // Base update data
-        const updateData = {
-            [`${type}.startTime`]: startTime,
-            [`${type}.endTime`]: endTime,
-            [`${type}.price`]: price,
-            [`${type}.isAvailable`]: updatedAvailability,
-            updatedAt: new Date()
-        };
-
-        // If type is "Weekend", also update days array
-        if (type === "Weekend") {
-            if (!Array.isArray(days)) {
-                return res.status(400).json({ message: "For Weekend type, 'days' must be an array of strings" });
-            }
-            updateData[`${type}.days`] = days;
-        }
-
-        // Update using updateOne
-        await AppointmentSlotTypes.updateOne(
-            { doctorId: doctorId },
-            { $set: updateData }
+        const result = await AppointmentSlotTypes.findOneAndUpdate(
+            {_id : new mongoose.Types.ObjectId(id)},
+            [{$set : {startingTime:startingTime,endingTime : endingTime,price:price,allowBooking:allowBooking}}],
+            {new : true}
         );
+        if (!result) {
+            return res.status(404).json({ message: "id not foound" });
+        }
 
-        return res.json({
-            message: `${type} slot updated successfully`,
-            updatedFields: updateData
+        return res.status(200).json({
+            message: "updated successfully",
+            data: result
         });
 
     } catch (error) {
@@ -358,40 +309,33 @@ exports.updateSlotType = async (req, res) => {
 };
 
 exports.deleteSlotTypes = async (req,res)=>{
-    const doctorId = req.user._id;
 
     try {
-        const {type } = req.body; // or req.query
+        const { id } = req.params; // the document _id from URL params
 
-        if (!doctorId || !type) {
-            return res.status(400).json({ message: "doctorId and type are required" });
+        // Convert string id to ObjectId
+        const objectId = new mongoose.Types.ObjectId(id);
+
+        const deletedDoc = await AppointmentSlotTypes.findByIdAndDelete(objectId);
+
+        if (!deletedDoc) {
+            return res.status(404).json({ message: "Document not found" });
         }
 
-        const allowedTypes = ["Normal", "PostWorkingHours", "Weekend", "OpinionConsultation"];
-        if (!allowedTypes.includes(type)) {
-            return res.status(400).json({ message: "Invalid type provided" });
-        }
-
-        const result = await AppointmentSlotTypes.updateOne(
-            { doctorId: doctorId },
-            { $unset: { [type]: "" } } // remove the field
-        );
-
-        if (result.modifiedCount === 0) {
-            return res.status(404).json({ message: "No matching document or type found" });
-        }
-
-        res.json({ message: `${type} slot deleted successfully` });
+        return res.json({ message: "Document deleted successfully" });
     } 
     catch (error) {
-        console.error("Error deleting slot type:", error);
-        res.status(500).json({ message: "Internal server error" });
+        console.error("Error deleting document:", error);
+        return res.status(500).json({ message: "Error deleting document" });
     }
 };
 
+// consultation priority 
+
 exports.createConsulationPriorityMapping = async(req,res)=>{
+    const {priority,percentage} = req.body;
     try{
-        await ConsultationPriorityMapping.create({createdAt : Date.now()});
+        await ConsultationPriorityMapping.create({priority:priority, percentage : percentage,createdAt : Date.now()});
         console.log("data inserted successfully");
         return res.status(201).json({message:"data inserted successfully "});
     }
@@ -402,28 +346,24 @@ exports.createConsulationPriorityMapping = async(req,res)=>{
 };
 
 exports.editConsultationPriorityMapping = async (req, res) => {
-    const { str } = req.body;
-    const id = req.params.id;
+    const { percentage } = req.body;
+    const {id} = req.params;
 
     try {
         // Find current document
-        const data = await ConsultationPriorityMapping.findById(id);
+        const data = await ConsultationPriorityMapping.findOneAndUpdate(
+            {_id : new mongoose.Types.ObjectId(id)},
+            [{$set : {percentage : percentage}}],
+            {new : true}
+        );
+        
         if (!data) {
-            return res.status(404).json({ message: 'Document not found' });
-        }
-
-        if (str === "AllowRescheduling") {
-            data.AllowRescheduling = !data.AllowRescheduling;
-        } else if (str === "RefundAdjustmentOnRescheduling") {
-            data.RefundAdjustmentOnRescheduling = !data.RefundAdjustmentOnRescheduling;
-        } else {
-            return res.status(400).json({ message: 'Invalid field option' });
-        }
-
-        await data.save();
+            return res.status(404).json({ message: "id not foound" });
+        };
 
         return res.status(200).json({ message: 'modified successfully', data });
-    } catch (error) {
+    } 
+    catch (error) {
         console.log("Error in database operations", error);
         return res.status(500).json({ message: "error in database operations" });
     }
@@ -444,6 +384,63 @@ exports.getConsultationPriorityMapping = async (req,res) =>{
     catch(error){
         console.log("error in the database fetching ");
         return res.status(500).json({message : "error in the database fetching"});
+    }
+};
+
+// reschedule and refund 
+
+exports.createRescheduleAndRefund = async (req,res)=>{
+    const {name} = req.body;
+    try{
+        const result = await RescheduleAndRefund.create({name : name});
+        if(!result){
+            console.log("error data not inserted");
+            return res.status(400).json({message : "error data not inserted"});
+        }
+        console.log("created ");
+        return res.status(201).json({message : "created"});
+    }
+    catch(error){
+        console.log("database error");
+        return res.status(500).json({message:"database error"});
+    }
+}
+
+exports.editRescheduleAndRefund = async (req,res)=>{
+    const {id} = req.params;
+    try{
+        const result = await RescheduleAndRefund.findOneAndUpdate(
+            {_id : new mongoose.Types.ObjectId(id)},
+            [{$set : {status : {$not : "$status"}}}],
+            
+        );
+        if (!result) {
+            return res.status(404).json({ message: "id not foound" });
+        };
+
+        return res.status(200).json({ message: 'modified successfully', result });
+
+    }
+    catch(error){
+        console.log("database error");
+        return res.status(500).json({message:"database error"});
+    }
+};
+
+exports.getRescheduleAndRefund = async (req,res)=>{
+    try{
+        const result = await RescheduleAndRefund.find({});
+        if (!result) {
+            return res.status(404).json({ message: "id not foound" });
+        };
+
+        console.log("fetched successfully");
+        return res.json({message : "success" , result : result });
+
+    }
+    catch(error){
+        console.log("database error");
+        return res.status(500).json({message:"database error"});
     }
 };
 

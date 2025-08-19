@@ -1,53 +1,18 @@
 const mongoose = require("mongoose");
 
-const workinghours = new mongoose.Schema({
-    startTime : {
-        type : String,
-        default : "10:00 AM"
+const appointmentSettingsSchema = new mongoose.Schema({
+    day : {
+        type : String
     },
-    endTime : {
-        type : String,
-        default : "01:00 PM"
+    startingTime : {
+        type : String
     },
-    isAvailable : {
+    endingTime : {
+        type : String
+    },
+    status : {
         type : Boolean,
         default : true
-    }
-})
-
-
-const appointmentSettingsSchema = new mongoose.Schema({
-    doctorId : {
-        type : mongoose.Schema.Types.ObjectId,
-        unique :true
-    },
-    sunday : {
-        type : workinghours,
-        default : ()=>({})
-    },
-    monday : {
-        type : workinghours,
-        default : () => ({})
-    },
-    tuesday : {
-        type : workinghours,
-        default : ()=>({})
-    },
-    wednesday : {
-        type : workinghours,
-        default : ()=>({})
-    },
-    thursday : {
-        type : workinghours,
-        default : ()=>({})
-    },
-    friday : {
-        type : workinghours,
-        default : ()=>({})
-    },
-    saturday : {
-        type : workinghours,
-        default : ()=>({})
     },
 
     createdAt : {
@@ -60,90 +25,26 @@ const appointmentSettingsSchema = new mongoose.Schema({
 });
 
 const appointmentslottype = mongoose.Schema({
-    doctorId : {
-        type : mongoose.Schema.Types.ObjectId,
-        required :true
+    slotType : {
+        type : String
     },
-    Normal : {
-        price : {
-            type : Number,
-            default : 500
-        },
-        startTime : {
-            type : String,
-            default : "03:00 AM"
-        },
-        endTime : {
-            type : String,
-            default : "10:00 PM"
-        },
-        isAvailable : {
-            type : Boolean,
-            default : true
-        }
+    startingTime : {
+        type : String
     },
-    PostWorkingHours : {
-        price : {
-            type : Number,
-            default : 700
-        },
-        startTime : {
-            type : String,
-            default : "03:00 AM"
-        },
-        endTime : {
-            type : String,
-            default : "10:00 PM"
-        },
-        isAvailable : {
-            type : Boolean,
-            default : true
-        }
+    endingTime : {
+        type : String
     },
-    Weekend : {
-        days:{
-            type : [String],
-            default : ["Monday","Tuesday","Wednesday","Thursday","Friday","Saturday","Sunday"]
-        },
-        price : {
-            type : Number,
-            default : 600
-        },
-        startTime : {
-            type : String,
-            default : "03:00 AM"
-        },
-        endTime : {
-            type : String,
-            default : "10:00 PM"
-        },
-        isAvailable : {
-            type : Boolean,
-            default : true
-        }
+    price:{
+        type : Number
     },
-    OpinionConsultation : {
-        price : {
-            type : Number,
-            default : 400
-        },
-        startTime : {
-            type : String,
-            default : "03:00 AM"
-        },
-        endTime : {
-            type : String,
-            default : "10:00 PM"
-        },
-        isAvailable : {
-            type : Boolean,
-            default : true
-        }
+    allowBooking :{
+        type : Boolean,
+        default : true
     },
-    createdAt : {
+    createdAt :{
         type : Date
     },
-    updatedAt : {
+    UpdatedAt : {
         type : Date,
         default : Date.now
     }
@@ -152,25 +53,11 @@ const appointmentslottype = mongoose.Schema({
 
 
 const consultationPriorityMapping = new mongoose.Schema({
-    Acute : {
-        type : String,
-        default : "70%"
+    priority : {
+        type : String
     },
-    Chronic : {
-        type : String,
-        default : "20%"
-    },
-    OpinionConsultation : {
-        type : String,
-        default : "10%"
-    },
-    AllowRescheduling : {
-        type : Boolean,
-        default : true
-    },
-    RefundAdjustmentOnRescheduling : {
-        type : Boolean,
-        default : true
+    percentage : {
+        type : String
     },
     createdAt : {
         type : Date
@@ -180,6 +67,16 @@ const consultationPriorityMapping = new mongoose.Schema({
         default : Date.now
     }
 });
+
+const rescheduleAndRefund = new mongoose.Schema({
+    name : {
+        type : String
+    },
+    status : {
+        type : Boolean,
+        default : true
+    }
+})
 
 
 const shipmentPanelSchema = new mongoose.Schema({
@@ -343,5 +240,6 @@ const PaymentMessageTemplate = new mongoose.model("PaymentMessageTemplate",payme
 const ClinicOperationHours = new mongoose.model("ClinicOperationHours",appointmentSettingsSchema);
 const AppointmentSlotTypes = new mongoose.model("AppointmentSlotTypes",appointmentslottype);
 const ConsultationPriorityMapping = new mongoose.model("ConsultationPriorityMapping",consultationPriorityMapping);
+const RescheduleAndRefund = new mongoose.model("rescheduleAndRefund",rescheduleAndRefund);
 
-module.exports = {DoctorQuestionMapWithQuery,DoctorfeedbackSettings,ClinicOperationHours,AppointmentSlotTypes,ConsultationPriorityMapping,ShipmentPanelSettings,PaymentIntimationPanel};
+module.exports = {RescheduleAndRefund,DoctorQuestionMapWithQuery,DoctorfeedbackSettings,ClinicOperationHours,AppointmentSlotTypes,ConsultationPriorityMapping,ShipmentPanelSettings,PaymentIntimationPanel};

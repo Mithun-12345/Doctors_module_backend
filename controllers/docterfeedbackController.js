@@ -147,67 +147,6 @@ exports.editDoctorFeedbackOption = async (req, res) => {
 
 
 
-exports.editFeedbackParticularQuestion = async (req,res) =>{
-    //
-    const doctorId = req.user._id;
-    const { oldQuestion,messengerUseCase, feedbackPurpose,questionId } = req.body;
-
-    if(!oldQuestion || !messengerUseCase || !feedbackPurpose || !questionId){
-        console.log("give the input from frontend correctly");
-        return res.status(404).json({message : "invalid input from frontend"});
-    }
-
-    const newQuestion = await regenerateSingleQuestion(
-        oldQuestion,
-        messengerUseCase,
-        feedbackPurpose
-        );
-    console.log("new question : ",newQuestion);
-
-    try{
-        const doc = await DoctorQuestionMapWithQuery.findOne({
-            doctorId: doctorId,
-            messengerUsecase: messengerUseCase
-        });
-        
-        if (!doc) {
-            return res.status(404).json({ message: "Feedback record not found" });
-        }
-        console.log("hi 1");
-        
-        const result = await DoctorQuestionMapWithQuery.updateOne(
-            {
-                doctorId: doctorId,
-                messengerUsecase: messengerUseCase,
-                "questions._id": questionId
-            },
-            {
-                $set: {
-                    "questions.$.question": newQuestion.trim(),
-                    updatedAt: new Date()
-                }
-            }
-        );
-
-        if (result.matchedCount === 0) {
-            return res.status(404).json({ message: "No matching question found" });
-        }
-
-        // return res.json({ message: "Question updated successfully" });
-
-        return res.json({
-            message: "Question updated successfully",
-            updatedDoc: doc
-        });
-
-
-    }
-    catch(error){
-        console.log("error in database insertion ");
-        return res.status(500).json({message: "error in database insertion"});
-    }
-}
-
 
 
 exports.getQuestions = async(req,res)=>{
