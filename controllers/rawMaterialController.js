@@ -156,7 +156,7 @@ exports.createRawMaterial = async (req, res) => {
       thresholdQuantity: Number(thresholdQuantity),
       expiryDate: new Date(expiryDate),
       productImage: productImageUrl,
-      costPerUnit: Number(costPerUnit),
+      costPerUnit: Number(costPerUnit)/Number(quantity),
       barcode,
       totalWeight: Number(totalWeight), // Consistent type casting
       isAlcohol,
