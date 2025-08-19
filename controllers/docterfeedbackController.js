@@ -1,7 +1,7 @@
 const { default: mongoose } = require("mongoose");
 const {DoctorQuestionMapWithQuery,DoctorfeedbackSettings} = require("../models/feedBackSettings");
 
-const {generateFeedbackQuestions,regenerateSingleQuestion} = require("./grokFunction");
+
 
 //  endpoint "/api/doctorFeedback/createFeedback" 
 // this will receive details to create the document in doctorFeedbackSettings 
@@ -145,71 +145,7 @@ exports.editDoctorFeedbackOption = async (req, res) => {
     }
 };
 
-exports.createDoctorFeedback = async (req,res) => {
 
-    
-    // call that gork api and save questions in this area
-    const doctorId = req.user._id;
-
-    const {messengerUsecase,purpose,totalQuestions,afterXhours} = req.body;
-
-    const response = await generateFeedbackQuestions(messengerUsecase,purpose,totalQuestions,0,0);
-    console.log("ouput from grok  : ",response);
-    const questions = response.questions;
-    const questionsName = response.feedbackName;
-
-    const output = await DoctorfeedbackSettings.findOne({doctorId : doctorId});
-
-    const generalQueryId = output.generalQuery._id;
-    const newConsultationId = output.newConsultation._id;
-    const existingConsultationId = output.existingConsultation._id;
-    const opinionConsultationId = output.opinionConsultation._id;
-
-    let queryId;
-    // find the true query 0    
-    if(messengerUsecase == "generalQuery"){
-        queryId = generalQueryId;
-    }
-    else if(messengerUsecase == "newConsultation"){
-        queryId = newConsultationId;
-    }
-    else if(messengerUsecase == "opinionConsultation"){
-        queryId = opinionConsultationId;
-    }
-    else if(messengerUsecase == "existingConsultation"){
-        queryId = existingConsultationId;
-    }
-
-    createdAt = Date.now();
-    const data1 = {
-        doctorId,
-        queryId,
-        messengerUsecase , 
-        afterXhours, 
-        purpose ,
-        totalQuestions,
-        questionsName,
-        questions,
-        createdAt
-    };
-
-    try {
-        const result = await DoctorQuestionMapWithQuery.insertOne(data1);
-
-        if(!result){
-            console.log("Not inserted : ",result);
-            return res.status(401).json({message : "not inserted "});
-        }
-
-        console.log("successfully inserted ");
-        return res.status(201).json({message : "inserted successfully ",result : result});
-    }
-    catch(error){
-        console.log("error in inserting data into the collection ",error);
-        return res.status(500).json({message : "error occurs in inserting data in collection "})
-    }
-    
-}
 
 exports.editFeedbackParticularQuestion = async (req,res) =>{
     //
@@ -272,32 +208,7 @@ exports.editFeedbackParticularQuestion = async (req,res) =>{
     }
 }
 
-exports.viewFeedbackQuestions = async (req, res) => {
-    const doctorId = req.user._id;
-    const { messengerUsecase } = req.body; //  extract the property properly
 
-    try {
-        const output = await DoctorQuestionMapWithQuery.findOne({
-            doctorId: doctorId,
-            messengerUsecase: messengerUsecase
-        });
-
-        if (!output) {
-            return res.status(404).json({ message: "Doctor feedback not created" });
-        }
-
-        console.log("Fetched successfully");
-        return res.json({
-            message: "Data fetched successfully",
-            output: output.questions
-        });
-    } catch (error) {
-        console.error("Error fetching data from the database:", error);
-        return res.status(500).json({
-            message: "Error fetching data from the database"
-        });
-    }
-};
 
 exports.getQuestions = async(req,res)=>{
 

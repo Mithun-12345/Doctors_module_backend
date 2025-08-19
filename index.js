@@ -46,7 +46,7 @@ const scheduleRoutes = require('./routes/generateMedicationScheduleRoutes.js');
 const medicationRoutes = require('./routes/generateMedicationScheduleRoutes');
 
 const doctorFeedbackRoutes = require("./routes/doctorFeedback.js");
-const doctorAppointmentSettingsRoutes = require("./routes/doctorappointmentsettingsRoutes.js");
+const doctorAppointmentSettingsRoutes = require("./routes/consultationMessengerSettingsRoutes.js");
 const pushNotificationRouter = require("./routes/pushNotificationRouter.js");
 
 
@@ -101,7 +101,7 @@ app.use('/api', scheduleRoutes);
 app.use('/api/medication', medicationRoutes);
 
 // messaging module 
-app.use("/api/doctorFeedback",doctorFeedbackRoutes);
+// app.use("/api/doctorFeedback",doctorFeedbackRoutes);
 app.use("/api/doctorAppointmentSettings",doctorAppointmentSettingsRoutes);
 
 // push notification 
