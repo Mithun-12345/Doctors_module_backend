@@ -12,6 +12,7 @@ const Patient = require('../models/patientModel');
 const Appointment = require("../models/appointmentModel");
 const WastageLog = require('../models/wastageSchema');
 const MasterInstructions = require('../models/medPrepSettings');
+const Notification = require('../models/notificationHub');
 
 
 const initializeMedicinePreparation = async (req, res) => {
@@ -1274,10 +1275,8 @@ const setMedicineExpiryDate = async (req, res) => {
 
 const updateShipmentStatus = async (req, res) => {
   const { prescriptionId } = req.params;
-  // Get only the new status from the request body
   const { shipmentStatus } = req.body;
 
-  // 1. Validate inputs
   if (!mongoose.Types.ObjectId.isValid(prescriptionId)) {
     return res.status(400).json({ message: 'Invalid Prescription ID format.' });
   }
@@ -1286,22 +1285,42 @@ const updateShipmentStatus = async (req, res) => {
   }
 
   try {
-    // 2. Find the summary and update the first nested packaging item
     const result = await MedicinePreparationSummary.updateOne(
       { "prescriptionId": prescriptionId },
-      { 
-        // Use "packagingUsed.0" to directly target the FIRST item in the array
-        $set: { "packagingUsed.0.shipmentStatus": shipmentStatus } 
-      }
+      { $set: { "packagingUsed.0.shipmentStatus": shipmentStatus } }
     );
 
-    // 3. Check if a document was found and updated
     if (result.matchedCount === 0) {
       return res.status(404).json({ message: 'Preparation summary not found for this prescription.' });
     }
-    if (result.modifiedCount === 0) {
-      return res.status(200).json({ message: 'Shipment status is already set to this value.' });
+    if (result.modifiedCount === 0 && shipmentStatus === false) {
+       // If status is false and nothing was modified, it's not a "shipped" event.
+      return res.status(200).json({ message: 'Shipment status is already set to not shipped.' });
     }
+    
+    // --- START: ADDED NOTIFICATION LOGIC ---
+
+    // Only send a notification if the status was successfully updated to TRUE (shipped)
+    if (shipmentStatus === true) {
+      // 1. Fetch the necessary details for the notification message
+      const summary = await MedicinePreparationSummary.findOne({ prescriptionId: prescriptionId });
+      const prescription = await Prescription.findById(prescriptionId);
+
+      if (summary && prescription) {
+        // Use the first medicine's name for a concise message
+        const medicineName = summary.medicinePreparations?.[0]?.medicineName || 'order';
+
+        // 2. Create the notification
+        await Notification.create({
+          recipient: prescription.patientId, // Get the patient's ID
+          message: `Your ${medicineName} that was prepared has been shipped successfully.`,
+          type: "MEDICINE_SHIPMENT_DONE",
+          link: `/track-order/${prescriptionId}`, // Example link to a tracking page
+        });
+      }
+    }
+
+    // --- END: ADDED NOTIFICATION LOGIC ---
 
     res.status(200).json({ message: 'Shipment status updated successfully.' });
 

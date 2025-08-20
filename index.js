@@ -44,7 +44,9 @@ const labelRoutes = require("./routes/labelRoutes.js");
 const consumptionRoutes = require("./routes/consumptionRoutes");
 const scheduleRoutes = require('./routes/generateMedicationScheduleRoutes.js');
 const medicationRoutes = require('./routes/generateMedicationScheduleRoutes');
-
+const { startReminderCronJob } = require('./utils/notificationScheduler.js');
+// ... other route imports at the top of index.jsconst notificationRoutes = require("./routes/notificationRoutes.js");// ... your other app.use() statements
+const notificationRoutes = require("./routes/notificationRoutes.js");
 
 
 
@@ -97,7 +99,7 @@ app.use("/api/prescriptionControl", prescriptionControl);
 app.use("/api/posts", require("./routes/postRoutes"));
 app.use('/api', scheduleRoutes);
 app.use('/api/medication', medicationRoutes);
-
+app.use("/api/notifications", notificationRoutes);
 
 const options = {
   key: fs.readFileSync("server.key"),
@@ -315,4 +317,5 @@ app.get("/", (req, res) => {
 const PORT = process.env.PORT || 8000;
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
+  startReminderCronJob(); 
 });

@@ -1,4 +1,5 @@
 const express = require("express");
+const mongoose = require("mongoose");
 const {
   sendForm,
   patientDetails,
@@ -31,7 +32,8 @@ const {
   getPrescriptionsGroupedByWeekAndDay,
   savePatientNotification,
   getPatientMedicationSummary,
-  updateReminderOffset
+  updateReminderOffset,
+  getTodaysAppointmentsForPatient
 } = require("../controllers/patientController");
 const {
   upload,
@@ -93,7 +95,26 @@ router.patch(
   validateToken,
   markProductReceived
 );
+router.get('/:patientId/todays-appointments', async (req, res) => {
+  try {
+    const { patientId } = req.params;
 
+    // Best Practice: Validate the ID format before querying the database
+    if (!mongoose.Types.ObjectId.isValid(patientId)) {
+      return res.status(400).json({ message: "Invalid Patient ID format." });
+    }
+
+    // Now, call your function with ONLY the patientId string
+    const appointments = await getTodaysAppointmentsForPatient(patientId);
+
+    // Send the successful response back to the client
+    res.status(200).json(appointments);
+
+  } catch (error) {
+    console.error("Error in GET /patient/:patientId/today route:", error);
+    res.status(500).json({ message: "Server error while fetching appointments." });
+  }
+});
 const familyMemberController = require("../controllers/patientController");
 const { validate } = require("../models/patientModel");
 router.get("/familyMembers", validateToken, familyMemberController.getFamily);

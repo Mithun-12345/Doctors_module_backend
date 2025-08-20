@@ -18,6 +18,7 @@ const crypto = require("crypto");
 const { google } = require("googleapis");
 const { createGoogleMeet } = require("./Gmeet");
 const cloudinary = require("cloudinary").v2;
+const Notification = require("../models/notificationHub");
 // patientController.js
 const UserGoogleTokens = require("../models/UserTokenSchema");
 const accountSid = process.env.TWILIO_ACCOUNT_SID;
@@ -907,6 +908,8 @@ exports.finalizeAppointment = asyncHandler(async (req, res) => {
   }
 });
 
+// ... your other models like Patient, Doctor, Appointment etc. ...
+
 // Book appointment
 exports.bookAppointment = asyncHandler(async (req, res) => {
   const phone = req.user.phone;
@@ -953,14 +956,8 @@ exports.bookAppointment = asyncHandler(async (req, res) => {
 
     // Validate time slot
     const timeSlots = [
-      "10:00",
-      "11:00",
-      "12:00",
-      "13:00",
-      "14:00",
-      "15:00",
-      "16:00",
-      "17:00",
+      "10:00", "11:00", "12:00", "13:00",
+      "14:00", "15:00", "16:00", "17:00",
     ];
 
     if (!timeSlots.includes(timeSlot)) {
@@ -1070,7 +1067,7 @@ exports.bookAppointment = asyncHandler(async (req, res) => {
       patient: user._id,
       patientEmail: user.email,
       patientName: user.name,
-      consultingFor: consultingFor, // Fixed: remove .label since consultingFor is now just the ID
+      consultingFor: consultingFor,
       reason: consultingReason,
       symptom: symptom,
       doctor: doctor._id,
@@ -1078,22 +1075,39 @@ exports.bookAppointment = asyncHandler(async (req, res) => {
       appointmentDate,
       timeSlot,
       isChronic,
-      status: "reserved", // Key change: only reserved, not confirmed
+      status: "reserved",
       isPaid: false,
-      payment: 500, // Amount in paise
+      payment: 500,
       reservedAt: new Date(),
-      expiresAt: new Date(Date.now() + 7 * 60 * 1000), // 7 minutes expiry
+      expiresAt: new Date(Date.now() + 7 * 60 * 1000),
     });
 
     const savedAppointment = await newAppointment.save();
 
+    // --- START: ADDED NOTIFICATION LOGIC ---
+
+    const appointmentFullDate = new Date(`${appointmentDate}T${timeSlot}`);
+    const istFormatter = new Intl.DateTimeFormat('en-IN', {
+      timeZone: 'Asia/Kolkata',
+      dateStyle: 'long',  // e.g., "20 August 2025"
+      timeStyle: 'short'  // e.g., "3:00 PM"
+    });
+    const formattedDateTime = istFormatter.format(appointmentFullDate);
+
+    await Notification.create({
+      recipient: user._id,
+      message: `Your appointment with ${doctor.name} for ${formattedDateTime} is reserved.`,
+      type: "APPOINTMENT_RESERVED",
+      link: `/appointments/${savedAppointment._id}`, // Example link
+    });
+
+    // --- END: ADDED NOTIFICATION LOGIC ---
+
     res.status(201).json({
       success: true,
       message:
-        "Slot reserved temporarily. Please complete payment within 7 minutes.",
+        `Your appointment with ${doctor.name} for ${formattedDateTime} is reserved.`, 
       appointmentId: savedAppointment._id,
-      amount: 50000, // Amount in paise
-      expiresAt: new Date(Date.now() + 7 * 60 * 1000),
     });
   } catch (error) {
     console.error("Failed to reserve appointment:", error);
@@ -1104,7 +1118,6 @@ exports.bookAppointment = asyncHandler(async (req, res) => {
     });
   }
 });
-
 exports.deleteAppointment = asyncHandler(async (req, res) => {
   let { appointmentId } = req.params;
   let patientId = req.user._id;

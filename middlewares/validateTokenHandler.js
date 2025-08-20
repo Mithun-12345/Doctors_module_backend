@@ -3,7 +3,6 @@ const asyncHandler = require("express-async-handler");
 const Patient = require("../models/patientModel");
 const Doctor = require("../models/doctorModel");
 const Admin = require("../models/Admin");
-
 const validateToken = asyncHandler(async (req, res, next) => {
   let token;
   const authHeader = req.headers.authorization || req.headers.Authorization;
