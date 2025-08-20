@@ -1379,36 +1379,63 @@ exports.getUserAppointments = async (req, res) => {
 
 exports.updateFollowUpStatus = async (req, res) => {
   try {
-    const { patientId } = req.params;
-    const appointment = await Appointment.findById(patientId);
+    const { patientId: appointmentId } = req.params; // Using a clearer name
+    const appointment = await Appointment.findById(appointmentId);
+
     if (!appointment) {
       return res.status(404).json({ message: "appointment not found" });
     }
 
     const exDtTm = new Date();
+    const originalStatus = appointment.follow; // Store the status before it's changed
 
-// Update follow-up status
-switch (appointment.follow) {
-  case "Follow up-C":
-    appointment.follow = "Follow up-P";
-    break;
-  case "Follow up-P":
-    appointment.follow = "Follow up-Mship";
-    appointment.followUpTimestamp = exDtTm; 
-    break;
-  case "Follow up-Mship":
-    appointment.follow = "Follow up-MP";
-    break;
-  case "Follow up-MP":
-    appointment.follow = "Follow up-ship";
-    break;
-  case "Follow up-ship":
-    appointment.follow = "Follow up-PCare"; 
-    break;
-  default:
-    return res.status(400).json({ message: "Invalid follow-up status" });
-}
+    // Update follow-up status
+    switch (appointment.follow) {
+      case "Follow up-C":
+        appointment.follow = "Follow up-P";
+        break;
+      case "Follow up-P":
+        appointment.follow = "Follow up-Mship";
+        appointment.followUpTimestamp = exDtTm; 
+        break;
+      case "Follow up-Mship":
+        appointment.follow = "Follow up-MP";
+        break;
+      case "Follow up-MP":
+        appointment.follow = "Follow up-ship";
+        break;
+      case "Follow up-ship":
+        appointment.follow = "Follow up-PCare"; 
+        break;
+      default:
+        return res.status(400).json({ message: "Invalid follow-up status" });
+    }
+
     await appointment.save();
+
+    // --- START: NOTIFICATION LOGIC ---
+
+    // Notification for when status changes from C to P
+    if (originalStatus === "Follow up-C" && appointment.follow === "Follow up-P") {
+        await Notification.create({
+            recipient: appointment.patient,
+            message: "With the completion of your appointment, you'll be taken to the next steps. Stay tuned for updates.",
+            type: "FOLLOW_UP_UPDATE", // You may need to add this to your Notification schema enum
+            link: `/appointments/${appointment._id}`
+        });
+    }
+
+    // NEW: Notification for when status changes from ship to PCare
+    if (originalStatus === "Follow up-ship" && appointment.follow === "Follow up-PCare") {
+        await Notification.create({
+            recipient: appointment.patient,
+            message: "You are now under patient care and will receive regular reminders for your prescribed medication intake.",
+            type: "PATIENT_CARE_STARTED", // You may need to add this to your Notification schema enum
+            link: `/patient-care/${appointment.patient}` // Example link to a patient care dashboard
+        });
+    }
+
+    // --- END: NOTIFICATION LOGIC ---
 
     res.status(200).json({
       message: "Follow-up status updated successfully",
@@ -1423,7 +1450,6 @@ switch (appointment.follow) {
     res.status(500).json({ message: "Internal server error" });
   }
 };
-
 // Update Call Status
 exports.updateFollowPatientCall = async (req, res) => {
   const { patientId } = req.params;

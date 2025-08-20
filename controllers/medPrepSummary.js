@@ -14,7 +14,6 @@ const WastageLog = require('../models/wastageSchema');
 const MasterInstructions = require('../models/medPrepSettings');
 const Notification = require('../models/notificationHub');
 
-
 const initializeMedicinePreparation = async (req, res) => {
   try {
     const { prescriptionId, medicineName, prescriptionItemId, rawMaterials } = req.body;
@@ -51,7 +50,6 @@ const initializeMedicinePreparation = async (req, res) => {
     let summary = await MedicinePreparationSummary.findOne({ prescriptionId });
 
     if (summary) {
-      // Prevent duplicate medicine entries
       const alreadyExists = summary.medicinePreparations.some(
         (prep) => prep.medicineName === medicineName
       );
@@ -63,13 +61,29 @@ const initializeMedicinePreparation = async (req, res) => {
       summary.medicinePreparations.push(newMedicinePrep);
       await summary.save();
     } else {
-      // Create new summary
       summary = new MedicinePreparationSummary({
         prescriptionId,
         medicinePreparations: [newMedicinePrep]
       });
       await summary.save();
     }
+
+    // --- START: ADDED NOTIFICATION LOGIC ---
+
+    // 1. Find the prescription to get the patient's ID
+    const prescription = await Prescription.findById(prescriptionId);
+    
+    // 2. If the prescription exists, create the notification for the patient
+    if (prescription) {
+        await Notification.create({
+            recipient: prescription.patientId, // The patient associated with the prescription
+            message: "Your medicine is under preparation. We will update you further. Stay tuned.",
+            type: "MEDICINE_PREPARATION_STARTED",
+            link: `/track-order/${prescriptionId}` // Example link to an order tracking page
+        });
+    }
+
+    // --- END: ADDED NOTIFICATION LOGIC ---
 
     return res.status(201).json({
       message: 'Medicine preparation initialized successfully',
@@ -81,7 +95,6 @@ const initializeMedicinePreparation = async (req, res) => {
     return res.status(500).json({ message: 'Server error' });
   }
 };
-
 const updatePostWeight = async (req, res) => {
   try {
     const { prescriptionId, medicineName, rawMaterialId, postWeight } = req.body;

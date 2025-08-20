@@ -34,6 +34,11 @@ const notificationSchema = new mongoose.Schema(
       default: false,
       index: true,
     },
+    isbotread:{
+        type:Boolean,
+        default:false,
+        index:true
+    },
     // A URL for the user to navigate to when clicking the notification
     link: {
       type: String,
