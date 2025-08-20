@@ -1,7 +1,8 @@
 
 const { default: mongoose } = require("mongoose");
 const {generateFeedbackQuestions,regenerateSingleQuestion} = require("./grokFunction");
-const {RescheduleAndRefund,DoctorQuestionMapWithQuery,DoctorfeedbackSettings,ClinicOperationHours,AppointmentSlotTypes,ConsultationPriorityMapping,ShipmentPanelSettings,PaymentIntimationPanel} = require("../models/consultationMessengerSettings");
+const {PaymentIntimationPanelEnableSchema,  PaymentIntimationPanelSchema2,PaymentMsgTempSchema,RescheduleAndRefund,DoctorQuestionMapWithQuery,DoctorfeedbackSettings,ClinicOperationHours,AppointmentSlotTypes,ConsultationPriorityMapping,ShipmentPanel} = require("../models/consultationMessengerSettings");
+const { read } = require("pdfkit");
 
 // feed back panel
 
@@ -446,103 +447,266 @@ exports.getRescheduleAndRefund = async (req,res)=>{
 
 // create 
 
-exports.createShipmentPanel = async (req,res)=>{
-    try{
 
-        await ShipmentPanelSettings.create({createdAt: Date.now()});
-        console.log("intial table created");
-        return res.status(201).json({message :"intial table created "});
-        
-    }
-    catch(error){
-        console.log("database error");
-        return res.status(500).json({message:"database error"});
-    }
-}
 
-// Get current shipment panel settings
-exports.getShipmentPanel = async (req, res) => {
+
+
+exports.sendShipmentPanel = async (req, res) => {
   try {
-    const panel = await ShipmentPanelSettings.find();
-    if (!panel) {
-      return res.status(404).json({ message: "Shipment Panel settings not found" });
+    const defaults = [
+      { name: "Enable Image Upload", status: true },
+      { name: "Allow Text Instructions", status: true },
+      { name: "Enable Mark As Received", status: true },
+      { name: "Customer Acknowledgement", status: true },
+      { name: "Mark As Lost In Transit", status: true },
+    ];
+
+    // Insert only if collection is empty
+    const existing = await ShipmentPanel.find();
+    if (existing.length === 0) {
+      await ShipmentPanel.insertMany(defaults);
+      return res.json({ message: "Default shipment panels inserted " });
+    } else {
+      return res.json({ message: "Already seeded" });
     }
-    res.json(panel);
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
 };
 
-// Update shipment panel settings (toggles true/false)
-exports.updateShipmentPanel = async (req, res) => {
-  try {
-    const {updates} = req.body; // { enableImageUpload: true, allowTextInstructions: false, ... }
-    
-    let panel = await ShipmentPanelSettings.findOne();
-    if (!panel) {
-      panel = new ShipmentPanelSettings(updates);
-    } else {
-      Object.assign(panel, updates); // merge updates
-    }
 
-    await panel.save();
-    res.json(panel);
-  } catch (err) {
-    res.status(400).json({ message: err.message });
+exports.getShipmentPanels = async (req, res) => {
+  try {
+    const panels = await ShipmentPanel.find();
+    res.json(panels);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
   }
 };
 
-// Payment intimation panel
+// PATCH: update only status by ID
+exports.updateShipmentPanel = async (req, res) => {
 
-exports.createPaymentIntimationPanel = async (req,res)=>{
-    try{
-        await PaymentIntimationPanel.create({createdAt : Date.now()});
-        console.log("inital payment intimation panel created");
-        return res.status(201).json({message : "inital payment intimation panel created"});
-    }
-    catch(error){
-        console.log("Error in database");
-        return res.status(500).json({message : "error in database"});
-    }
-};
-
-exports.editPaymentIntimationPanel = async(req,res)=>{
-    const {str} = req.body;
+   try {
     const id = req.params.id;
 
+    // Find the document first
+    let shipment = await ShipmentPanel.findById(id);
+
+    if (!shipment) {
+      return res.status(404).json({ message: "Record not found" });
+    }
+
+    // Toggle the boolean
+    shipment.status = !shipment.status;
+
+    // Save the updated document
+    await shipment.save();
+
+    res.json({
+      message: "Status toggled successfully",
+      data: shipment
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Server error" });
+  }
+};
+
+// Payment intimation panel 
+
+exports.createPaymentSettings1 = async (req, res) => {
+    try {
+      const defaults = [
+        { name: "enablePaymentIntimation", status: true },
+        { name: "enableFollowups", status: true },
+        { name: "enablechargeSummaryPreview", status: true },
+        
+      ];
+  
+      // Insert only if collection is empty
+      const existing = await PaymentIntimationPanelEnableSchema.find();
+      if (existing.length === 0) {
+        await PaymentIntimationPanelEnableSchema.insertMany(defaults);
+        return res.json({ message: "Default inserted " });
+      } else {
+        return res.json({ message: "Already seeded" });
+      }
+    } catch (err) {
+      res.status(500).json({ message: err.message });
+    }
+  };
+  
+exports.createPaymentSettings2 = async (req, res) => {
+  
+   try {
+      const defaults = [
+        { Interval: 2, Followupmsgtemp: "Gentle reminder: Your payment is pending" },
+      ];
+  
+      // Insert only if collection is empty
+      const existing = await PaymentIntimationPanelSchema2.find();
+      if (existing.length === 0) {
+        await PaymentIntimationPanelSchema2.create(defaults);
+        return res.json({ message: "Default inserted " });
+      } else {
+        return res.json({ message: "Already seeded" });
+      }
+    } catch (err) {
+      res.status(500).json({ message: err.message });
+    }
+  };
+  
+
+  
+
+
+exports.getPaymentIntimationPanel1 = async (req,res)=>{
     try{
-        const data = await PaymentIntimationPanel.findById(id);
-
-        if(!data){
-            console.log(`this ${id}document is not available in database`);
-            return res.json({message : `this ${id}document is not available in database`});
+        const result = await PaymentIntimationPanelEnableSchema.find({});
+        if(!result){
+            console.log("no documnet found");
+            return res.status(400).json({message : "no document found"});
         }
-
-        if(str === "enablePaymentIntimation"){
-            data.enablePaymentIntimation =  !data.enablePaymentIntimation;
-        }
-        else if(str === "enableFollowUps"){
-            data.enableFollowUps = !data.enableFollowUps;
-        }
-        else if(str === "enableChargeSummaryPreview"){
-            data.enableChargeSummaryPreview.isAvailable = !data.enableChargeSummaryPreview.isAvailable;
-        }
-        else{
-            console.log("input is invalid");
-            return res.status(400).json({message : "Invalid input ",input : str});
-        }
-
-        await data.save();
-
-        console.log("modified successfully ");
-        return res.status(200).json({message : "modified successfully"});
-
+        console.log("fetched successfully");
+        return res.json({success : true , result : result});
     }
-    catch(error){
-        console.log("eror in database operations");
-        return res.status(500).json({message : "error  in the database operations "});
+    catch (err) {
+        console.error(err);
+        res.status(500).json({ message: "Server error" });
+      }
+};
+
+exports.updatePaymentIntimationPanel1 = async (req, res) => {
+
+    try {
+     const id = req.params.id;
+ 
+     // Find the document first
+     let Payment = await PaymentIntimationPanelEnableSchema.findById(id);
+ 
+     if (!Payment) {
+       return res.status(404).json({ message: "Record not found" });
+     }
+ 
+     // Toggle the boolean
+     Payment.status = !Payment.status;
+ 
+     // Save the updated document
+     await Payment.save();
+ 
+     res.json({
+       message: "Status toggled successfully",
+       data: Payment
+     });
+   } catch (err) {
+     console.error(err);
+     res.status(500).json({ message: "Server error" , err});
+   }
+ };
+
+exports.getPaymentIntimationPanel2 = async (req,res)=>{
+    try{
+        const result = await PaymentIntimationPanelSchema2.find({});
+        if(!result){
+            console.log("no documnet found");
+            return res.status(400).json({message : "no document found"});
+        }
+        console.log("fetched successfully");
+        return res.json({success : true , result : result});
     }
+    catch (err) {
+        console.error(err);
+        res.status(500).json({ message: "Server error" });
+      }
+};
+
+exports.editPaymentIntimationPanel2 = async(req,res)=>{
+    const {id} = req.params;
+    const {Interval,Followupmsgtemp} = req.body;
+    try{
+        const result = await PaymentIntimationPanelSchema2.findOneAndUpdate(
+            {_id: new mongoose.Types.ObjectId(id)},
+            [{$set : {Interval : Interval , Followupmsgtemp: Followupmsgtemp}}],
+            {new : true}
+        );
+
+        if (!result) {
+            return res.status(404).json({ message: "id not foound" });
+        };
+
+        return res.status(200).json({ message: 'modified successfully', result });
+    }
+    catch (err) {
+        console.error(err);
+        res.status(500).json({ message: "Server error" });
+      }
 }
+
+// payment msg template
+
+exports.createPaymentSettings3 = async (req, res) => {
+  
+    try {
+        const defaults = [
+          { Description: "Hello! Your total bill is ₹{total_amount}. Please click below to pay and confirm your order.", Placeholder: ["{medicine_amount}", "{shipment_amount}", "{total_amount}"] },
+        ];
+    
+        // Insert only if collection is empty
+        const existing = await PaymentMsgTempSchema.find();
+        if (existing.length === 0) {
+          await PaymentMsgTempSchema.create(defaults);
+          return res.json({ message: "Default inserted " });
+        } else {
+          return res.json({ message: "Already seeded" });
+        }
+      } catch (err) {
+        res.status(500).json({ message: err.message });
+      }
+    };
+
+exports.editPaymentMsgTemplate = async (req,res)=>{
+    const {id} = req.params;
+    const {Description,Placeholder} = req.body;
+    try{
+        const result = await PaymentMsgTempSchema.findOneAndUpdate(
+            {_id: new mongoose.Types.ObjectId(id)},
+            [{$set : {Description : Description , Placeholder: Placeholder}}],
+            {new : true}
+        );
+
+        if (!result) {
+            return res.status(404).json({ message: "id not foound" });
+        };
+
+        return res.status(200).json({ message: 'modified successfully', result });
+    }
+    catch (err) {
+        console.error(err);
+        res.status(500).json({ message: "Server error" });
+      }
+    
+};
+
+exports.getPaymentMsgTemplate = async (req,res)=>{
+    try{
+        const result = await PaymentMsgTempSchema.find({});
+        if(!result){
+            console.log("no documnet found");
+            return res.status(400).json({message : "no document found"});
+        }
+        console.log("fetched successfully");
+        return res.json({success : true , result : result});
+    }
+    catch (err) {
+        console.error(err);
+        res.status(500).json({ message: "Server error" });
+      }
+};
+
+
+
+
 
 
 

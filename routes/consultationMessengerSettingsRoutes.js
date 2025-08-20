@@ -1,6 +1,6 @@
 const express = require("express");
 const router = express.Router();
-const {getRescheduleAndRefund,editRescheduleAndRefund,createRescheduleAndRefund,generateDoctorFeedbackQuestions,regenerateParticularQuestion,viewFeedbackQuestionsofParticularQuery,createDoctorFeedback,editFeedbackPanel,getFeedbackPanel,createFeedbackPanel,createShipmentPanel,editPaymentIntimationPanel,createPaymentIntimationPanel,getShipmentPanel,updateShipmentPanel,getConsultationPriorityMapping,editConsultationPriorityMapping,getAppointmentSlottypes,getClinicOperationalHours,createConsulationPriorityMapping,deleteSlotTypes,updateSlotType,createClinicOperationalHours,editOperationalHours,createAppointmentSlotTypes} = require("../controllers/consultationMessengerSettingsController")
+const {updatePaymentIntimationPanel1,createPaymentSettings3,createPaymentSettings2,createPaymentSettings1,getPaymentMsgTemplate,getPaymentIntimationPanel2,getPaymentIntimationPanel1,editPaymentIntimationPanel2,editPaymentMsgTemplate,getShipmentPanels,sendShipmentPanel,getRescheduleAndRefund,editRescheduleAndRefund,createRescheduleAndRefund,generateDoctorFeedbackQuestions,regenerateParticularQuestion,viewFeedbackQuestionsofParticularQuery,createDoctorFeedback,editFeedbackPanel,getFeedbackPanel,createFeedbackPanel,updateShipmentPanel,getConsultationPriorityMapping,editConsultationPriorityMapping,getAppointmentSlottypes,getClinicOperationalHours,createConsulationPriorityMapping,deleteSlotTypes,updateSlotType,createClinicOperationalHours,editOperationalHours,createAppointmentSlotTypes} = require("../controllers/consultationMessengerSettingsController")
 const validateToken = require("../middlewares/validateTokenHandler");
 
 
@@ -36,11 +36,23 @@ router.post("/createRescheduleAndRefund",validateToken,createRescheduleAndRefund
 router.patch("/editRescheduleAndRefund/:id",validateToken,editRescheduleAndRefund);
 router.get("/getRescheduleAndRefund",validateToken,getRescheduleAndRefund);
 
-router.post("/createShipmentPanel",validateToken,createShipmentPanel);
-router.get("/getShipmentPanel",validateToken,getShipmentPanel);
-router.patch("/updateShipmentPanel",validateToken,updateShipmentPanel);
+// shipment panel 
+router.post("/sendShipmentPanel",validateToken,sendShipmentPanel);
+router.get("/getShipmentPanels",validateToken,getShipmentPanels);
+router.patch("/updateShipmentPanel/:id",validateToken,updateShipmentPanel);
 
-router.post("/createPaymentIntimationPanel",validateToken,createPaymentIntimationPanel);
-router.patch("/editPaymentIntimationPanel/:id",validateToken,editPaymentIntimationPanel);
+// payment intimation panel
+router.post("/createPaymentSettings1",validateToken,createPaymentSettings1);
+router.patch("/updatePaymentIntimationPanel1/:id",validateToken,updatePaymentIntimationPanel1);
+router.post("/createPaymentSettings2",validateToken,createPaymentSettings2);
+router.get("/getPaymentIntimationPanel1",validateToken,getPaymentIntimationPanel1);
+router.get("/getPaymentIntimationPanel2",validateToken,getPaymentIntimationPanel2);
+router.patch("/editPaymentIntimationPanel2/:id",validateToken,editPaymentIntimationPanel2);
+
+// payment messeage template 
+router.post("/createPaymentSettings3",validateToken,createPaymentSettings3);
+router.patch("/editPaymentMsgTemplate/:id",validateToken,editPaymentMsgTemplate);
+router.get("/getPaymentMsgTemplate",validateToken,getPaymentMsgTemplate);
+
 
 module.exports = router;

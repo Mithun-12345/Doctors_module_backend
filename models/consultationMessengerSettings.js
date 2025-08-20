@@ -79,90 +79,16 @@ const rescheduleAndRefund = new mongoose.Schema({
 })
 
 
-const shipmentPanelSchema = new mongoose.Schema({
-  enableImageUpload: { type: Boolean, default: true },
-  allowTextInstructions: { type: Boolean, default: true },
-  enableMarkAsReceived: { type: Boolean, default: true },
-  customerAcknowledgement: { type: Boolean, default: true },
-  markAsLostInTransit: { type: Boolean, default: true },
-  createdAt : {type: Date},
-  updatedAt : {type : Date , default : Date.now}
-}, { timestamps: true });
+const shipmentPanelSchema = new mongoose.Schema(
+    {
+        name: { type: String, required: true, unique: true }, // e.g. enableImageUpload
+        status: { type: Boolean, default: true },             // true/false toggle
+      },
+      { timestamps: true }
+);
 
-const enableChargeSummaryPreviewsub = new mongoose.Schema({
-    isAvailable : {type : Boolean,default : true},
-    patientId : {type : String , default : "P1234"},
-    charges : {
-        type : {
-            consultationCharge : {
-                type : Number,
-                default : 500
-            },
-            medicineCharge : {
-                type : Number,
-                default : 400
-            },
-            shipmentCharge : {
-                type : Number,
-                default : 40
-            },
-            total : {
-                type : Number,
-                default : 940
-            }
 
-        }
-    },
-    
-});
 
-const paymentIntimationPanel = new mongoose.Schema({
-    enablePaymentIntimation : {
-        type : Boolean,
-        default : true
-    },
-    enableChargeSummaryPreview : {
-        type : enableChargeSummaryPreviewsub,
-        default : ()=>({})
-    },
-    enableFollowUps : {
-        type : Boolean,
-        default : true
-    },
-    message : {
-        type :{
-            interval : {
-                type : Number,
-                default : 2
-            },
-            followUpMessage : {
-                type : String,
-                default : "Gentle remainder. Your payment is pending "
-            }
-        },
-        default : ()=>({})
-    },
-    createdAt : {
-        type : Date,
-        default : Date.now
-    },
-    updatedAt : {
-        type : Date,
-        default : Date.now
-    }
-
-});
-
-const paymentmessagetemplate = new mongoose.Schema({
-    description : {
-        type : String,
-        default : "Hello your total bill is {total_amount} Please click below to pay and confirm your order "
-    },
-    placeholders : {
-        type : [String],
-        default : ["medicine_amount","shipment_amount","total_amount"]
-    }
-});
 
 const feedbackPanel = new mongoose.Schema({
     doctorId : {
@@ -229,17 +155,43 @@ const questionsMapWithQuery = new mongoose.Schema({
     }
 });
 
+const paymentIntimationPanelEnableSchema = new mongoose.Schema(
+    {
+      name: { type: String, required: true, unique: true }, 
+      status: { type: Boolean, default: true },            
+    },
+    { timestamps: true }
+  );
+
+const paymentIntimationPanelSchema2 = new mongoose.Schema(
+    {
+      Interval: { type: Number }, 
+      Followupmsgtemp: { type: String},            
+    },
+    { timestamps: true }
+  );
+
+const paymentMsgTempSchema = new mongoose.Schema(
+    {
+      Description: { type: String }, 
+      Placeholder: { type: [String] },            
+    },
+    { timestamps: true }
+  );
+
 const DoctorfeedbackSettings = new mongoose.model("DoctorfeedbackSettings",feedbackPanel);
 const DoctorQuestionMapWithQuery = new mongoose.model("DoctorQuestionMapWithQuery",questionsMapWithQuery);
 
 
-const ShipmentPanelSettings = new mongoose.model("ShipmentPanelSettings", shipmentPanelSchema);
-const PaymentIntimationPanel = new mongoose.model("PaymentIntimationPanel",paymentIntimationPanel);
-const PaymentMessageTemplate = new mongoose.model("PaymentMessageTemplate",paymentmessagetemplate);
+const ShipmentPanel = new mongoose.model("ShipmentPanelSettings", shipmentPanelSchema);
+
+const PaymentIntimationPanelEnableSchema = new mongoose.model("paymentIntimationPanelEnableSchema",paymentIntimationPanelEnableSchema);
+const PaymentIntimationPanelSchema2 = new mongoose.model("paymentIntimationPanelSchema2",paymentIntimationPanelSchema2);
+const PaymentMsgTempSchema = new mongoose.model("paymentMsgTempSchema",paymentMsgTempSchema);
 
 const ClinicOperationHours = new mongoose.model("ClinicOperationHours",appointmentSettingsSchema);
 const AppointmentSlotTypes = new mongoose.model("AppointmentSlotTypes",appointmentslottype);
 const ConsultationPriorityMapping = new mongoose.model("ConsultationPriorityMapping",consultationPriorityMapping);
 const RescheduleAndRefund = new mongoose.model("rescheduleAndRefund",rescheduleAndRefund);
 
-module.exports = {RescheduleAndRefund,DoctorQuestionMapWithQuery,DoctorfeedbackSettings,ClinicOperationHours,AppointmentSlotTypes,ConsultationPriorityMapping,ShipmentPanelSettings,PaymentIntimationPanel};
+module.exports = {PaymentMsgTempSchema,PaymentIntimationPanelSchema2,PaymentIntimationPanelEnableSchema,RescheduleAndRefund,DoctorQuestionMapWithQuery,DoctorfeedbackSettings,ClinicOperationHours,AppointmentSlotTypes,ConsultationPriorityMapping,ShipmentPanel};
