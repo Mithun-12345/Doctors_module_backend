@@ -1100,6 +1100,43 @@ exports.appointmentBookingTimeSlot = async (req,res)=>{
 
 }
 
+function getMostRecentAppointment(appointmentDates) {
+  const today = new Date();
+  const fifteenDaysBefore = new Date();
+  fifteenDaysBefore.setDate(today.getDate() - 15);
+
+  // Filter only appointments within the last 15 days
+  const pastAppointments = appointmentDates
+      .map(dateStr => new Date(dateStr))
+      .filter(date => date >= fifteenDaysBefore && date <= today);
+
+  // Sort descending (latest first)
+  pastAppointments.sort((a, b) => b - a);
+
+  // Return the most recent one (first in sorted array)
+  return pastAppointments.length > 0 ? pastAppointments[0] : null;
+}
+// patent appointment dates 
+
+exports.patientAppointmentDates = asyncHandler(async (req,res) =>{
+
+  const {id } = req.params;
+
+  const appointments = await Appointment.find({patient : new mongoose.Types.ObjectId(id) });
+  console.log("All appointmens : ",appointments );
+
+  const appointmentDates = appointments.map(app => app.appointmentDate);
+  if(!appointmentDates){
+    return res.json({success: false , appointmentDates : appointmentDates });
+  }
+
+  const pastRecentAppointment = getMostRecentAppointment(appointmentDates);
+
+  return res.json({appointmentDates : pastRecentAppointment});
+
+});
+
+
 // Book appointment
 exports.bookAppointment = asyncHandler(async (req, res) => {
   const phone = req.user.phone;

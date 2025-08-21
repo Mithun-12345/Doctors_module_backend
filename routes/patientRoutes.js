@@ -33,7 +33,8 @@ const {
   getPatientMedicationSummary,
   updateReminderOffset,
   createDoctorAppointmentInitialSetup,
-  appointmentBookingTimeSlot
+  appointmentBookingTimeSlot,
+  patientAppointmentDates
 } = require("../controllers/patientController");
 const {
   upload,
@@ -73,6 +74,7 @@ router.put("/editAppointment/:appointmentId",validateToken, editAppointmentOnce)
 
 router.post("/createDoctorAppointmentInitialSetup",validateToken,createDoctorAppointmentInitialSetup);
 router.get("/appointmentBookingTimeSlot",validateToken,appointmentBookingTimeSlot);
+router.get("/patientAppointmentDates/:id",validateToken,patientAppointmentDates);
 
 
 router.put("/updateProfile", validateToken, updateProfile);
