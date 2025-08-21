@@ -15,11 +15,18 @@ const validateToken = require('../middlewares/validateTokenHandler');
 //   .delete(vendorController.deleteVendor);
 
 // router.get("/zoom/authorize", validateToken, zoomAuthorize);
+router.get('/materials', vendorController.getUniqueRawMaterials);
+router.get('/compare-prices/:rawMaterialName', vendorController.compareMaterialPrices);
 router.get("/vendors", validateToken, vendorController.getAllVendors);
 router.post("/vendors", validateToken, vendorController.createVendor);
 router.patch("/vendors", validateToken, vendorController.updateVendor);
 // router.get("/vendors/:id", validateToken, vendorController.updateVendor);
 router.delete("/vendors", validateToken, vendorController.deleteVendor);
+router.patch('/edit-vendor/:id', vendorController.updateVendorDetails);
+router.patch(
+  '/:vendorId/products/:productId',
+  vendorController.updateVendorProduct
+);
 
 const Vendor = require('../models/Vendor')
 router.get('/', async (req, res) => {
@@ -262,6 +269,9 @@ router.delete('/:id/products/:productId', async (req, res) => {
     res.status(500).send('Server Error');
   }
 });
+
+// At the top of vendorRoutes.js
+
 
 
 module.exports = router;
