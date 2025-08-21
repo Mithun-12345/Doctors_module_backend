@@ -31,7 +31,9 @@ const {
   getPrescriptionsGroupedByWeekAndDay,
   savePatientNotification,
   getPatientMedicationSummary,
-  updateReminderOffset
+  updateReminderOffset,
+  createDoctorAppointmentInitialSetup,
+  appointmentBookingTimeSlot
 } = require("../controllers/patientController");
 const {
   upload,
@@ -68,6 +70,10 @@ router.post(
 router.post("/bookAppointment", validateToken, bookAppointment);
 router.post("/deleteAppointment/:appointmentId",validateToken,  deleteAppointment);
 router.put("/editAppointment/:appointmentId",validateToken, editAppointmentOnce);
+
+router.post("/createDoctorAppointmentInitialSetup",validateToken,createDoctorAppointmentInitialSetup);
+router.get("/appointmentBookingTimeSlot",validateToken,appointmentBookingTimeSlot);
+
 
 router.put("/updateProfile", validateToken, updateProfile);
 router.post("/finalizeAppointment", validateToken, finalizeAppointment);
