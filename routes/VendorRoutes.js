@@ -3,6 +3,7 @@ const router = express.Router();
 const vendorController = require('../controllers/vendorController');
 // const { validateVendorInput } = require('../middleware/validate');
 const validateToken = require('../middlewares/validateTokenHandler');
+const Vendor = require('../models/Vendor')
 
 // Vendor routes
 // router.route('/vendors')
@@ -15,6 +16,7 @@ const validateToken = require('../middlewares/validateTokenHandler');
 //   .delete(vendorController.deleteVendor);
 
 // router.get("/zoom/authorize", validateToken, zoomAuthorize);
+
 router.get('/materials', vendorController.getUniqueRawMaterials);
 router.get('/compare-prices/:rawMaterialName', vendorController.compareMaterialPrices);
 router.get("/vendors", validateToken, vendorController.getAllVendors);
@@ -27,8 +29,10 @@ router.patch(
   '/:vendorId/products/:productId',
   vendorController.updateVendorProduct
 );
+router.post('/create-order', vendorController.createOrder);
+router.get('/get-all-orders', vendorController.getAllOrders);
+router.get('/get-amendment-logs', vendorController.getAllLogs);
 
-const Vendor = require('../models/Vendor')
 router.get('/', async (req, res) => {
   try {
     const vendors = await Vendor.find().sort({ name: 1 });

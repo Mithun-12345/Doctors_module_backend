@@ -12,6 +12,13 @@ const ProductSchema = new Schema({
     type: Number,
     required: [true, 'Raw material price is required'],
     min: [0, 'Price cannot be negative']
+  },
+  quantity:{
+    type: Number,
+    min:[0,'Quantity cannot be less than 0']
+  },
+  uom:{
+    type: String,
   }
 });
 

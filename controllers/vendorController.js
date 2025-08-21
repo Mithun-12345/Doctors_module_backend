@@ -2,6 +2,9 @@ const Vendor = require("../models/Vendor");
 const { sanitizeInput } = require("../utils/sanitize");
 const AppError = require("../utils/appError");
 const catchAsync = require("../utils/catchAsync");
+const OrderHistory = require('../models/vendorOrderSchema'); // Adjust path
+const EditLog = require('../models/vendorAmmendmentLog');
+
 
 // Get all vendors
 exports.getAllVendors = catchAsync(async (req, res, next) => {
@@ -109,37 +112,77 @@ exports.deleteVendor = catchAsync(async (req, res, next) => {
   });
 });
 exports.updateVendorDetails = catchAsync(async (req, res, next) => {
-  // --- START: THE FIX ---
+  // 1. Fetch the original document to compare against
+  const originalVendor = await Vendor.findById(req.params.id);
+  if (!originalVendor) {
+    return next(new AppError('No vendor found with that ID to update', 404));
+  }
 
+  // 2. Prepare the update data from the request body
   const { vendor, products } = req.body;
   const updateData = {};
+  if (vendor) Object.assign(updateData, vendor);
+  if (products) updateData.products = products;
 
-  // If the 'vendor' object exists, spread its properties (name, email, etc.)
-  // into the main update object.
-  if (vendor) {
-    Object.assign(updateData, vendor);
+  // 3. Perform the update in the database
+  const updatedVendor = await Vendor.findByIdAndUpdate(
+    req.params.id,
+    updateData,
+    { new: true, runValidators: true }
+  );
+
+  // 4. Compare the original data with the submitted data to find actual changes
+  const actualChanges = [];
+  const oldProductsMap = new Map(
+    originalVendor.products.map(p => [p._id.toString(), p.toObject()])
+  );
+
+  for (const key in updateData) {
+    if (key === 'products') {
+      // Detailed comparison for the products array
+      for (const newProduct of updateData.products) {
+        const oldProduct = oldProductsMap.get(newProduct._id.toString());
+        if (oldProduct) {
+          // Check for change in raw material name
+          if (oldProduct.rawMaterialName !== newProduct.rawMaterialName) {
+            actualChanges.push({
+              field: `Raw Material ${oldProduct.rawMaterialName} name updated`,
+              oldValue: oldProduct.rawMaterialName,
+              newValue: newProduct.rawMaterialName,
+            });
+          }
+          // Check for change in raw material price
+          if (oldProduct.rawMaterialPrice !== newProduct.rawMaterialPrice) {
+            actualChanges.push({
+              field: `Raw Material ${newProduct.rawMaterialName} price updated`,
+              oldValue: oldProduct.rawMaterialPrice,
+              newValue: newProduct.rawMaterialPrice,
+            });
+          }
+        }
+      }
+    } else {
+      // Simple comparison for top-level fields (e.g., name, city)
+      if (originalVendor[key] !== updateData[key]) {
+        actualChanges.push({
+          field: key,
+          oldValue: originalVendor[key],
+          newValue: updateData[key],
+        });
+      }
+    }
   }
 
-  // If the 'products' array exists, add it to the update object.
-  // This will overwrite the entire products array as intended.
-  if (products) {
-    updateData.products = products;
+  // 5. If any changes were detected, create a log entry
+  if (actualChanges.length > 0) {
+    await EditLog.create({
+      resourceId: req.params.id,
+      vendorName: updatedVendor.name, // Always store the vendor's name for context
+      changes: actualChanges,
+    });
   }
 
-  // --- END: THE FIX ---
-
-  // 1. Find the vendor by its ID and update it with the CORRECTLY structured data
-  const updatedVendor = await Vendor.findByIdAndUpdate(req.params.id, updateData, {
-    new: true, // This option returns the document after the update has been applied
-    runValidators: true, // This ensures that updates are validated against your schema
-  });
-
-  // 2. If no vendor was found with that ID, return an error
-  if (!updatedVendor) {
-    return next(new AppError('No vendor found with that ID', 404));
-  }
-
-  // 3. If successful, send the updated vendor data back
+  // 6. Send the final, updated vendor document back in the response
   res.status(200).json({
     status: 'success',
     data: {
@@ -147,11 +190,6 @@ exports.updateVendorDetails = catchAsync(async (req, res, next) => {
     },
   });
 });
-/**
- * @desc    Update a specific raw material for a vendor
- * @route   PATCH /api/v1/vendors/:vendorId/products/:productId
- * @access  Private
- */
 exports.updateVendorProduct = catchAsync(async (req, res, next) => {
   const { vendorId, productId } = req.params;
   const { rawMaterialName, rawMaterialPrice } = req.body;
@@ -287,6 +325,72 @@ exports.getUniqueRawMaterials = catchAsync(async (req, res, next) => {
     results: materialNames.length,
     data: {
       materials: materialNames,
+    },
+  });
+});
+exports.createOrder = catchAsync(async (req, res, next) => {
+  // 1. Get the required data. Note: vendorId is no longer here.
+  const { items, totalOrderValue } = req.body;
+
+  // 2. Generate a unique order number.
+  const orderNumber = `ORD-${Date.now()}`;
+
+  // 3. Create the new order. Note: the top-level 'vendor' field is gone.
+  const newOrder = await OrderHistory.create({
+    orderNumber,
+    items, // The items array now contains the vendorId for each item
+    totalOrderValue,
+    // placedBy: req.user.id,
+  });
+
+  // 4. Send a '201 Created' response.
+  res.status(201).json({
+    status: 'success',
+    data: {
+      order: newOrder,
+    },
+  });
+});
+/**
+ * @desc    Get all orders
+ * @route   GET /api/v1/orders
+ * @access  Private (should be protected)
+ */
+exports.getAllOrders = catchAsync(async (req, res, next) => {
+  // 1. Find all documents in the OrderHistory collection.
+  const orders = await OrderHistory.find()
+    .sort({ createdAt: -1 }) // Sort by creation date, newest first.
+    .populate({
+      path: 'placedBy',
+      select: 'name email', // Select which user fields to return.
+    })
+    .populate({
+      path: 'items.vendorId',
+      select: 'name email phoneNumber', // Populate the vendor for each item in the order.
+    });
+
+  // 2. Send the response.
+  res.status(200).json({
+    status: 'success',
+    results: orders.length,
+    data: {
+      orders,
+    },
+  });
+});
+exports.getAllLogs = catchAsync(async (req, res, next) => {
+  const logs = await EditLog.find()
+    .sort({ modifiedAt: -1 }) // Sort by modified date, newest first
+    .populate({
+      path: 'resourceId',
+      select: 'name', // From the Vendor model, get the vendor's name
+    });
+
+  res.status(200).json({
+    status: 'success',
+    results: logs.length,
+    data: {
+      logs,
     },
   });
 });
