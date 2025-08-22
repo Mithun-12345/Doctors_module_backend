@@ -24,6 +24,7 @@ const {
   updateTrackingId,
   getDoctorPatientMedicationSummary,
   startPrescription,
+  getPaymentsByDoctor
 } = require("../controllers/doctorController");
 const {
   upload,
@@ -40,7 +41,7 @@ const router = express.Router();
 
 router.get("/google/authorize", googleAuth);
 router.get("/google/callback", googleCallback);
-
+router.get("/show-all-payments-doctor/:doctorId", getPaymentsByDoctor);
 router.get("/zoom/authorize", zoomAuth);
 router.get("/zoom/callback", zoomCallback);
 

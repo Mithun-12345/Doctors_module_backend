@@ -9,7 +9,63 @@ const Prescription = require("../models/Prescription.js");
 const fs = require("fs");
 const NotificationReminderSettings = require("../models/NotificationReminderSettings");
 const MedicinePreparationSummary = require('../models/MedicinePreparationSummary');
+const Payment = require("../models/Payment.js");
 
+// ... other controller functions
+
+/**
+ * @desc    Get all payments for a specific doctor
+ * @route   GET /api/payments/doctor/:doctorId
+ * @access  Private
+ */
+exports.getPaymentsByDoctor = async (req, res) => {
+  try {
+    const { doctorId } = req.params;
+
+    // Validate if the provided doctorId is a valid MongoDB ObjectId
+    if (!mongoose.Types.ObjectId.isValid(doctorId)) {
+      return res.status(400).json({ success: false, message: "Invalid Doctor ID format." });
+    }
+
+    // Find all appointment IDs associated with the doctor
+    const appointments = await Appointment.find({ doctor: doctorId }).select('_id');
+
+    // If no appointments are found for the doctor, they have no payments.
+    if (!appointments || appointments.length === 0) {
+      return res.json({
+        success: true,
+        message: "No payments found for this doctor.",
+        data: [],
+      });
+    }
+
+    // Extract just the IDs from the appointment documents
+    const appointmentIds = appointments.map(app => app._id);
+
+    // Find all payments where the appointmentId is in our list of appointmentIds
+    const payments = await Payment.find({ appointmentId: { $in: appointmentIds } })
+      .populate({
+        path: 'appointmentId',
+        select: 'appointmentDate timeSlot patient', // Select which appointment fields to return
+        populate: {
+          path: 'patient',
+          select: 'name phone' // Select which patient fields to return for the doctor's view
+        }
+      })
+      .sort({ createdAt: -1 }); // Sort by most recent payment first
+
+    res.json({
+      success: true,
+      message: "Payments retrieved successfully.",
+      count: payments.length,
+      data: payments,
+    });
+
+  } catch (err) {
+    console.error("Error fetching doctor payments:", err);
+    res.status(500).json({ success: false, message: "Server Error" });
+  }
+};
 exports.addDoctor = async (req, res) => {
   const { name, age, gender, photo, specialization, bio, phone, role } =
     req.body;

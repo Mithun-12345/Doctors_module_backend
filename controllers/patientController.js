@@ -3202,3 +3202,51 @@ exports.getAllPaymentsByPatient = async (req, res) => {
     res.status(500).json({ message: "Internal server error" });
   }
 };
+exports.getPaymentsByPatient = async (req, res) => {
+  try {
+    const { patientId } = req.params;
+
+    // Validate if the provided patientId is a valid MongoDB ObjectId
+    if (!mongoose.Types.ObjectId.isValid(patientId)) {
+      return res.status(400).json({ success: false, message: "Invalid Patient ID format." });
+    }
+
+    // Find all appointment IDs associated with the patient
+    const appointments = await Appointment.find({ patient: patientId }).select('_id');
+
+    // If no appointments are found for the patient, they have no payments.
+    if (!appointments || appointments.length === 0) {
+      return res.json({
+        success: true,
+        message: "No payments found for this patient.",
+        data: [],
+      });
+    }
+
+    // Extract just the IDs from the appointment documents
+    const appointmentIds = appointments.map(app => app._id);
+
+    // Find all payments where the appointmentId is in our list of appointmentIds
+    const payments = await Payment.find({ appointmentId: { $in: appointmentIds } })
+      .populate({
+        path: 'appointmentId',
+        select: 'appointmentDate timeSlot doctor', // Select which appointment fields to return
+        populate: {
+          path: 'doctor',
+          select: 'name specialization' // Select which doctor fields to return
+        }
+      })
+      .sort({ createdAt: -1 }); // Sort by most recent payment first
+
+    res.json({
+      success: true,
+      message: "Payments retrieved successfully.",
+      count: payments.length,
+      data: payments,
+    });
+
+  } catch (err) {
+    console.error("Error fetching patient payments:", err);
+    res.status(500).json({ success: false, message: "Server Error" });
+  }
+};
