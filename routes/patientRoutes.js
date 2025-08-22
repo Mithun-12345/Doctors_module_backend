@@ -78,7 +78,7 @@ router.post("/deleteAppointment/:appointmentId",validateToken,  deleteAppointmen
 router.put("/editAppointment/:appointmentId",validateToken, editAppointmentOnce);
 
 router.post("/createDoctorAppointmentInitialSetup",validateToken,createDoctorAppointmentInitialSetup);
-router.get("/appointmentBookingTimeSlot",validateToken,appointmentBookingTimeSlot);
+router.post("/appointmentBookingTimeSlot",validateToken,appointmentBookingTimeSlot);
 router.get("/patientAppointmentDates/:id",validateToken,patientAppointmentDates);
 router.get(
   "/pending-payments/:patientId", getPendingPaymentsByPatient
