@@ -1351,6 +1351,7 @@ exports.bookAppointment = asyncHandler(async (req, res) => {
         `Your appointment with ${doctor.name} for ${formattedDateTime} is reserved.`, 
       appointmentId: savedAppointment._id,
       amount: savedAppointment.payment, // <-- ADDED THIS LINE
+      expiresAt: new Date(Date.now() + 7 * 60 * 1000),
     });
   } catch (error) {
     console.error("Failed to reserve appointment:", error);
