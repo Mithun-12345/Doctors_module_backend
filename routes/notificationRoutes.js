@@ -78,5 +78,44 @@ router.patch("/mark-all-read", validateToken, async (req, res) => {
     res.status(500).json({ message: "Server error" });
   }
 });
+router.patch("/:id/bot-status", async (req, res) => {
+  const { id } = req.params;
+  const { isbotread } = req.body;
 
+  // 1. Validate the notification ID format
+  if (!mongoose.Types.ObjectId.isValid(id)) {
+    return res.status(400).json({ message: "Invalid notification ID format." });
+  }
+
+  // 2. Validate the payload from the request body
+  if (typeof isbotread !== "boolean") {
+    return res
+      .status(400)
+      .json({ message: 'The "isbotread" field must be a boolean (true or false).' });
+  }
+
+  try {
+    // 3. Find the notification by ID and update it
+    const updatedNotification = await Notification.findByIdAndUpdate(
+      id,
+      { isbotread: isbotread }, // The update operation
+      { new: true } // This option returns the modified document
+    );
+
+    // 4. Handle the case where the notification is not found
+    if (!updatedNotification) {
+      return res.status(404).json({ message: "Notification not found." });
+    }
+
+    // 5. Send a success response with the updated data
+    res.status(200).json({
+      message: "Bot read status updated successfully.",
+      notification: updatedNotification,
+    });
+  } catch (error) {
+    // 6. Handle any server-side errors
+    console.error("Error updating notification:", error);
+    res.status(500).json({ message: "An internal server error occurred." });
+  }
+});
 module.exports = router;
