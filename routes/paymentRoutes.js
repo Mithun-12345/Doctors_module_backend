@@ -301,6 +301,16 @@ router.post("/verify-prescription-payment", authMiddleware, async (req, res) => 
     if (!prescription) {
       throw new Error("Prescription not found");
     }
+    
+    // --- Start of Changes ---
+
+    // Find the associated appointment using the prescriptionId
+    const appointment = await Appointment.findOne({ prescriptionID: prescriptionId });
+    if (!appointment) {
+      throw new Error("Associated appointment for this prescription could not be found.");
+    }
+
+    // --- End of Changes ---
 
     // 3. Update the prescription to mark it as paid
     prescription.isPayementDone = true;
@@ -313,6 +323,7 @@ router.post("/verify-prescription-payment", authMiddleware, async (req, res) => 
       razorpaySignature: razorpay_signature,
       amount: savedPrescription.medicineCharges + savedPrescription.shippingCharges + savedPrescription.additionalCharges,
       prescriptionId: savedPrescription._id,
+      appointmentId: appointment._id, // ✅ Automatically add the found appointmentId
     });
     await newPayment.save();
 
@@ -336,5 +347,4 @@ router.post("/verify-prescription-payment", authMiddleware, async (req, res) => 
     res.status(400).json({ success: false, message: err.message });
   }
 });
-
 module.exports = router;
