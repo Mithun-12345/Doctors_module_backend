@@ -18,6 +18,7 @@ const createPrescription = async (req, res) => {
       followUpDays,
       medicineCharges,
       shippingCharges,
+      additionalCharges,
       notes,
       medicineCourse,
       action,
@@ -199,6 +200,7 @@ const createPrescription = async (req, res) => {
       followUpDays: followUpDays || 10,
       medicineCharges: medicineCharges || 0,
       shippingCharges: shippingCharges || 0,
+      additionalCharges:additionalCharges||0,
       notes: notes || "",
       medicineCourse,
       action: action || { status: "In Progress", closeComment: "" },
@@ -228,7 +230,7 @@ const createPrescription = async (req, res) => {
     // --- START: ADDED NOTIFICATION LOGIC ---
 
     // 1. Calculate the total charges
-    const totalCharges = (medicineCharges || 0) + (shippingCharges || 0);
+    const totalCharges = (medicineCharges || 0) + (shippingCharges || 0) + (additionalCharges||0);
 
     // 2. Create the notification for the patient
     await Notification.create({

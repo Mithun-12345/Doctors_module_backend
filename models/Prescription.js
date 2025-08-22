@@ -268,6 +268,10 @@ const prescriptionSchema = new mongoose.Schema({
     type: Number,
     default: 0,
   },
+  additionalCharges:{
+    type:Number,
+    default:0
+  },
   trackingId: { 
     type: String, 
     default: null 

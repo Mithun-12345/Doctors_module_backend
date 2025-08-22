@@ -3105,12 +3105,14 @@ exports.getPendingPaymentsByPatient = async (req, res) => {
     const detailedBills = pendingPrescriptions.map((p) => {
       const medicineCharges = p.medicineCharges || 0;
       const shippingCharges = p.shippingCharges || 0;
-      const totalCharges = medicineCharges + shippingCharges;
+      const additionalCharges=p.additionalCharges||0;
+      const totalCharges = medicineCharges + shippingCharges + additionalCharges
 
       return {
         prescriptionId: p._id,
         medicineCharges,
         shippingCharges,
+        additionalCharges,
         totalCharges,
       };
     });
