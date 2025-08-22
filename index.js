@@ -47,7 +47,9 @@ const medicationRoutes = require('./routes/generateMedicationScheduleRoutes');
 const { startReminderCronJob } = require('./utils/notificationScheduler.js');
 // ... other route imports at the top of index.jsconst notificationRoutes = require("./routes/notificationRoutes.js");// ... your other app.use() statements
 const notificationRoutes = require("./routes/notificationRoutes.js");
-
+const doctorFeedbackRoutes = require("./routes/doctorFeedback.js");
+const doctorAppointmentSettingsRoutes = require("./routes/consultationMessengerSettingsRoutes.js");
+const pushNotificationRouter = require("./routes/pushNotificationRouter.js");
 
 
 
@@ -100,6 +102,12 @@ app.use("/api/posts", require("./routes/postRoutes"));
 app.use('/api', scheduleRoutes);
 app.use('/api/medication', medicationRoutes);
 app.use("/api/notifications", notificationRoutes);
+// messaging module 
+// app.use("/api/doctorFeedback",doctorFeedbackRoutes);
+app.use("/api/doctorAppointmentSettings",doctorAppointmentSettingsRoutes);
+
+// push notification 
+app.use("/api/notification",pushNotificationRouter);
 
 const options = {
   key: fs.readFileSync("server.key"),

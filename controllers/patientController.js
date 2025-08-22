@@ -908,7 +908,251 @@ exports.finalizeAppointment = asyncHandler(async (req, res) => {
   }
 });
 
-// ... your other models like Patient, Doctor, Appointment etc. ...
+const {DoctorPrefinedAppointmentDetails} = require("../models/doctorPrefinedSettings");
+// const {ClinicOperationHours} = require("../models/consultationMessengerSettings");
+// doctor appointment setup 
+
+exports.createDoctorAppointmentInitialSetup = asyncHandler(async (req,res)=>{
+  const doctorId = req.user._id;
+  const {consultationTime } = req.body;
+  try{
+
+    if(!consultationTime || consultationTime <= 0){
+      return res.json({message : "invalid data"});
+    }
+    const startHour = 10; // 10 am 
+    const endHour = 17; // 5pm
+    const totalMinutes = (endHour - startHour) * 60;
+  
+    const totalAppointments = Math.floor(totalMinutes / consultationTime);
+
+    const data ={
+      doctorId : doctorId,
+      consultationTime : consultationTime,
+      totalslotPerday : totalAppointments
+    };
+
+    const result = await DoctorPrefinedAppointmentDetails.create(data);
+    if(!result){
+      return res.status(404).json({message : "not inserted"});
+    }
+    console.log("inserted successfully");
+    return res.json({message : "inserted successfully",result : result});
+
+  }
+  catch(error){
+    console.log("error occured",error);
+    return res.status(500).json({message : error});
+  }
+});
+
+function to24Hour(timeStr) {
+  let [hr, min, period] = timeStr.match(/(\d+):(\d+)\s*(AM|PM)/).slice(1,4);
+  hr = parseInt(hr, 10);
+  min = parseInt(min, 10);
+  if (period === "PM" && hr !== 12) hr += 12;
+  if (period === "AM" && hr === 12) hr = 0;
+  return { hr, min };
+}
+
+function getTimeSlots24(start, end, interval) {
+  let result = [];
+  const s = to24Hour(start);
+  const e = to24Hour(end);
+
+  let current = new Date(0, 0, 0, s.hr, s.min);
+  const endDate = new Date(0, 0, 0, e.hr, e.min);
+
+  while (current <= endDate) {
+    let hh = current.getHours().toString().padStart(2, "0");
+    let mm = current.getMinutes().toString().padStart(2, "0");
+    result.push(`${hh}:${mm}`); // Only 24-hour format, no AM/PM
+    current.setMinutes(current.getMinutes() + interval);
+  }
+  return result;
+}
+
+function removeSlots(slotsToRemove, slots) {
+  const removalSet = new Set(slotsToRemove);
+  return slots.filter(slot => !removalSet.has(slot));
+}
+
+function getFrequency(arr) {
+  const freq = { Acute: 0, Chronic: 0, Others: 0 };
+
+  for (const word of arr) {
+    if (freq.hasOwnProperty(word)) {
+      freq[word] += 1;
+    }
+  }
+
+  return freq;
+}
+
+function calculateSlots(total, percentObj) {
+  const result = {};
+  let sum = 0;
+
+  for (const [key, percent] of Object.entries(percentObj)) {
+    result[key] = Math.floor((percent / 100) * total);
+    sum += result[key];
+  }
+
+  // Adjust to ensure the total is exactly equal to totalSlots
+  let remainder = total - sum;
+  if (remainder > 0) {
+    // Assign remainder to the category with highest percentage (Acute here)
+    result['Acute'] += remainder;
+  }
+
+  return result;
+}
+
+//give timeslots 
+// const Appointment = require("../models/appointmentModel"); 
+const {ClinicOperationHours} = require("../models/consultationMessengerSettings");
+
+exports.appointmentBookingTimeSlot = async (req,res)=>{
+  const doctorId = req.user._id;
+  const {appointmentType,date} = req.body;
+
+  try{
+    if (!date) {
+      return res.status(400).json({ message: "Date is required" });
+    }
+    
+    const inputDate = new Date(date);
+  // Get day of week
+    const days = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+    const dayName = days[inputDate.getDay()];
+    console.log("Particular day : ",dayName);
+
+    // check the  status 
+    const result = await ClinicOperationHours.find({day : dayName});
+
+    console.log("result : ",result);
+    if(result.status === false){
+      console.log("Not calculated");
+      return res.json({message : "Not available for this day "});
+    }
+
+    // get all the appointments in that day 
+
+    // Convert input date into start and end of the day
+    const start = new Date(date);
+    start.setHours(0, 0, 0, 0);
+
+    const end = new Date(date);
+    end.setHours(23, 59, 59, 999);
+
+    const appointments = await Appointment.find({
+      appointmentDate: { $gte: start, $lte: end }
+    });
+
+    // this timeslots having the booked appointments times 
+    const timeSlots = appointments.map(app => app.timeSlot);
+    // array of disease category actue,chronic 
+    const categorydisease = appointments.map(app => app.diseaseType.name);
+
+
+    const startingTime = result[0].startingTime;
+    const endingTime = result[0].endingTime
+
+    const answer = await DoctorPrefinedAppointmentDetails.find({});
+    const consultationTime = answer[0].consultationTime;
+    const totalslot = answer[0].totalslotPerday;
+
+    const percentages = {
+      Acute: 70,
+      Chronic: 20,
+      Others: 10,
+    };
+    const categoryrealdata = calculateSlots(totalslot,percentages);
+    const frequencyOfCategoryDisease = getFrequency(categorydisease);
+
+    if(appointmentType === "Acute"){
+      if(categoryrealdata.Acute <= frequencyOfCategoryDisease.Acute){
+        return res.json("Acute limit reached today ");
+      }
+    }
+    else if(appointmentType === "Chronic"){
+      if(categoryrealdata.Chronic <= frequencyOfCategoryDisease.Chronic){
+        return res.json("Chronic limit reached today ");
+      }
+    }
+    else{
+      if(categoryrealdata.Others <= frequencyOfCategoryDisease.Others){
+        return res.json("Other limit reached today");
+      }
+    }
+
+    const alltimeslot = getTimeSlots24(startingTime,endingTime,consultationTime);
+
+    const output = removeSlots(timeSlots,alltimeslot);
+    
+    return res.json({result : output });
+
+  }
+  catch(error){
+    console.log("error : ",error);
+    return res.json({message : "error"});
+  }
+
+
+}
+
+function getMostRecentAppointment(appointmentDates) {
+  const today = new Date();
+  const fifteenDaysBefore = new Date();
+  fifteenDaysBefore.setDate(today.getDate() - 15);
+
+  // Filter only appointments within the last 15 days
+  const pastAppointments = appointmentDates
+      .map(dateStr => new Date(dateStr))
+      .filter(date => date >= fifteenDaysBefore && date <= today);
+
+  // Sort descending (latest first)
+  pastAppointments.sort((a, b) => b - a);
+
+  // Return the most recent one (first in sorted array)
+  return pastAppointments.length > 0 ? pastAppointments[0] : null;
+}
+
+function findAppointmentsByDate(appointments, requestedDate) {
+  // Normalize requested date to YYYY-MM-DD
+  const reqDate = new Date(requestedDate).toISOString().split("T")[0];
+
+  // Filter full documents where date matches
+  const matchedAppointments = appointments.filter(app => {
+    const appDate = new Date(app.appointmentDate).toISOString().split("T")[0];
+    return appDate === reqDate;
+  });
+
+  return matchedAppointments;
+}
+// patent appointment dates 
+
+exports.patientAppointmentDates = asyncHandler(async (req,res) =>{
+
+  const {id } = req.params;
+
+  const appointments = await Appointment.find({patient : new mongoose.Types.ObjectId(id) });
+  console.log("All appointmens : ",appointments );
+
+  const appointmentDates = appointments.map(app => app.appointmentDate);
+  if(!appointmentDates){
+    return res.json({success: false , appointmentDates : appointmentDates });
+  }
+
+  const pastRecentAppointment = getMostRecentAppointment(appointmentDates);
+  console.log("appointment date : ",pastRecentAppointment);
+
+  const matchedAppointment = findAppointmentsByDate(appointments,pastRecentAppointment);
+
+  return res.json({ message : true , lastAppointmentDocument : matchedAppointment});
+
+});
+
 
 // Book appointment
 exports.bookAppointment = asyncHandler(async (req, res) => {
