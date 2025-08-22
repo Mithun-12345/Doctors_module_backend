@@ -66,6 +66,47 @@ exports.getPaymentsByDoctor = async (req, res) => {
     res.status(500).json({ success: false, message: "Server Error" });
   }
 };
+
+// ... other controller functions
+
+/**
+ * @desc    Get all payments made to any doctor
+ * @route   GET /api/payments/doctors
+ * @access  Private (e.g., for Admin)
+ */
+exports.getAllDoctorPaymentsTotal = async (req, res) => {
+  try {
+    // Find all payments and populate details
+    const payments = await Payment.find({}) // 👈 Find all documents
+      .populate({
+        path: 'appointmentId',
+        select: 'appointmentDate timeSlot patient doctor', // Select fields from appointment
+        populate: [ // 👈 We can populate multiple fields within the appointment
+          {
+            path: 'patient',
+            select: 'name phone' // Select fields from patient
+          },
+          {
+            path: 'doctor',
+            select: 'name specialization' // Select fields from doctor
+          }
+        ]
+      })
+      .sort({ createdAt: -1 }); // Sort by most recent payment first
+
+    res.json({
+      success: true,
+      message: "All doctor-related payments retrieved successfully.",
+      count: payments.length,
+      data: payments,
+    });
+
+  } catch (err) {
+    console.error("Error fetching all doctor payments:", err);
+    res.status(500).json({ success: false, message: "Server Error" });
+  }
+};
+
 exports.addDoctor = async (req, res) => {
   const { name, age, gender, photo, specialization, bio, phone, role } =
     req.body;
