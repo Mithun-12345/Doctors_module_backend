@@ -37,7 +37,8 @@ const {
   createDoctorAppointmentInitialSetup,
   appointmentBookingTimeSlot,
   patientAppointmentDates,
-  getPendingPaymentsByPatient
+  getPendingPaymentsByPatient,
+  getAllPaymentsByPatient
 } = require("../controllers/patientController");
 const {
   upload,
@@ -81,6 +82,8 @@ router.get("/patientAppointmentDates/:id",validateToken,patientAppointmentDates)
 router.get(
   "/pending-payments/:patientId", getPendingPaymentsByPatient
 );
+router.get("/:patientId/payments",getAllPaymentsByPatient);
+
 
 
 router.put("/updateProfile", validateToken, updateProfile);

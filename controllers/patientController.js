@@ -3134,3 +3134,71 @@ exports.getPendingPaymentsByPatient = async (req, res) => {
     res.status(500).json({ message: "Internal server error" });
   }
 };
+exports.getAllPaymentsByPatient = async (req, res) => {
+  try {
+    const { patientId } = req.params;
+
+    // Validate the patientId format
+    if (!mongoose.Types.ObjectId.isValid(patientId)) {
+      return res.status(400).json({ message: "Invalid Patient ID format" });
+    }
+
+    // Find ALL prescriptions for the patient, regardless of payment status
+    const allPrescriptions = await Prescription.find({
+      patientId: patientId,
+      // The `isPayementDone: false` filter is removed
+    }).sort({ createdAt: -1 }); // Sort by most recent first
+
+    if (!allPrescriptions || allPrescriptions.length === 0) {
+      return res.status(200).json({
+        message: "No payment history found for this patient.",
+        prescriptions: [],
+      });
+    }
+
+    // Process the prescriptions to include payment status and totals
+    let totalAmount = 0;
+    let amountPaid = 0;
+    
+    const detailedBills = allPrescriptions.map((p) => {
+      const medicineCharges = p.medicineCharges || 0;
+      const shippingCharges = p.shippingCharges || 0;
+      const additionalCharges = p.additionalCharges || 0;
+      const totalCharges = medicineCharges + shippingCharges + additionalCharges;
+
+      // Add this bill's total to the overall total
+      totalAmount += totalCharges;
+      // If it's paid, add it to the amountPaid total
+      if (p.isPayementDone === true) {
+        amountPaid += totalCharges;
+      }
+
+      return {
+        prescriptionId: p._id,
+        isPaid: p.isPayementDone, // Include the payment status
+        createdAt: p.createdAt,
+        medicineCharges,
+        shippingCharges,
+        additionalCharges,
+        totalCharges,
+      };
+    });
+
+    // Calculate the final amount due
+    const amountDue = totalAmount - amountPaid;
+
+    // Send the final structured response
+    res.status(200).json({
+      allBills: detailedBills,
+      summary: {
+        totalAmount,
+        amountPaid,
+        amountDue
+      },
+    });
+    
+  } catch (error) {
+    console.error("Error fetching all payments:", error);
+    res.status(500).json({ message: "Internal server error" });
+  }
+};

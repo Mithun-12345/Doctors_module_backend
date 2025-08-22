@@ -265,14 +265,16 @@ router.post("/create-prescription-order", authMiddleware, async (req, res) => {
     };
 
     const order = await razorpay.orders.create(options);
-    res.json({ success: true, order });
+
+    // --- MODIFIED LINE ---
+    // Now the frontend receives both the order and the ID it's associated with.
+    res.json({ success: true, order, prescriptionId: prescriptionId });
 
   } catch (err) {
     console.error("Create prescription order error:", err);
     res.status(500).json({ success: false, message: err.message });
   }
 });
-
 // ## STEP 2: VERIFY THE PAYMENT AND UPDATE THE PRESCRIPTION
 router.post("/verify-prescription-payment", authMiddleware, async (req, res) => {
   try {
