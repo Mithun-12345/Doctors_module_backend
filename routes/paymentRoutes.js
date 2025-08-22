@@ -140,6 +140,7 @@ router.post("/verify-payment", authMiddleware, async (req, res) => {
         amount: appointment.payment,
         appointmentId,
         createdAt: new Date(),
+        paidFor: "Consultation"
       });
 
       await newPayment.save({ session });
@@ -324,6 +325,7 @@ router.post("/verify-prescription-payment", authMiddleware, async (req, res) => 
       amount: savedPrescription.medicineCharges + savedPrescription.shippingCharges + savedPrescription.additionalCharges,
       prescriptionId: savedPrescription._id,
       appointmentId: appointment._id, // ✅ Automatically add the found appointmentId
+      paidFor: "Medicine"
     });
     await newPayment.save();
 

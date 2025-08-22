@@ -28,6 +28,10 @@ const paymentSchema = new mongoose.Schema(
       enum: ["created", "paid", "failed"],
       default: "paid",
     },
+    paidFor:{
+        type: String,
+        trim:true
+    },
     appointmentId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Appointment",
