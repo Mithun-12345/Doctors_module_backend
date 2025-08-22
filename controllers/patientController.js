@@ -1116,6 +1116,19 @@ function getMostRecentAppointment(appointmentDates) {
   // Return the most recent one (first in sorted array)
   return pastAppointments.length > 0 ? pastAppointments[0] : null;
 }
+
+function findAppointmentsByDate(appointments, requestedDate) {
+  // Normalize requested date to YYYY-MM-DD
+  const reqDate = new Date(requestedDate).toISOString().split("T")[0];
+
+  // Filter full documents where date matches
+  const matchedAppointments = appointments.filter(app => {
+    const appDate = new Date(app.appointmentDate).toISOString().split("T")[0];
+    return appDate === reqDate;
+  });
+
+  return matchedAppointments;
+}
 // patent appointment dates 
 
 exports.patientAppointmentDates = asyncHandler(async (req,res) =>{
@@ -1131,8 +1144,11 @@ exports.patientAppointmentDates = asyncHandler(async (req,res) =>{
   }
 
   const pastRecentAppointment = getMostRecentAppointment(appointmentDates);
+  console.log("appointment date : ",pastRecentAppointment);
 
-  return res.json({appointmentDates : pastRecentAppointment});
+  const matchedAppointment = findAppointmentsByDate(appointments,pastRecentAppointment);
+
+  return res.json({ message : true , lastAppointmentDocument : matchedAppointment});
 
 });
 
