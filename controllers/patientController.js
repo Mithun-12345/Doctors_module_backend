@@ -1152,8 +1152,6 @@ exports.patientAppointmentDates = asyncHandler(async (req,res) =>{
   return res.json({ message : true , lastAppointmentDocument : matchedAppointment});
 
 });
-
-
 // Book appointment
 exports.bookAppointment = asyncHandler(async (req, res) => {
   const phone = req.user.phone;
@@ -1352,6 +1350,7 @@ exports.bookAppointment = asyncHandler(async (req, res) => {
       message:
         `Your appointment with ${doctor.name} for ${formattedDateTime} is reserved.`, 
       appointmentId: savedAppointment._id,
+      amount: savedAppointment.payment, // <-- ADDED THIS LINE
     });
   } catch (error) {
     console.error("Failed to reserve appointment:", error);
@@ -3077,3 +3076,58 @@ exports.getPrescriptionsGroupedByWeekAndDay = asyncHandler(async (req, res) => {
 
   res.status(200).json(weekMap);
 });
+exports.getPendingPaymentsByPatient = async (req, res) => {
+  try {
+    const { patientId } = req.params;
+
+    // Validate if the provided patientId is a valid MongoDB ObjectId
+    if (!mongoose.Types.ObjectId.isValid(patientId)) {
+      return res.status(400).json({ message: "Invalid Patient ID format" });
+    }
+
+    // Find all prescriptions for the patient where payment is not done
+    const pendingPrescriptions = await Prescription.find({
+      patientId: patientId,
+      isPayementDone: false,
+    });
+
+    // If no prescriptions are found, return a clean response
+    if (!pendingPrescriptions || pendingPrescriptions.length === 0) {
+      return res.status(200).json({
+        message: "No pending payments found for this patient.",
+        prescriptions: [],
+        grandTotal: 0,
+      });
+    }
+
+    // Process the found prescriptions to calculate totals
+    const detailedBills = pendingPrescriptions.map((p) => {
+      const medicineCharges = p.medicineCharges || 0;
+      const shippingCharges = p.shippingCharges || 0;
+      const totalCharges = medicineCharges + shippingCharges;
+
+      return {
+        prescriptionId: p._id,
+        medicineCharges,
+        shippingCharges,
+        totalCharges,
+      };
+    });
+
+    // Calculate the grand total by summing up the totalCharges of each bill
+    const grandTotal = detailedBills.reduce(
+      (sum, bill) => sum + bill.totalCharges,
+      0
+    );
+
+    // Send the final structured response
+    res.status(200).json({
+      prescriptions: detailedBills,
+      grandTotal,
+    });
+    
+  } catch (error) {
+    console.error("Error fetching pending payments:", error);
+    res.status(500).json({ message: "Internal server error" });
+  }
+};
