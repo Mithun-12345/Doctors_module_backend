@@ -5,6 +5,8 @@ const razorpay = require("../utils/razorpay");
 const Payment = require("../models/Payment");
 const Appointment = require("../models/appointmentModel");
 const Doctor = require("../models/doctorModel");
+const Prescription = require("../models/Prescription");
+const Notification = require("../models/notificationHub");
 const authMiddleware = require("../middlewares/validateTokenHandler");
 
 const router = express.Router();
@@ -242,5 +244,95 @@ router.get(
     }
   }
 );
+router.post("/create-prescription-order", authMiddleware, async (req, res) => {
+  try {
+    const { amount, prescriptionId } = req.body;
+
+    // Validate the prescription
+    const prescription = await Prescription.findById(prescriptionId);
+    if (!prescription) {
+      return res.status(404).json({ message: "Prescription not found" });
+    }
+    if (prescription.isPayementDone) {
+      return res.status(400).json({ message: "This prescription has already been paid for." });
+    }
+
+    // Razorpay requires amount in the smallest currency unit (paise)
+    const options = {
+      amount: amount * 100,
+      currency: "INR",
+      receipt: `receipt_pres_${prescriptionId}`,
+    };
+
+    const order = await razorpay.orders.create(options);
+    res.json({ success: true, order });
+
+  } catch (err) {
+    console.error("Create prescription order error:", err);
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+// ## STEP 2: VERIFY THE PAYMENT AND UPDATE THE PRESCRIPTION
+router.post("/verify-prescription-payment", authMiddleware, async (req, res) => {
+  try {
+    const {
+      razorpay_order_id,
+      razorpay_payment_id,
+      razorpay_signature,
+      prescriptionId,
+    } = req.body;
+
+    // 1. Verify the signature from Razorpay
+    const sign = razorpay_order_id + "|" + razorpay_payment_id;
+    const expectedSignature = crypto
+      .createHmac("sha256", process.env.RAZORPAY_KEY_SECRET)
+      .update(sign)
+      .digest("hex");
+
+    if (expectedSignature !== razorpay_signature) {
+      throw new Error("Invalid payment signature");
+    }
+
+    // 2. Find the prescription
+    const prescription = await Prescription.findById(prescriptionId);
+    if (!prescription) {
+      throw new Error("Prescription not found");
+    }
+
+    // 3. Update the prescription to mark it as paid
+    prescription.isPayementDone = true;
+    const savedPrescription = await prescription.save();
+
+    // 4. (Optional but recommended) Create a record in your Payment collection
+    const newPayment = new Payment({
+      razorpayOrderId: razorpay_order_id,
+      razorpayPaymentId: razorpay_payment_id,
+      razorpaySignature: razorpay_signature,
+      amount: savedPrescription.medicineCharges + savedPrescription.shippingCharges + savedPrescription.additionalCharges,
+      prescriptionId: savedPrescription._id,
+    });
+    await newPayment.save();
+
+    // 5. Create a "Medicine Preparation Started" notification for the user
+    await Notification.create({
+        recipient: savedPrescription.patientId,
+        message: "Payment received! Our pharmacy has begun preparing your medicines.",
+        type: "MEDICINE_PREPARATION_STARTED",
+        link: `/track-order/${savedPrescription._id}`
+    });
+
+    res.json({
+      success: true,
+      message: "Payment successful! Your prescription is being processed.",
+      orderId: razorpay_order_id,
+      paymentId: razorpay_payment_id
+    });
+
+  } catch (err) {
+    console.error("Prescription payment verification error:", err);
+    res.status(400).json({ success: false, message: err.message });
+  }
+});
 
 module.exports = router;
