@@ -137,6 +137,7 @@ const appointmentSchema = new mongoose.Schema(
     meetLink: {
       type: String,
       required: false,
+      default: "https://meet.google.com/jrz-wxor-gph"
     },
     notes: {
       type: String,

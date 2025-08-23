@@ -3250,3 +3250,53 @@ exports.getPaymentsByPatient = async (req, res) => {
     res.status(500).json({ success: false, message: "Server Error" });
   }
 };
+// Assuming Appointment and Doctor models are imported
+
+exports.getAllAppointmentsForPatientDashboard = async (req, res) => {
+  try {
+    const { patientId } = req.params;
+
+    // Validate the patientId
+    if (!mongoose.Types.ObjectId.isValid(patientId)) {
+      return res.status(400).json({ message: "Invalid Patient ID format." });
+    }
+
+    // 1. Find ALL appointments for the given patientId
+    const appointments = await Appointment.find({ patient: patientId })
+      .sort({ appointmentDate: -1 }) // Show most recent/upcoming first
+      .populate({ 
+          path: 'doctor', 
+          select: 'name' // From the Doctor model, select only the 'name' field
+      })
+      .select('doctor meetLink consultingFor timeSlot appointmentDate status'); // Select necessary fields
+
+    if (!appointments || appointments.length === 0) {
+      return res.status(200).json({
+        success: true,
+        message: "No appointments found for this patient.",
+        appointments: [],
+      });
+    }
+
+    // 2. Format the data to match the required output
+    const formattedAppointments = appointments.map(appt => ({
+      appointmentId: appt._id,
+      doctorName: appt.doctor ? appt.doctor.name : 'Unknown Doctor',
+      doctorId: appt.doctor ? appt.doctor._id : null,
+      appointmentDate: appt.appointmentDate,
+      timeSlot: appt.timeSlot,
+      status: appt.status,
+      meetLink: appt.meetLink,
+      consultingFor: appt.consultingFor,
+    }));
+
+    res.status(200).json({
+      success: true,
+      appointments: formattedAppointments,
+    });
+
+  } catch (error) {
+    console.error("Error fetching patient's appointments:", error);
+    res.status(500).json({ success: false, message: "Internal server error" });
+  }
+};

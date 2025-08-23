@@ -25,7 +25,8 @@ const {
   getDoctorPatientMedicationSummary,
   startPrescription,
   getPaymentsByDoctor,
-  getAllDoctorPaymentsTotal
+  getAllDoctorPaymentsTotal,
+  getTodaysAppointments
 } = require("../controllers/doctorController");
 const {
   upload,
@@ -46,6 +47,8 @@ router.get("/show-all-payments-doctor/:doctorId", getPaymentsByDoctor);
 router.get("/zoom/authorize", zoomAuth);
 router.get("/zoom/callback", zoomCallback);
 router.get("/show-every-payment", getAllDoctorPaymentsTotal);
+router.get("/todays-appointments",validateToken,getTodaysAppointments);
+
 
 // @route   POST /api/doctor/addDoctor
 // @desc    Add a new doctor

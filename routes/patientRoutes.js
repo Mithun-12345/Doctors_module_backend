@@ -39,7 +39,8 @@ const {
   patientAppointmentDates,
   getPendingPaymentsByPatient,
   getAllPaymentsByPatient,
-  getPaymentsByPatient
+  getPaymentsByPatient,
+  getAllAppointmentsForPatientDashboard
 } = require("../controllers/patientController");
 const {
   upload,
@@ -151,7 +152,7 @@ router.delete(
 );
 
 router.get("/profile", validateToken, fetchProfile);
-
+router.get("/:patientId/appointments-for-dashboard", getAllAppointmentsForPatientDashboard);
 router.get("/pendingAppointments", validateToken, pendingAppointment);
 router.get("/pendingCoupons", validateToken, pendingCoupons);
 router.get("/upComingAppointment", validateToken, upComingAppointment);

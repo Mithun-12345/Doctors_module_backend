@@ -1098,4 +1098,44 @@ exports.getDoctorPatientMedicationSummary = async (req, res) => {
     return res.status(500).json({ message: "Server error", error });
   }
 };
+exports.getTodaysAppointments = async (req, res) => {
+  try {
+    // 1. Define the start and end of the current day
+    const now = new Date();
+    const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0);
+    const endOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
 
+    // 2. Find appointments and select 'meetLink' instead of 'link'
+    const appointments = await Appointment.find({
+      appointmentDate: {
+        $gte: startOfToday,
+        $lte: endOfToday,
+      },
+    })
+    .sort({ timeSlot: 1 })
+    .populate({ 
+        path: 'patient', 
+        select: 'name'
+    })
+    .select('patient meetLink consultingFor timeSlot'); // <-- UPDATED THIS LINE
+
+    // 3. Format the data with the 'meetLink' field
+    const formattedAppointments = appointments.map(appt => ({
+      appointmentId: appt._id,
+      patientName: appt.patient ? appt.patient.name : 'Unknown Patient',
+      patientId: appt.patient ? appt.patient._id : null,
+      meetLink: appt.meetLink, // <-- UPDATED THIS LINE
+      consultingFor: appt.consultingFor,
+      timeSlot: appt.timeSlot
+    }));
+
+    res.status(200).json({
+      success: true,
+      appointments: formattedAppointments,
+    });
+
+  } catch (error) {
+    console.error("Error fetching today's appointments:", error);
+    res.status(500).json({ success: false, message: "Internal server error" });
+  }
+};
