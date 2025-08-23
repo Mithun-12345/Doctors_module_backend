@@ -17,15 +17,6 @@ const notificationSchema = new mongoose.Schema(
     // A category for the notification
     type: {
       type: String,
-      enum: [
-        "APPOINTMENT_RESERVED",
-        "APPOINTMENT_REMINDER",
-        "PRESCRIPTION_STARTED",
-        "PRESCRIPTION_READY",
-        "PRESCRIPTION_PAYMENT_DUE",
-        "MEDICINE_PREPARATION_STARTED",
-        "MEDICINE_SHIPMENT_DONE"
-      ],
       required: true,
     },
     // The read/unread status

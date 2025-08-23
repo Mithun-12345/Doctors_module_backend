@@ -46,7 +46,6 @@
     "multer": "^1.4.5-lts.1",
     "multer-storage-cloudinary": "^4.0.0",
     "node-cron": "^3.0.3",
-    "nodemon": "^3.1.10",
     "pdfkit": "^0.15.1",
     "razorpay": "^2.9.6",
     "socket.io": "^4.7.5",
@@ -55,6 +54,7 @@
     "zoomus": "^0.1.4"
   },
   "devDependencies": {
-    "gh-pages": "^6.1.1"
+    "gh-pages": "^6.1.1",
+    "nodemon": "^3.1.10"
   }
 }
