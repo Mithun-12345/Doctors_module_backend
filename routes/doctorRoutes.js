@@ -27,7 +27,10 @@ const {
   getPaymentsByDoctor,
   getAllDoctorPaymentsTotal,
   getTodaysAppointments,
-  getAppointedPatients
+  getAppointedPatients,
+  getAppointmentWithTimedata,
+  consultationNotes,
+  secondFormDetails
 } = require("../controllers/doctorController");
 const {
   upload,
@@ -116,8 +119,9 @@ router.post(
 router.put("/updateProfile", validateToken, updateProfile);
 router.get("/doctor/me", validateToken, getDoctorByFollow);
 router.get('/getAppointedPatients',validateToken,getAppointedPatients)
-
-
+router.get('/getAppointmentWithTimedata',validateToken,getAppointmentWithTimedata);
+router.post('/consultationNotes', validateToken, consultationNotes)
+router.get('/secondFormDetails', validateToken, secondFormDetails);
 
 
 module.exports = router;

@@ -1139,6 +1139,34 @@ exports.getTodaysAppointments = async (req, res) => {
     res.status(500).json({ success: false, message: "Internal server error" });
   }
 };
+exports.getAppointmentWithTimedata = async (req, res) => {
+  try {
+    const patientId = new mongoose.Types.ObjectId(req.query.id);
+    const type = req.query.type; // "past" or "future"
+
+    const allAppointments = await Appointment.find({ patient: patientId });
+
+    if (allAppointments.length === 0) {
+      return res.json({ message: "The appointments are not found" });
+    }
+
+    const now = new Date();
+
+    const filteredAppointments = allAppointments.filter(app => {
+      const date = new Date(app.appointmentDate);
+      const [hour, minute] = app.timeSlot.split(":").map(Number);
+      date.setHours(hour, minute, 0, 0);
+      return type === "past" ? date < now : date >= now;
+    });
+
+    res.json(filteredAppointments);
+
+  } catch (error) {
+    console.log(error);
+    res.status(500).json({ message: "Internal server error" });
+  }
+};
+
 exports.getAppointedPatients = async (req,res)=>{
   try {
     const appointments = await Appointment.find({doctor:req.query.id});
@@ -1147,5 +1175,77 @@ exports.getAppointedPatients = async (req,res)=>{
     res.json(patientDetails)
   } catch (error) {
     console.log(error)
+  }
+}
+
+exports.consultationNotes = async (req, res) => {
+  try {
+    console.log('Received consultation note data:', req.body); // Debug log
+    
+    // Validate required fields
+    const { patientId, userId, note } = req.body;
+    
+    if (!patientId || !userId || !note) {
+      return res.status(400).json({ 
+        success: false,
+        message: 'Missing required fields: patientId, userId, and note are required',
+        received: req.body
+      });
+    }
+
+    // Create new consultation note
+    const consultationNote = new ConsultationNote({
+      patientId,
+      userId,
+      note,
+      date: req.body.date || new Date()
+    });
+
+    console.log('Saving consultation note:', consultationNote); // Debug log
+    
+    const savedNote = await consultationNote.save();
+    
+    console.log('Successfully saved note:', savedNote); // Debug log
+    
+    res.status(201).json({
+      success: true,
+      message: 'Consultation note saved successfully',
+      data: savedNote
+    });
+    
+  } catch (error) {
+    console.error('Error saving consultation note:', error); // Detailed error log
+    
+    // Handle different types of errors
+    if (error.name === 'ValidationError') {
+      return res.status(400).json({
+        success: false,
+        message: 'Validation Error',
+        errors: Object.values(error.errors).map(err => err.message)
+      });
+    }
+    
+    if (error.code === 11000) {
+      return res.status(400).json({
+        success: false,
+        message: 'Duplicate entry error',
+        error: error.message
+      });
+    }
+    
+    res.status(500).json({ 
+      success: false,
+      message: 'Internal Server Error',
+      error: process.env.NODE_ENV === 'development' ? error.message : 'Something went wrong'
+    });
+  }
+};
+
+exports.secondFormDetails = async (req,res) =>{
+  try {
+    const response = await chronicModel.find({userId:req.query.id})
+    res.json(response);
+  } catch (error) {
+    console.log(error);
   }
 }
