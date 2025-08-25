@@ -13,15 +13,12 @@ const cors = require("cors");
 const helmet = require("helmet");
 const morgan = require("morgan");
 const rateLimit = require("express-rate-limit");
-// START: Added from Messenger Team's File
 const multer = require("multer");
 const { v2: cloudinary } = require("cloudinary");
-// END: Added from Messenger Team's File
 
 // Load environment variables first
 dotenv.config();
 
-// START: Added from Messenger Team's File
 // ✅ CLOUDINARY CONFIGURATION (For File Uploads)
 cloudinary.config({
   cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
@@ -43,8 +40,6 @@ const upload = multer({
     }
   },
 });
-// END: Added from Messenger Team's File
-
 
 // ✅ DATABASE CONNECTION
 const dbConnection = require("./configs/dbConnection");
@@ -92,9 +87,7 @@ const validateToken = require("./middlewares/validateTokenHandler");
 
 // ✅ SERVICES
 const { startReminderCronJob } = require('./utils/notificationScheduler.js');
-// START: Added from Messenger Team's File
 const { analyzePatientMessage, triggerActionFromIntent, conversationalFallback } = require("./services/groqservice");
-// END: Added from Messenger Team's File
 
 // =================================================================================
 //                                 SERVER SETUP
@@ -174,8 +167,6 @@ app.use("/api/payments", paymentRoutes);
 // =================================================================================
 //                              SOCKET.IO LOGIC
 // =================================================================================
-
-// START: Added from Messenger Team's File (This replaces your old socket logic)
 
 // Enhanced user presence tracking
 const connectedUsers = new Map(); // userId -> { socketId, role, name, lastSeen }
@@ -346,8 +337,6 @@ setInterval(() => {
   }
 }, 60000);
 
-// END: Added from Messenger Team's File
-
 // =================================================================================
 //                             CUSTOM ENDPOINTS
 // =================================================================================
@@ -375,7 +364,6 @@ app.get("/api/generate-employee-id", (req, res) => {
 app.get("/", (req, res) => res.send("✅ Backend is up and running!"));
 
 
-// START: Added from Messenger Team's File
 // Cloudinary File Upload Endpoint
 app.post("/api/upload/cloudinary", validateToken, upload.single("file"), async (req, res) => {
     try {
@@ -412,8 +400,42 @@ app.post("/api/groq/analyze", validateToken, async (req, res) => {
     res.status(500).json({ success: false, message: "Analysis failed", error: error.message });
   }
 });
-// END: Added from Messenger Team's File
 
+// START: Added Missing Chat API Endpoints
+// Fetches message history between two users
+app.get("/api/chat/:senderId/:receiverId", async (req, res) => {
+  try {
+    const { senderId, receiverId } = req.params;
+    const messages = await Message.find({
+      $or: [
+        { sender: senderId, receiver: receiverId },
+        { sender: receiverId, receiver: senderId },
+      ],
+    }).sort({ timestamp: 1 });
+    res.json(messages);
+  } catch (err) {
+    console.error("Error fetching messages:", err);
+    res.status(500).json({ message: "Server error", error: err.message });
+  }
+});
+
+// Sends a message via API and notifies online users
+app.post("/api/chat/send", async (req, res) => {
+  try {
+    const { sender, receiver, message, senderName, receiverName } = req.body;
+    const newMessage = new Message({ sender, receiver, message, senderName, receiverName, timestamp: new Date() });
+    const savedMessage = await newMessage.save();
+    const receiverSocket = connectedUsers.get(receiver);
+    if (receiverSocket) {
+      io.to(`user_${receiver}`).emit("receiveMessage", savedMessage);
+    }
+    res.status(201).json({ success: true, message: "Message sent successfully", data: savedMessage });
+  } catch (error) {
+    console.error("Error sending message via API:", error);
+    res.status(500).json({ success: false, message: "Failed to send message", error: error.message });
+  }
+});
+// END: Added Missing Chat API Endpoints
 
 // =================================================================================
 //                                 TWILIO LOGIC
@@ -485,7 +507,6 @@ server.listen(PORT, () => {
   startReminderCronJob();
 });
 
-// START: Added from Messenger Team's File
 // Graceful Shutdown Logic
 process.on("SIGINT", () => {
   console.log("SIGINT received. Shutting down gracefully...");
@@ -495,4 +516,3 @@ process.on("SIGINT", () => {
     process.exit(0);
   });
 });
-// END: Added from Messenger Team's File
