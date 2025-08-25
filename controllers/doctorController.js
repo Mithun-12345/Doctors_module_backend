@@ -1139,3 +1139,13 @@ exports.getTodaysAppointments = async (req, res) => {
     res.status(500).json({ success: false, message: "Internal server error" });
   }
 };
+exports.getAppointedPatients = async (req,res)=>{
+  try {
+    const appointments = await Appointment.find({doctor:req.query.id});
+    const appointedPatients = [...new Set(appointments.map(patient => patient.patient.toString()))];
+    const patientDetails = await Patient.find({_id:{$in:appointedPatients}})
+    res.json(patientDetails)
+  } catch (error) {
+    console.log(error)
+  }
+}

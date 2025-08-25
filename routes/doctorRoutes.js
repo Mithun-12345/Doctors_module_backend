@@ -26,7 +26,8 @@ const {
   startPrescription,
   getPaymentsByDoctor,
   getAllDoctorPaymentsTotal,
-  getTodaysAppointments
+  getTodaysAppointments,
+  getAppointedPatients
 } = require("../controllers/doctorController");
 const {
   upload,
@@ -114,7 +115,7 @@ router.post(
 );
 router.put("/updateProfile", validateToken, updateProfile);
 router.get("/doctor/me", validateToken, getDoctorByFollow);
-
+router.get('/getAppointedPatients',validateToken,getAppointedPatients)
 
 
 

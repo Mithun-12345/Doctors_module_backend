@@ -3300,3 +3300,14 @@ exports.getAllAppointmentsForPatientDashboard = async (req, res) => {
     res.status(500).json({ success: false, message: "Internal server error" });
   }
 };
+exports.getAppointedDocs = async (req, res) => {
+  try {
+    const appointments = await Appointment.find({ patient: req.query.id });
+    const uniqueDoctorIds = [...new Set(appointments.map(doc => doc.doctor.toString()))];
+    const docDetails = await Doctor.find({_id:{$in:uniqueDoctorIds}})
+    res.json(docDetails);
+  } catch (error) {
+    console.log(error);
+    res.status(500).json({ message: "Server Error" });
+  }
+};

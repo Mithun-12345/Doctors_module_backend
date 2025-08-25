@@ -169,5 +169,7 @@ router.get(
   getPatientMedicationSummary
 );
 router.get('/prescriptions/week-view/:patientId', validateToken,getPrescriptionsGroupedByWeekAndDay);
+router.get('/getAppointedDocs',validateToken,familyMemberController.getAppointedDocs)
+
 
 module.exports = router;
