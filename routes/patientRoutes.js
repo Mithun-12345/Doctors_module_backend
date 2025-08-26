@@ -40,7 +40,8 @@ const {
   getPendingPaymentsByPatient,
   getAllPaymentsByPatient,
   getPaymentsByPatient,
-  getAllAppointmentsForPatientDashboard
+  getAllAppointmentsForPatientDashboard,
+  getBookedAppointmentsByDate
 } = require("../controllers/patientController");
 const {
   upload,
@@ -169,7 +170,8 @@ router.get(
   getPatientMedicationSummary
 );
 router.get('/prescriptions/week-view/:patientId', validateToken,getPrescriptionsGroupedByWeekAndDay);
-router.get('/getAppointedDocs',validateToken,familyMemberController.getAppointedDocs)
+router.get('/getAppointedDocs',validateToken,familyMemberController.getAppointedDocs),
+router.post("/appointments-by-date", getBookedAppointmentsByDate);
 
 
 module.exports = router;

@@ -3311,3 +3311,70 @@ exports.getAppointedDocs = async (req, res) => {
     res.status(500).json({ message: "Server Error" });
   }
 };
+
+exports.getBookedAppointmentsByDate = async (req, res) => {
+  try {
+    const { date } = req.query; // Get date from query params, e.g., ?date=2025-08-27
+
+    // 1. Validate the input date
+    if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+      return res.status(400).json({ message: "Please provide a date in YYYY-MM-DD format." });
+    }
+
+    // 2. Define the date range for the entire requested day
+    const startOfDay = new Date(date);
+    startOfDay.setHours(0, 0, 0, 0);
+    const endOfDay = new Date(date);
+    endOfDay.setHours(23, 59, 59, 999);
+
+    // 3. Find all "booked" (confirmed or completed) appointments in the date range
+    const bookedAppointments = await Appointment.find({
+      appointmentDate: { $gte: startOfDay, $lte: endOfDay },
+      status: { $in: ["confirmed", "completed"] }
+    })
+    .sort({ timeSlot: 1 }) // Sort appointments by time
+    .populate({ 
+        path: 'patient', 
+        select: 'name phone' // Select the fields you want from the Patient model
+    })
+    .populate({
+        path: 'doctor',
+        select: 'name department' // Select the fields you want from the Doctor model
+    });
+
+    if (bookedAppointments.length === 0) {
+        return res.status(200).json({
+            success: true,
+            message: "No booked appointments found for this date.",
+            appointments: []
+        });
+    }
+    
+    // 4. (Optional but recommended) Format the response for clarity
+    const formattedAppointments = bookedAppointments.map(appt => ({
+        appointmentId: appt._id,
+        timeSlot: appt.timeSlot,
+        status: appt.status,
+        consultingFor: appt.consultingFor,
+        patient: appt.patient ? {
+            id: appt.patient._id,
+            name: appt.patient.name,
+            phone: appt.patient.phone
+        } : null, // Handle case where patient might be deleted
+        doctor: appt.doctor ? {
+            id: appt.doctor._id,
+            name: appt.doctor.name,
+            department: appt.doctor.department
+        } : null // Handle case where doctor might be deleted
+    }));
+
+    res.status(200).json({
+      success: true,
+      appointments: formattedAppointments
+    });
+
+  } catch (error) {
+    console.error("Error fetching booked appointments:", error);
+    res.status(500).json({ success: false, message: "Internal server error" });
+  }
+};

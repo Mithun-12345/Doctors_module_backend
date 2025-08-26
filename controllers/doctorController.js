@@ -10,6 +10,7 @@ const fs = require("fs");
 const NotificationReminderSettings = require("../models/NotificationReminderSettings");
 const MedicinePreparationSummary = require('../models/MedicinePreparationSummary');
 const Payment = require("../models/Payment.js");
+const ConsultationNote = require("../models/ConsultationNots.js")
 
 // ... other controller functions
 
