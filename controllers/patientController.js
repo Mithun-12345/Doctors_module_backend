@@ -3444,3 +3444,56 @@ exports.fetchPatientPendingPaymentsToDashboard =async (req, res) => {
     res.status(500).json({ success: false, message: "Internal server error" });
   }
 };
+exports.getPatientReferrals = async (req, res) => {
+  try {
+    const patientId = req.user._id;
+
+    const referrals = await Referral.find({ referrerId: patientId })
+      .sort({ createdAt: -1 });
+
+    if (!referrals || referrals.length === 0) {
+      return res.status(200).json({
+        success: true,
+        message: "You haven't made any referrals yet.",
+        referrals: [],
+        summary: { total: 0, completed: 0, pending: 0, claimed: 0, expired: 0 }
+      });
+    }
+
+    const formattedReferrals = referrals.map(ref => {
+      let status = 'Pending';
+      if (new Date() > ref.expiresAt && !ref.isUsed && !ref.firstAppointmentDone) {
+        status = 'Expired';
+      } else if (ref.isUsed) {
+        status = 'Benefit Claimed';
+      } else if (ref.firstAppointmentDone) {
+        status = 'Completed';
+      }
+
+      return {
+        // referralId: ref._id, // <-- THIS LINE HAS BEEN REMOVED
+        referredFriendName: ref.referredFriendName || 'Friend',
+        referredFriendPhone: ref.referredFriendPhone,
+        status: status
+      };
+    });
+
+    const summary = {
+        total: formattedReferrals.length,
+        completed: formattedReferrals.filter(r => r.status === 'Completed').length,
+        pending: formattedReferrals.filter(r => r.status === 'Pending').length,
+        claimed: formattedReferrals.filter(r => r.status === 'Benefit Claimed').length,
+        expired: formattedReferrals.filter(r => r.status === 'Expired').length
+    };
+
+    res.status(200).json({
+      success: true,
+      referrals: formattedReferrals,
+      summary: summary
+    });
+
+  } catch (error) {
+    console.error("Error fetching patient referrals:", error);
+    res.status(500).json({ success: false, message: "Internal server error" });
+  }
+};

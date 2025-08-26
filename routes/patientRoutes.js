@@ -43,7 +43,8 @@ const {
   getAllAppointmentsForPatientDashboard,
   getBookedAppointmentsByDate,
   getTotalPatients,
-  fetchPatientPendingPaymentsToDashboard
+  fetchPatientPendingPaymentsToDashboard,
+  getPatientReferrals
 } = require("../controllers/patientController");
 const {
   upload,
@@ -89,6 +90,8 @@ router.get(
   "/pending-payments/:patientId", getPendingPaymentsByPatient
 );
 router.get("/:patientId/payments",getAllPaymentsByPatient);
+router.get("/referrals-dashboard", validateToken, getPatientReferrals);
+
 
 router.get("/show-all-payments/:patientId", getPaymentsByPatient);
 router.get("/total-no-patients",getTotalPatients);
