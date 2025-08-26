@@ -44,7 +44,10 @@ const {
   getBookedAppointmentsByDate,
   getTotalPatients,
   fetchPatientPendingPaymentsToDashboard,
-  getPatientReferrals
+  getPatientReferrals,
+  getCompletedPaymentsCount,
+  getPastAppointmentsCount,
+  getTotalAppointmentsCount
 } = require("../controllers/patientController");
 const {
   upload,
@@ -66,7 +69,9 @@ const {
 const validateToken = require("../middlewares/validateTokenHandler");
 
 const router = express.Router();
-
+router.get("/appointments/total/count", validateToken, getTotalAppointmentsCount);
+router.get("/appointments/past", validateToken, getPastAppointmentsCount);
+router.get("/payments/count", validateToken, getCompletedPaymentsCount);
 router.post("/sendRegForm", sendForm);
 router.post("/sendChronicForm", validateToken, sendChronicForm);
 router.get("/details", validateToken, patientDetails);

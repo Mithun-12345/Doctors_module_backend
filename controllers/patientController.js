@@ -3497,3 +3497,93 @@ exports.getPatientReferrals = async (req, res) => {
     res.status(500).json({ success: false, message: "Internal server error" });
   }
 };
+exports.getTotalAppointmentsCount = async (req, res) => {
+  try {
+    const patientId = req.user._id;
+
+    // Count all documents where the 'patient' field matches the user's ID
+    const totalCount = await Appointment.countDocuments({
+      patient: patientId,
+    });
+
+    res.status(200).json({ 
+        success: true, 
+        totalAppointments: totalCount 
+    });
+
+  } catch (error) {
+    console.error("Error fetching total appointments for patient:", error);
+    res.status(500).json({ success: false, message: "Internal server error" });
+  }
+};
+exports.getUpcomingAppointmentsCount = async (req, res) => {
+  try {
+    const patientId = req.user._id;
+    const now = new Date();
+
+    // Use countDocuments to get only the total number
+    const upcomingAppointmentsCount = await Appointment.countDocuments({
+      patient: patientId,
+      appointmentDate: { $gte: now }, // The filter logic remains the same
+      status: { $in: ["reserved", "confirmed"] }
+    });
+
+    res.status(200).json({ 
+        success: true, 
+        count: upcomingAppointmentsCount 
+    });
+
+  } catch (error) {
+    console.error("Error fetching upcoming appointments count:", error);
+    res.status(500).json({ success: false, message: "Internal server error" });
+  }
+};
+exports.getPastAppointmentsCount = async (req, res) => {
+  try {
+    const patientId = req.user._id;
+    const now = new Date();
+
+    // Use countDocuments instead of find to get only the total number
+    const pastAppointmentsCount = await Appointment.countDocuments({
+      patient: patientId,
+      // The filter logic remains the same
+      $or: [
+        { appointmentDate: { $lt: now } },
+        { status: "completed" }
+      ]
+    });
+
+    res.status(200).json({ 
+        success: true, 
+        count: pastAppointmentsCount 
+    });
+
+  } catch (error) {
+    console.error("Error fetching past appointments count:", error);
+    res.status(500).json({ success: false, message: "Internal server error" });
+  }
+};
+exports.getCompletedPaymentsCount = async (req, res) => {
+  try {
+    const patientId = req.user._id;
+
+    // Run both database counts at the same time
+    const [paidAppointmentsCount, paidPrescriptionsCount] = await Promise.all([
+      Appointment.countDocuments({ patient: patientId, isPaid: true }),
+      Prescription.countDocuments({ patientId: patientId, isPayementDone: true })
+    ]);
+
+    const totalPaymentsDone = paidAppointmentsCount + paidPrescriptionsCount;
+
+    res.status(200).json({
+      success: true,
+      totalPaymentsDone: totalPaymentsDone,
+      paidAppointmentsCount: paidAppointmentsCount,
+      paidPrescriptionsCount: paidPrescriptionsCount,
+    });
+
+  } catch (error) {
+    console.error("Error fetching payment count:", error);
+    res.status(500).json({ success: false, message: "Internal server error" });
+  }
+};
