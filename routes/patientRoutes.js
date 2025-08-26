@@ -42,7 +42,8 @@ const {
   getPaymentsByPatient,
   getAllAppointmentsForPatientDashboard,
   getBookedAppointmentsByDate,
-  getTotalPatients
+  getTotalPatients,
+  fetchPatientPendingPaymentsToDashboard
 } = require("../controllers/patientController");
 const {
   upload,
@@ -69,6 +70,7 @@ router.post("/sendRegForm", sendForm);
 router.post("/sendChronicForm", validateToken, sendChronicForm);
 router.get("/details", validateToken, patientDetails);
 router.get("/payments", validateToken, getPayments);
+router.get("/payments-pending-dashboard", validateToken,fetchPatientPendingPaymentsToDashboard);
 router.post(
   "/uploadProfilePicture",
   validateToken,

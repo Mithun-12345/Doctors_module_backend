@@ -3387,3 +3387,60 @@ exports.getTotalPatients = async (req, res) => {
     res.status(500).json({ success: false, message: "Internal server error" });
   }
 };
+
+exports.fetchPatientPendingPaymentsToDashboard =async (req, res) => {
+  try {
+    const patientId = req.user._id;
+
+    // 1. Fetch pending items (this part is unchanged)
+    const [pendingAppointments, pendingPrescriptions] = await Promise.all([
+      Appointment.find({ patient: patientId, isPaid: false })
+        .populate({ path: 'doctor', select: 'name' })
+        .select('doctor consultingFor payment'),
+      Prescription.find({ patientId: patientId, isPayementDone: false })
+        .select('medicineCharges shippingCharges additionalCharges')
+    ]);
+
+    // --- START: MODIFIED LOGIC ---
+
+    // 2. Get the COUNT of pending appointments
+    const appointmentCount = pendingAppointments.length;
+    
+    // 3. Get the COUNT of pending medicine prescriptions
+    const medicineCount = pendingPrescriptions.length;
+
+    // 4. Calculate the total COUNT
+    const totalCount = appointmentCount + medicineCount;
+
+    // --- END: MODIFIED LOGIC ---
+
+    // 5. Format the lists for a clean response (this part is unchanged)
+    const formattedAppointments = pendingAppointments.map(appt => ({
+        appointmentId: appt._id,
+        doctorName: appt.doctor ? appt.doctor.name : 'N/A',
+        consultingFor: appt.consultingFor,
+        amount: appt.payment || 0
+    }));
+
+    const formattedPrescriptions = pendingPrescriptions.map(pres => ({
+        prescriptionId: pres._id,
+        amount: (pres.medicineCharges || 0) + (pres.shippingCharges || 0) + (pres.additionalCharges || 0)
+    }));
+
+    // 6. Send the final response with the new summary counts
+    res.status(200).json({
+      success: true,
+      pendingAppointments: formattedAppointments,
+      pendingPrescriptions: formattedPrescriptions,
+      summary: {
+        totalPendingCount: totalCount,
+        pendingAppointmentCount: appointmentCount,
+        pendingMedicineCount: medicineCount
+      }
+    });
+
+  } catch (error) {
+    console.error("Error fetching patient pending payments:", error);
+    res.status(500).json({ success: false, message: "Internal server error" });
+  }
+};
