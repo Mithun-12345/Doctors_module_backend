@@ -41,7 +41,8 @@ const {
   getAllPaymentsByPatient,
   getPaymentsByPatient,
   getAllAppointmentsForPatientDashboard,
-  getBookedAppointmentsByDate
+  getBookedAppointmentsByDate,
+  getTotalPatients
 } = require("../controllers/patientController");
 const {
   upload,
@@ -88,6 +89,7 @@ router.get(
 router.get("/:patientId/payments",getAllPaymentsByPatient);
 
 router.get("/show-all-payments/:patientId", getPaymentsByPatient);
+router.get("/total-no-patients",getTotalPatients);
 
 router.put("/updateProfile", validateToken, updateProfile);
 router.post("/finalizeAppointment", validateToken, finalizeAppointment);

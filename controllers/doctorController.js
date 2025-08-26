@@ -1250,3 +1250,17 @@ exports.secondFormDetails = async (req,res) =>{
     console.log(error);
   }
 }
+exports.getTotalAppointments = async (req, res) => {
+  try {
+    // Count all documents in the Appointment collection with no filter
+    const totalAppointments = await Appointment.countDocuments({});
+
+    res.status(200).json({
+      success: true,
+      totalAppointments: totalAppointments,
+    });
+  } catch (error) {
+    console.error("Error fetching total appointment count:", error);
+    res.status(500).json({ success: false, message: "Internal server error" });
+  }
+};

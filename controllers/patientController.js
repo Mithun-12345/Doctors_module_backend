@@ -1195,19 +1195,14 @@ exports.bookAppointment = asyncHandler(async (req, res) => {
         message: "Doctor not found",
       });
     }
-
-    // Validate time slot
+    
+    // --- TIME SLOT VALIDATION REMOVED AS PER YOUR REQUEST ---
+    // The `if (!timeSlots.includes(timeSlot))` block has been deleted.
+    // The `timeSlots` array is kept for the chronic patient logic below.
     const timeSlots = [
       "10:00", "11:00", "12:00", "13:00",
       "14:00", "15:00", "16:00", "17:00",
     ];
-
-    if (!timeSlots.includes(timeSlot)) {
-      return res.status(400).json({
-        success: false,
-        message: "Invalid time slot",
-      });
-    }
 
     // Validate date
     const currentDate = new Date();
@@ -1350,7 +1345,7 @@ exports.bookAppointment = asyncHandler(async (req, res) => {
       message:
         `Your appointment with ${doctor.name} for ${formattedDateTime} is reserved.`, 
       appointmentId: savedAppointment._id,
-      amount: savedAppointment.payment, // <-- ADDED THIS LINE
+      amount: savedAppointment.payment,
       expiresAt: new Date(Date.now() + 7 * 60 * 1000),
     });
   } catch (error) {
@@ -3375,6 +3370,20 @@ exports.getBookedAppointmentsByDate = async (req, res) => {
 
   } catch (error) {
     console.error("Error fetching booked appointments:", error);
+    res.status(500).json({ success: false, message: "Internal server error" });
+  }
+};
+exports.getTotalPatients = async (req, res) => {
+  try {
+    // Use countDocuments with an empty filter to count all documents in the collection
+    const totalPatients = await Patient.countDocuments({});
+
+    res.status(200).json({
+      success: true,
+      totalPatients: totalPatients,
+    });
+  } catch (error) {
+    console.error("Error fetching total patient count:", error);
     res.status(500).json({ success: false, message: "Internal server error" });
   }
 };
