@@ -3375,11 +3375,28 @@ exports.getBookedAppointmentsByDate = async (req, res) => {
 };
 exports.getPatientById = async (req, res) => {
   try {
-    const user = await Patient.findById(req.params.id);
+    const patientId = req.params.id;
+    // Step 1: Find the patient, same as before
+    const user = await Patient.findById(patientId);
+
     if (!user) {
-      return res.status(404).json({ success: false, message: "User not found" });
+      return res
+        .status(404)
+        .json({ success: false, message: "User not found" });
     }
-    res.json(user);
+
+    // Step 2: Find all appointments for that patient
+    const appointments = await Appointment.find({ patient: patientId }).select(
+      "diseaseName consultingFor appointmentDate timeSlot -_id"
+    );
+
+    // Step 3: Combine patient data with their appointment history
+    const responseData = {
+      ...user.toObject(), // Keep all original patient data
+      appointments: appointments, // Add the new appointment details
+    };
+
+    res.json(responseData);
   } catch (error) {
     res.status(500).json({ success: false, message: "Server Error" });
   }

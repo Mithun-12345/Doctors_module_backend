@@ -183,7 +183,7 @@ router.get(
 );
 router.get('/prescriptions/week-view/:patientId', validateToken,getPrescriptionsGroupedByWeekAndDay);
 router.get('/getAppointedDocs',validateToken,familyMemberController.getAppointedDocs),
-router.get('/patientById/:id', validateToken, familyMemberController.getPatientById);
+router.get('/patientById/:id', familyMemberController.getPatientById);
 router.post("/appointments-by-date", getBookedAppointmentsByDate);
 
 
