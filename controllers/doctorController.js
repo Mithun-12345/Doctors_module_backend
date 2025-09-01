@@ -1101,42 +1101,55 @@ exports.getDoctorPatientMedicationSummary = async (req, res) => {
 };
 exports.getTodaysAppointments = async (req, res) => {
   try {
-    // 1. Define the start and end of the current day
-    const now = new Date();
-    const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0);
-    const endOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
+    // 1. Get doctorId from logged-in user and date from query
+    const doctorId = req.user._id; // Assumes doctor's ID is from the auth token
+    const { date } = req.query; // e.g., ?date=2025-09-01
 
-    // 2. Find appointments and select 'meetLink' instead of 'link'
+    // 2. Validate the input date
+    if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+      return res
+        .status(400)
+        .json({ message: "Please provide a date in YYYY-MM-DD format." });
+    }
+
+    // 3. Define the date range for the entire requested day
+    const startOfDay = new Date(date);
+    startOfDay.setUTCHours(0, 0, 0, 0);
+    const endOfDay = new Date(date);
+    endOfDay.setUTCHours(23, 59, 59, 999);
+
+    // 4. Find all confirmed or completed appointments for that doctor on that day
     const appointments = await Appointment.find({
-      appointmentDate: {
-        $gte: startOfToday,
-        $lte: endOfToday,
-      },
+      doctor: doctorId,
+      appointmentDate: { $gte: startOfDay, $lte: endOfDay },
+      status: { $in: ["confirmed", "completed"] }, // Get booked appointments
     })
-    .sort({ timeSlot: 1 })
-    .populate({ 
-        path: 'patient', 
-        select: 'name'
-    })
-    .select('patient meetLink consultingFor timeSlot'); // <-- UPDATED THIS LINE
+      .sort({ timeSlot: 1 }) // Sort by time
+      .populate({
+        path: "patient",
+        select: "name phone", // Select name and phone from Patient model
+      })
 
-    // 3. Format the data with the 'meetLink' field
-    const formattedAppointments = appointments.map(appt => ({
+    // 5. Format the response to match your example
+    const formattedAppointments = appointments.map((appt) => ({
       appointmentId: appt._id,
-      patientName: appt.patient ? appt.patient.name : 'Unknown Patient',
-      patientId: appt.patient ? appt.patient._id : null,
-      meetLink: appt.meetLink, // <-- UPDATED THIS LINE
-      consultingFor: appt.consultingFor,
-      timeSlot: appt.timeSlot
+      timeSlot: appt.timeSlot,
+      status: appt.status,
+      patient: appt.patient
+        ? {
+            id: appt.patient._id,
+            name: appt.patient.name,
+            phone: appt.patient.phone,
+          }
+        : null, // Handle case where patient might be deleted
     }));
 
     res.status(200).json({
       success: true,
       appointments: formattedAppointments,
     });
-
   } catch (error) {
-    console.error("Error fetching today's appointments:", error);
+    console.error("Error fetching doctor appointments by date:", error);
     res.status(500).json({ success: false, message: "Internal server error" });
   }
 };
