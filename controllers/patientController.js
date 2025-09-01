@@ -3376,7 +3376,8 @@ exports.getBookedAppointmentsByDate = async (req, res) => {
 exports.getPatientById = async (req, res) => {
   try {
     const patientId = req.params.id;
-    // Step 1: Find the patient, same as before
+
+    // 1. Find the patient
     const user = await Patient.findById(patientId);
 
     if (!user) {
@@ -3385,19 +3386,33 @@ exports.getPatientById = async (req, res) => {
         .json({ success: false, message: "User not found" });
     }
 
-    // Step 2: Find all appointments for that patient
+    // 2. Find all appointments for that patient
+    // (Note: I've removed '-_id' so we can use the ID to find payments)
     const appointments = await Appointment.find({ patient: patientId }).select(
-      "diseaseName consultingFor appointmentDate timeSlot -_id"
+      "diseaseName consultingFor appointmentDate timeSlot"
     );
 
-    // Step 3: Combine patient data with their appointment history
+    // 3. Get the IDs from the appointment documents
+    const appointmentIds = appointments.map((appt) => appt._id);
+
+    // 4. Find all payment documents linked to those appointment IDs
+    let payments = [];
+    if (appointmentIds.length > 0) {
+      payments = await Payment.find({
+        appointmentId: { $in: appointmentIds },
+      });
+    }
+
+    // 5. Combine patient data, appointments, and payments into one response
     const responseData = {
       ...user.toObject(), // Keep all original patient data
-      appointments: appointments, // Add the new appointment details
+      appointments: appointments, // Add the appointment details
+      payments: payments, // Add the payment details
     };
 
     res.json(responseData);
   } catch (error) {
+    console.error("Error fetching patient details:", error);
     res.status(500).json({ success: false, message: "Server Error" });
   }
 };
