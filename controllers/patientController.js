@@ -3373,6 +3373,17 @@ exports.getBookedAppointmentsByDate = async (req, res) => {
     res.status(500).json({ success: false, message: "Internal server error" });
   }
 };
+exports.getPatientById = async (req, res) => {
+  try {
+    const user = await Patient.findById(req.params.id);
+    if (!user) {
+      return res.status(404).json({ success: false, message: "User not found" });
+    }
+    res.json(user);
+  } catch (error) {
+    res.status(500).json({ success: false, message: "Server Error" });
+  }
+};
 exports.getTotalPatients = async (req, res) => {
   try {
     // Use countDocuments with an empty filter to count all documents in the collection
