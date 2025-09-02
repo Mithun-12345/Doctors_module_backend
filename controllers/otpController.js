@@ -405,18 +405,49 @@ exports.login = asyncHandler(async (req, res) => {
 
 exports.changePassword = async (req, res) => {
   try {
-    const userId = req.user.id; // Adjust this based on your authentication method
-    console.log(userId);
-    let user;
-    user = await Doctor.findById(userId); // Exclude sensitive data
+    const userId = req.user.id;
+    const { oldPassword, newPassword, retypedNewPassword } = req.body;
+
+    // 1. Find the logged-in user (we still need to get the old password)
+    let user = await Doctor.findById(userId).select('+password'); // Include password for comparison
     if (!user) {
-      user = await regForm.findById(userId);
+      user = await regForm.findById(userId).select('+password');
     }
-    if (!user) {
-      return res.status(404).json({ message: "User not found" });
+    if (!user || !user.password) {
+      return res.status(404).json({ message: "User not found or password not set." });
     }
-    const { newPassword, retypedNewPassword } = req.body;
+
+    // 2. (CRITICAL) Verify the old password is correct
+    const isMatch = await bcrypt.compare(oldPassword, user.password);
+    if (!isMatch) {
+      return res.status(401).json({ message: "Incorrect old password." });
+    }
+
+    // 3. Check if the new passwords match and are valid
+    if (newPassword !== retypedNewPassword) {
+      return res.status(400).json({ message: "Confirmation Password does not match the new password." });
+    }
+    
+    // --- NEW LOGIC ADDED HERE ---
+    if (oldPassword === newPassword) {
+      return res.status(400).json({ message: "New password cannot be the same as the old password." });
+    }
+    // ----------------------------
+
+    if (newPassword.length < 6) { // Example validation
+        return res.status(400).json({ message: "Password must be at least 6 characters long." });
+    }
+
+    // 4. Hash the new password
+    const hashedPassword = await bcrypt.hash(newPassword, 10);
+
+    // 5. Use findByIdAndUpdate to save the new password
+    await user.constructor.findByIdAndUpdate(userId, { password: hashedPassword });
+
+    res.status(200).json({ success: true, message: "Password changed successfully." });
+
   } catch (error) {
+    console.error("Error changing password:", error);
     res.status(500).json({ message: "Internal Server Error" });
   }
 };
