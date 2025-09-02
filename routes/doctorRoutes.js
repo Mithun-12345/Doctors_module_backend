@@ -6,6 +6,7 @@ const {
   getAvailableSlots,
   getAppointments,
   redirectAppointment,
+  getDoctorAppointments,
   doctorDetails,
   getAssistantDoctors,
   getUserRole,
@@ -83,7 +84,7 @@ router.get(
   getAllAppointmentsWithPatientData
 );
 router.post("/notes", validateToken, submitNotes);
-
+router.get("/appointments",validateToken, getDoctorAppointments);
 router.get("/profile", validateToken, fetchProfile);
 router.post(
   "/uploadProfilePicture",

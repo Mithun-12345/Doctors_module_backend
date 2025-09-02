@@ -284,6 +284,35 @@ exports.redirectAppointment = async (req, res) => {
   }
 };
 
+exports.getDoctorAppointments = async (req, res) => {
+  try {
+    // 1. Get the logged-in doctor's ID from the token
+    const doctorId = req.user._id;
+
+    // 2. Find all appointments assigned to this doctor
+    const appointments = await Appointment.find({ doctor: doctorId })
+      .sort({ appointmentDate: 1 }) // Show soonest appointments first
+      .populate({ 
+        path: 'patient', 
+        select: 'name phone age gender' // Select which patient details to show
+      });
+
+    if (!appointments || appointments.length === 0) {
+      return res.status(200).json({ 
+        success: true, 
+        message: "No appointments found.",
+        appointments: [] 
+      });
+    }
+
+    res.status(200).json({ success: true, appointments });
+
+  } catch (error) {
+    console.error("Error fetching doctor's appointments:", error);
+    res.status(500).json({ success: false, message: "Internal server error" });
+  }
+};
+
 exports.getAssistantDoctors = async (req, res) => {
   try {
     const doctors = await Doctor.find({ role: "assistant-doctor" });
