@@ -173,6 +173,7 @@ const connectedUsers = new Map(); // userId -> { socketId, role, name, lastSeen 
 const typingUsers = new Map(); // userId -> { receiverId, timeout }
 const activeSessions = new Map();
 
+
 // Helper functions for user presence
 const broadcastOnlineUsers = () => {
   const onlineUserIds = Array.from(connectedUsers.keys());
@@ -300,7 +301,27 @@ io.on("connection", (socket) => {
       clearUserTyping(userId);
     }
   });
+  socket.on("sessionToggle", ({ patientId, doctorId, sessionActive }) => {
+  console.log("SessionToggle event:", {
+    patientId,
+    doctorId,
+    sessionActive,
+  });
 
+  activeSessions.set(patientId, sessionActive);
+
+  // broadcast to patient + doctor
+  io.to(`user_${patientId}`).emit("sessionToggle", {
+    patientId,
+    doctorId,
+    sessionActive,
+  });
+  io.to(`user_${doctorId}`).emit("sessionToggle", {
+    patientId,
+    doctorId,
+    sessionActive,
+  });
+});
   socket.on("disconnect", (reason) => {
     console.log("User disconnected:", socket.id, "Reason:", reason);
     handleUserDisconnect(socket);
@@ -435,8 +456,6 @@ app.post("/api/chat/send", async (req, res) => {
     res.status(500).json({ success: false, message: "Failed to send message", error: error.message });
   }
 });
-// END: Added Missing Chat API Endpoints
-
 // =================================================================================
 //                                 TWILIO LOGIC
 // =================================================================================
