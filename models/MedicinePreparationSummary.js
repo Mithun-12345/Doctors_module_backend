@@ -56,6 +56,7 @@ const packagingDetailSchema = new mongoose.Schema({
   arrivalDate:{type:String},
   shipmentId:{type:String,trim:true},
   shipmentStatus:{type:Boolean,default:false},
+  shipmentImageForMessenger:{type:String,trim:true}
 }, { _id: false });
 
 const medicinePreparationSummarySchema = new mongoose.Schema({

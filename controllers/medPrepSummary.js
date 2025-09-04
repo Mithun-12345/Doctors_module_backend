@@ -1342,7 +1342,7 @@ const updateShipmentStatus = async (req, res) => {
     res.status(500).json({ message: 'Server error while updating shipment status.' });
   }
 };
-const   getFollowUpAppointmentsPrescriptions = async (req, res) => {
+const getFollowUpAppointmentsPrescriptions = async (req, res) => {
   try {
     // 1. Find all appointments with the specific follow-up status
     const appointments = await Appointment.find({ 

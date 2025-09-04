@@ -11,7 +11,8 @@ const NotificationReminderSettings = require("../models/NotificationReminderSett
 const MedicinePreparationSummary = require('../models/MedicinePreparationSummary');
 const Payment = require("../models/Payment.js");
 const ConsultationNote = require("../models/ConsultationNots.js")
-
+const multer = require('multer');
+const upload = multer({ dest: 'uploads/' });
 // ... other controller functions
 
 /**
@@ -762,45 +763,55 @@ exports.uploadProfilePicture = async (req, res) => {
 exports.updateTrackingId = async (req, res) => {
   try {
     const { prescriptionId } = req.params;
-    // ✅ 1. Get all shipping details from the request body
     const { trackingId, deliveryPartner, shippedDate, arrivalDate } = req.body;
-
+    
     if (!trackingId) {
       return res.status(400).json({ message: "Tracking ID is required." });
     }
 
-    // --- EXISTING LOGIC to update the Prescription (Core logic is unchanged) ---
+    // --- START: NEW FILE UPLOAD LOGIC ---
+    let imageUrl = null;
+    if (req.file) {
+        // 1. Upload the file to Cloudinary
+        const result = await cloudinary.uploader.upload(req.file.path, {
+            folder: "shipment_images"
+        });
+        imageUrl = result.secure_url;
+
+        // 2. Clean up the temporary file from your server
+        fs.unlinkSync(req.file.path);
+    }
+    // --- END: NEW FILE UPLOAD LOGIC ---
+
+    // --- Update the Prescription document (Existing Logic) ---
     const prescription = await Prescription.findById(prescriptionId);
     if (!prescription) {
       return res.status(404).json({ message: "Prescription not found." });
     }
-
     prescription.trackingId = trackingId;
     prescription.isProductShipped = true;
-    // Use the shippedDate from the payload for consistency
     prescription.shippedDate = new Date(shippedDate); 
-    
     await prescription.save({ validateBeforeSave: false });
-    // --- END OF EXISTING LOGIC ---
 
+    
+    // --- Update the MedicinePreparationSummary (Modified Logic) ---
+    const updateData = {
+        "packagingUsed.0.shipmentId": trackingId,
+        "packagingUsed.0.deliveryPartner": deliveryPartner,
+        "packagingUsed.0.shippedDate": shippedDate,
+        "packagingUsed.0.arrivalDate": arrivalDate
+    };
 
-    // --- NEW LOGIC ADDED HERE to update the MedicinePreparationSummary ---
-    // This second, separate update adds the details to the packaging information.
+    // Conditionally add the image URL to the update if it exists
+    if (imageUrl) {
+        updateData["packagingUsed.0.shipmentImageForMessenger"] = imageUrl;
+    }
+
     await MedicinePreparationSummary.updateOne(
       { prescriptionId: prescriptionId },
-      { 
-        // Using "packagingUsed.0" to target the FIRST item in the array,
-        // which is assumed to be the main shipping container.
-        $set: { 
-          "packagingUsed.0.shipmentId": trackingId, // As you said, trackingId and shipmentId are the same
-          "packagingUsed.0.deliveryPartner": deliveryPartner,
-          "packagingUsed.0.shippedDate": shippedDate,
-          "packagingUsed.0.arrivalDate": arrivalDate
-        } 
-      }
+      { $set: updateData }
     );
-    // --- END OF NEW LOGIC ---
-
+    
     res.json({ message: "Tracking ID and shipping details updated successfully." });
     
   } catch (err) {
@@ -808,7 +819,6 @@ exports.updateTrackingId = async (req, res) => {
     res.status(500).json({ message: "Internal server error" });
   }
 };
-
 exports.startPrescription = async (req, res) => {
   try {
     const { prescriptionId } = req.params;

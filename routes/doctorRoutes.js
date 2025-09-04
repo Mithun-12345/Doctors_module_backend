@@ -104,8 +104,9 @@ router.patch(
   startPrescription
 );
 router.patch(
-  "/prescriptions/:prescriptionId/tracking", 
-   updateTrackingId
+  '/prescriptions/:prescriptionId/tracking', 
+  upload.single('shipmentImage'), 
+  updateTrackingId
 );
 router.get("/medications/summary/:doctorId", getDoctorPatientMedicationSummary);
 
