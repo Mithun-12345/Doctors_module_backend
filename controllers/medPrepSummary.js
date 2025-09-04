@@ -1342,6 +1342,7 @@ const updateShipmentStatus = async (req, res) => {
     res.status(500).json({ message: 'Server error while updating shipment status.' });
   }
 };
+
 const getFollowUpAppointmentsPrescriptions = async (req, res) => {
   try {
     // 1. Find all appointments with the specific follow-up status
@@ -1393,6 +1394,62 @@ const getFollowUpAppointmentsPrescriptions = async (req, res) => {
     res.status(500).json({ message: "Internal server error" });
   }
 };
+const getPatientPendingShipments = async (req, res) => {
+  try {
+    const { patientId } = req.params;
+
+    if (!mongoose.Types.ObjectId.isValid(patientId)) {
+      return res.status(400).json({ message: "Invalid Patient ID format." });
+    }
+
+    // 1. Find appointments for the patient where medicine is prepared
+    const appointments = await Appointment.find({ 
+      patient: patientId,
+      prescriptionID: { $exists: true, $ne: null },
+      medicinePrepared: true 
+    }).select('prescriptionID medicinePrepared');
+
+    if (!appointments.length) {
+      return res.status(200).json({ 
+        message: "No prescriptions are currently awaiting shipment for this patient.",
+        pendingShipments: [] 
+      });
+    }
+
+    // 2. Extract prescription IDs
+    const prescriptionIds = appointments.map(app => app.prescriptionID);
+
+    // 3. Fetch summaries where shipmentStatus is false
+    const pendingSummaries = await MedicinePreparationSummary.find({
+      prescriptionId: { $in: prescriptionIds },
+      'packagingUsed.0.shipmentStatus': false
+    }).select('prescriptionId');
+
+    // 4. Create a lookup set of prescription IDs pending shipment
+    const pendingPrescriptionIds = new Set(
+      pendingSummaries.map(summary => summary.prescriptionId.toString())
+    );
+
+    // 5. Build the final response
+    const results = appointments
+      .filter(appointment => pendingPrescriptionIds.has(appointment.prescriptionID.toString()))
+      .map(appointment => {
+        return {
+          appointmentId: appointment._id,
+          prescriptionId: appointment.prescriptionID,
+          medicinePrepared: true,
+          shipmentStatus: false,
+        };
+      });
+
+    res.status(200).json({ pendingShipments: results });
+
+  } catch (error) { // This is the corrected block
+    console.error("Error fetching patient pending shipments:", error);
+    res.status(500).json({ message: "Internal server error" });
+  }
+};
+
 module.exports = {
   initializeMedicinePreparation,
   updatePreWeight,
@@ -1419,6 +1476,7 @@ module.exports = {
   getAllMasterInstructions,
   updateShipmentStatus,
   setMedicineExpiryDate,
-  getFollowUpAppointmentsPrescriptions
+  getFollowUpAppointmentsPrescriptions,
+  getPatientPendingShipments
 };
 

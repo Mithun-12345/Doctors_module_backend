@@ -27,7 +27,8 @@ const {
   getAllMasterInstructions,
   setMedicineExpiryDate,
   updateShipmentStatus,
-  getFollowUpAppointmentsPrescriptions
+  getFollowUpAppointmentsPrescriptions,
+  getPatientPendingShipments
 } = require('../controllers/medPrepSummary');
 
 
@@ -57,5 +58,7 @@ router.get('/get-all-instructions', getAllMasterInstructions);
 router.patch('/set-expiry', setMedicineExpiryDate);
 router.patch('/:prescriptionId/update-shipment-status', updateShipmentStatus);
 router.get('/follow-up-mp', getFollowUpAppointmentsPrescriptions);
+router.get("/:patientId/pending-shipments", validateToken, getPatientPendingShipments);
+
 
 module.exports = router;
