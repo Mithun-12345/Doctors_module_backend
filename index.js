@@ -310,6 +310,27 @@ io.on("connection", (socket) => {
 
   activeSessions.set(patientId, sessionActive);
 
+  // Handle bot status changes
+socket.on("botStatusChanged", ({ doctorId, patientId, status }) => {
+  console.log("🤖 Bot status changed:", { doctorId, patientId, status });
+
+  // Broadcast to the doctor
+  // ✅ FIXED: Added backticks for the template literal
+  io.to(`user_${doctorId}`).emit("botStatusChanged", {
+    doctorId,
+    patientId,
+    status,
+  });
+
+  // Broadcast to the patient
+  // ✅ FIXED: Added backticks for the template literal
+  io.to(`user_${patientId}`).emit("botStatusChanged", {
+    doctorId,
+    patientId,
+    status,
+  });
+});
+
   // broadcast to patient + doctor
   io.to(`user_${patientId}`).emit("sessionToggle", {
     patientId,
@@ -322,6 +343,7 @@ io.on("connection", (socket) => {
     sessionActive,
   });
 });
+
   socket.on("disconnect", (reason) => {
     console.log("User disconnected:", socket.id, "Reason:", reason);
     handleUserDisconnect(socket);
