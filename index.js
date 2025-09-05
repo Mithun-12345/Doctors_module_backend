@@ -219,151 +219,147 @@ const sendBotReply = (io, patientId, text) => {
 
 // Enhanced Socket.IO connection handling
 io.on("connection", (socket) => {
-  console.log("User connected:", socket.id);
+  console.log("User connected:", socket.id);
 
-  socket.on("join", ({ userId, role, name }) => {
-    console.log(`${role} ${userId} (${name || "Unknown"}) joined`);
-    const userData = { socketId: socket.id, role, name: name || "Unknown", lastSeen: new Date(), connectedAt: new Date() };
-    connectedUsers.set(userId, userData);
-    socket.join(`user_${userId}`);
-    socket.userId = userId;
-    notifyUserOnline(userId, userData);
-    broadcastOnlineUsers();
-    console.log(`Total connected users: ${connectedUsers.size}`);
-  });
+  socket.on("join", ({ userId, role, name }) => {
+    console.log(`${role} ${userId} (${name || "Unknown"}) joined`);
+    const userData = { socketId: socket.id, role, name: name || "Unknown", lastSeen: new Date(), connectedAt: new Date() };
+    connectedUsers.set(userId, userData);
+    socket.join(`user_${userId}`);
+    socket.userId = userId;
+    notifyUserOnline(userId, userData);
+    broadcastOnlineUsers();
+    console.log(`Total connected users: ${connectedUsers.size}`);
+  });
 
-  socket.on("sendMessage", async (messageData) => {
-    try {
-      clearUserTyping(messageData.sender);
-      const messageDoc = {
-        sender: messageData.sender,
-        receiver: messageData.receiver,
-        message: messageData.message || (messageData.fileAttachment ? `Sent ${messageData.fileAttachment.fileName}` : ""),
-        senderName: messageData.senderName,
-        receiverName: messageData.receiverName,
-        timestamp: new Date(),
-      };
-      if (messageData.fileAttachment) {
-        messageDoc.fileAttachment = messageData.fileAttachment;
-        messageDoc.messageType = "file";
-      }
-      const newMessage = new Message(messageDoc);
-      await newMessage.save();
-      const messageToSend = {
-        _id: newMessage._id,
-        sender: messageData.sender,
-        receiver: messageData.receiver,
-        message: newMessage.message,
-        senderName: messageData.senderName,
-        receiverName: messageData.receiverName,
-        timestamp: newMessage.timestamp,
-        messageType: newMessage.messageType || "text",
-      };
-      if (newMessage.fileAttachment) {
-        messageToSend.fileAttachment = newMessage.fileAttachment;
-      }
-      const receiverSocket = connectedUsers.get(messageData.receiver);
-      if (receiverSocket) {
-        io.to(`user_${messageData.receiver}`).emit("receiveMessage", messageToSend);
-      }
-      io.to(`user_${messageData.sender}`).emit("receiveMessage", messageToSend);
-      socket.emit("messageSent", { success: true, messageId: newMessage._id, timestamp: newMessage.timestamp });
+  socket.on("sendMessage", async (messageData) => {
+    try {
+      clearUserTyping(messageData.sender);
+      const messageDoc = {
+        sender: messageData.sender,
+        receiver: messageData.receiver,
+        message: messageData.message || (messageData.fileAttachment ? `Sent ${messageData.fileAttachment.fileName}` : ""),
+        senderName: messageData.senderName,
+        receiverName: messageData.receiverName,
+        timestamp: new Date(),
+      };
+      if (messageData.fileAttachment) {
+        messageDoc.fileAttachment = messageData.fileAttachment;
+        messageDoc.messageType = "file";
+      }
+      const newMessage = new Message(messageDoc);
+      await newMessage.save();
+      const messageToSend = {
+        _id: newMessage._id,
+        sender: messageData.sender,
+        receiver: messageData.receiver,
+        message: newMessage.message,
+        senderName: messageData.senderName,
+        receiverName: messageData.receiverName,
+        timestamp: newMessage.timestamp,
+        messageType: newMessage.messageType || "text",
+      };
+      if (newMessage.fileAttachment) {
+        messageToSend.fileAttachment = newMessage.fileAttachment;
+      }
+      const receiverSocket = connectedUsers.get(messageData.receiver);
+      if (receiverSocket) {
+        io.to(`user_${messageData.receiver}`).emit("receiveMessage", messageToSend);
+      }
+      io.to(`user_${messageData.sender}`).emit("receiveMessage", messageToSend);
+      socket.emit("messageSent", { success: true, messageId: newMessage._id, timestamp: newMessage.timestamp });
 
-      if (messageData) {
-        try {
-          const analysis = await analyzePatientMessage(messageData.message);
-          const actionDone = await triggerActionFromIntent(analysis, messageData, io);
-          if (!actionDone) {
-            const fallbackReply = await conversationalFallback(messageData.message);
-            sendBotReply(io, messageData.sender, fallbackReply);
-          }
-        } catch (intentErr) {
-          console.error("❌ Groq intent analysis error:", intentErr);
-          sendBotReply(io, messageData.sender, "I'm here to help! Could you tell me more about your concern?");
-        }
-      }
-    } catch (error) {
-      console.error("Error saving message:", error);
-      socket.emit("messageError", { error: "Failed to send message", details: error.message });
-    }
-  });
+      if (messageData) {
+        try {
+          const analysis = await analyzePatientMessage(messageData.message);
+          const actionDone = await triggerActionFromIntent(analysis, messageData, io);
+          if (!actionDone) {
+            const fallbackReply = await conversationalFallback(messageData.message);
+            sendBotReply(io, messageData.sender, fallbackReply);
+          }
+        } catch (intentErr) {
+          console.error("❌ Groq intent analysis error:", intentErr);
+          sendBotReply(io, messageData.sender, "I'm here to help! Could you tell me more about your concern?");
+        }
+      }
+    } catch (error) {
+      console.error("Error saving message:", error);
+      socket.emit("messageError", { error: "Failed to send message", details: error.message });
+    }
+  });
 
-  socket.on("typing", ({ userId, receiverId, isTyping }) => {
-    if (isTyping) {
-      clearUserTyping(userId);
-      const timeout = setTimeout(() => clearUserTyping(userId), 3000);
-      typingUsers.set(userId, { receiverId, timeout });
-      const receiverSocket = connectedUsers.get(receiverId);
-      if (receiverSocket) {
-        io.to(`user_${receiverId}`).emit("userTyping", { userId, isTyping: true });
-      }
-    } else {
-      clearUserTyping(userId);
-    }
-  });
-  socket.on("sessionToggle", ({ patientId, doctorId, sessionActive }) => {
-  console.log("SessionToggle event:", {
-    patientId,
-    doctorId,
-    sessionActive,
-  });
+  socket.on("typing", ({ userId, receiverId, isTyping }) => {
+    if (isTyping) {
+      clearUserTyping(userId);
+      const timeout = setTimeout(() => clearUserTyping(userId), 3000);
+      typingUsers.set(userId, { receiverId, timeout });
+      const receiverSocket = connectedUsers.get(receiverId);
+      if (receiverSocket) {
+        io.to(`user_${receiverId}`).emit("userTyping", { userId, isTyping: true });
+      }
+    } else {
+      clearUserTyping(userId);
+    }
+  });
 
-  activeSessions.set(patientId, sessionActive);
+  socket.on("sessionToggle", ({ patientId, doctorId, sessionActive }) => {
+    console.log("SessionToggle event:", {
+      patientId,
+      doctorId,
+      sessionActive,
+    });
 
-  
+    activeSessions.set(patientId, sessionActive);
 
-  // Broadcast to the doctor
-  // ✅ FIXED: Added backticks for the template literal
-  io.to(`user_${doctorId}`).emit("botStatusChanged", {
-    doctorId,
-    patientId,
-    status,
-  });
+    // This block was moved inside the listener to have access to the variables
+    io.to(`user_${patientId}`).emit("sessionToggle", {
+      patientId,
+      doctorId,
+      sessionActive,
+    });
+    io.to(`user_${doctorId}`).emit("sessionToggle", {
+      patientId,
+      doctorId,
+      sessionActive,
+    });
+  });
 
-  // Broadcast to the patient
-  // ✅ FIXED: Added backticks for the template literal
-  io.to(`user_${patientId}`).emit("botStatusChanged", {
-    doctorId,
-    patientId,
-    status,
-  });
-});
+  socket.on("botStatusChanged", ({ doctorId, patientId, status }) => {
+    console.log("🤖 Bot status changed:", { doctorId, patientId, status });
 
-  // broadcast to patient + doctor
-  io.to(`user_${patientId}`).emit("sessionToggle", {
-    patientId,
-    doctorId,
-    sessionActive,
-  });
-  io.to(`user_${doctorId}`).emit("sessionToggle", {
-    patientId,
-    doctorId,
-    sessionActive,
-  });
-});
- // Handle bot status changes
-socket.on("botStatusChanged", ({ doctorId, patientId, status }) => {
-  console.log("🤖 Bot status changed:", { doctorId, patientId, status });
-  socket.on("disconnect", (reason) => {
-    console.log("User disconnected:", socket.id, "Reason:", reason);
-    handleUserDisconnect(socket);
-  });
+    io.to(`user_${doctorId}`).emit("botStatusChanged", {
+      doctorId,
+      patientId,
+      status,
+    });
 
-  function handleUserDisconnect(socket) {
-    if (socket.userId) {
-      const userData = connectedUsers.get(socket.userId);
-      if (userData) {
-        const lastSeen = new Date();
-        clearUserTyping(socket.userId);
-        connectedUsers.delete(socket.userId);
-        notifyUserOffline(socket.userId, lastSeen);
-        broadcastOnlineUsers();
-        console.log(`${userData.role} ${socket.userId} (${userData.name}) disconnected. Total connected: ${connectedUsers.size}`);
-      }
-    }
-  }
+    io.to(`user_${patientId}`).emit("botStatusChanged", {
+      doctorId,
+      patientId,
+      status,
+    });
+  });
 
-  socket.on("error", (error) => console.error("Socket error:", error));
+  socket.on("disconnect", (reason) => {
+    console.log("User disconnected:", socket.id, "Reason:", reason);
+    handleUserDisconnect(socket);
+  });
+
+  function handleUserDisconnect(socket) {
+    if (socket.userId) {
+      const userData = connectedUsers.get(socket.userId);
+      if (userData) {
+        const lastSeen = new Date();
+        clearUserTyping(socket.userId);
+        connectedUsers.delete(socket.userId);
+        notifyUserOffline(socket.userId, lastSeen);
+        broadcastOnlineUsers();
+        console.log(`${userData.role} ${socket.userId} (${userData.name}) disconnected. Total connected: ${connectedUsers.size}`);
+      }
+    }
+  }
+
+  socket.on("error", (error) => console.error("Socket error:", error));
 });
 
 // Periodic cleanup for stale connections
