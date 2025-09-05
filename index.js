@@ -310,9 +310,7 @@ io.on("connection", (socket) => {
 
   activeSessions.set(patientId, sessionActive);
 
-  // Handle bot status changes
-socket.on("botStatusChanged", ({ doctorId, patientId, status }) => {
-  console.log("🤖 Bot status changed:", { doctorId, patientId, status });
+  
 
   // Broadcast to the doctor
   // ✅ FIXED: Added backticks for the template literal
@@ -343,7 +341,9 @@ socket.on("botStatusChanged", ({ doctorId, patientId, status }) => {
     sessionActive,
   });
 });
-
+ // Handle bot status changes
+socket.on("botStatusChanged", ({ doctorId, patientId, status }) => {
+  console.log("🤖 Bot status changed:", { doctorId, patientId, status });
   socket.on("disconnect", (reason) => {
     console.log("User disconnected:", socket.id, "Reason:", reason);
     handleUserDisconnect(socket);
