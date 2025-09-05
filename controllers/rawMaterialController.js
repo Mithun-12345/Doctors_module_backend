@@ -533,4 +533,74 @@ exports.updateRawMaterialStatusFlags = async (req, res) => {
     return res.status(500).json({ message: "Server error." });
   }
 };
+exports.updateProductImageByBarcode = async (req, res) => {
+  try {
+    const { barcode } = req.params;
 
+    // 1. Check if a file was uploaded.
+    // Multer will add the `file` object to the request if a file is present.
+    if (!req.file || !req.file.path) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'No product image file was uploaded.' 
+      });
+    }
+
+    // 2. Find the raw material document using the unique barcode from the URL.
+    const rawMaterial = await RawMaterial.findOne({ barcode: barcode });
+
+    if (!rawMaterial) {
+      // If not found, make sure to clean up the uploaded temp file before responding.
+      fs.unlink(req.file.path, (err) => {
+        if (err) console.error('Failed to delete temp file for non-existent barcode:', err);
+      });
+      return res.status(404).json({ 
+        success: false, 
+        message: `Raw material with barcode '${barcode}' not found.` 
+      });
+    }
+
+    // 3. Upload the new image to Cloudinary from the temporary path on disk.
+    // This logic is identical to your create function's upload logic.
+    const productImageUrl = await new Promise((resolve, reject) => {
+      cloudinary.uploader.upload(
+        req.file.path,
+        { 
+          folder: 'productImages', // Keep uploads organized in Cloudinary
+          resource_type: 'image' 
+        },
+        (error, result) => {
+          if (result) resolve(result.secure_url);
+          else reject(error);
+        }
+      );
+    });
+
+    // 4. IMPORTANT: Clean up and delete the temporary file from the server's disk.
+    fs.unlink(req.file.path, (err) => {
+      if (err) console.error('Failed to delete temp file after Cloudinary upload:', err);
+    });
+
+    // 5. Update the productImage field and the updatedAt timestamp.
+    rawMaterial.productImage = productImageUrl;
+    rawMaterial.updatedAt = Date.now();
+
+    // 6. Save the updated document to the database.
+    const updatedRawMaterial = await rawMaterial.save();
+
+    // 7. Send a success response with the updated document.
+    res.status(200).json({
+      success: true,
+      message: 'Product image updated successfully.',
+      data: updatedRawMaterial,
+    });
+
+  } catch (error) {
+    console.error("Error updating product image:", error);
+    res.status(500).json({ 
+      success: false, 
+      message: 'Server error while updating product image.', 
+      error: error.message 
+    });
+  }
+};

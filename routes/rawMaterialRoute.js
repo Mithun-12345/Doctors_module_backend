@@ -46,7 +46,11 @@ router.get('/usage-status', rawMaterialController.getUsedAndUnusedRawMaterials);
 router.get('/unused/barcode/:barcode', rawMaterialController.getUnusedRawMaterialByBarcode);
 router.put('/status-flags/:barcode', rawMaterialController.updateRawMaterialStatusFlags);
 
-
+router.patch(
+  '/product-image/:barcode',
+  upload.single('productImage'), // This middleware handles the file upload first
+  rawMaterialController.updateProductImageByBarcode // Then, this controller function runs
+);
 
 
 
