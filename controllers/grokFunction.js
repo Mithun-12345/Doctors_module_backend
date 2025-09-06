@@ -31,7 +31,7 @@ Return the result as valid JSON in the format:
 
   try {
     const response = await client.chat.completions.create({
-      model: "llama3-70b-8192",
+      model: "llama-3.1-8b-instant",
       messages: [
         {
           role: "system",
@@ -73,7 +73,7 @@ export async function regenerateSingleQuestion(
   
     try {
       const response = await client.chat.completions.create({
-        model: "llama3-70b-8192",
+        model: "llama-3.1-8b-instant",
         messages: [
           {
             role: "system",
