@@ -3,6 +3,7 @@ const { default: mongoose } = require("mongoose");
 const {generateFeedbackQuestions,regenerateSingleQuestion} = require("./grokFunction");
 const {PaymentIntimationPanelEnableSchema,  PaymentIntimationPanelSchema2,PaymentMsgTempSchema,RescheduleAndRefund,DoctorQuestionMapWithQuery,DoctorfeedbackSettings,ClinicOperationHours,AppointmentSlotTypes,ConsultationPriorityMapping,ShipmentPanel} = require("../models/consultationMessengerSettings");
 const { read } = require("pdfkit");
+const patientModel = require("../models/patientModel");
 
 // feed back panel
 
@@ -183,7 +184,93 @@ exports.regenerateParticularQuestion = async (req,res) =>{
         console.log("error in database insertion ");
         return res.status(500).json({message: "error in database insertion"});
     }
+};
+
+exports.ViewAllTheTypesOfQuery = async (req,res)=>{
+    try{
+        const result = await DoctorfeedbackSettings.find();
+        const filteredData = result.map(item => ({
+            _id: item._id,
+            msgUseCase: item.msgUseCase
+          }));
+        console.log("data fetched from the docter query settings");
+        return res.status(200).json({success : true,message : "data fetched from the doctor query settings",filteredData});
+    }
+    catch(error){
+        console.log("error in the data fetching..");
+        return res.status(500).json({success : false,message : error});
+    }
+};
+
+exports.displayTheCreatedQuestionsForTheQuery = async (req,res)=>{
+    const id = req.params.id;
+    const doctorId = req.user._id;
+    try{
+        const check = await DoctorfeedbackSettings.findOne({_id : id});
+        if(!check){
+            console.log("this user is not found in database");
+            return res.status(400).json({success :true ,message : "this user is not found"});
+        }
+        if(!check.isAvailable){
+            console.log("this type is not avaliable");
+            return res.status(400).json({success : false,message : "This type is not available"});
+        }
+
+        const result = await DoctorQuestionMapWithQuery.find({queryId:id,doctorId :doctorId }).sort({createdAt : -1});
+        if(result.length === 0){
+            console.log("no feedback question is created for the given queryId ");
+            return res.status(400).json({success : false,message : "no feedback question is created for the given queryId"});
+        }
+
+        console.log("successfully fetched..");
+        return res.status(200).json({success : true,message : "successfully fetched",result : result[0]});
+
+    }
+    catch(error){
+        console.log("error in the data fetching..",error);
+        return res.status(500).json({success : false,message : error});
+    }
+};
+
+exports.updateReadOptionForTheQuestions = async (req,res)=>{
+    const {isRead} = req.body;
+    const queryId = req.params.id;
+
+    try{
+        const result = await DoctorQuestionMapWithQuery.findOneAndUpdate({queryId : new mongoose.Types.ObjectId(queryId)},{$set : {isRead : isRead}});
+        if(!result){
+            console.log("No document is found in this queryId");
+            return res.status(400).json({success:false,message : "No document is found in this queryId"});
+        }
+        console.log("updated in the database");
+        return res.status(200).json({success : true,message : "updated in the database",result});
+    }
+    catch(error){
+        console.log("error in the data fetching..",error);
+        return res.status(500).json({success : false,message : error});
+    }
 }
+
+exports.updateIsBotOptionForThePatient = async (req,res)=>{
+    const {isBotActive} = req.body;
+    // const {id} = req.params.id;
+
+    try{
+        
+        const result = await patientModel.findOneAndUpdate({phone : req.user.phone},{$set : {isBotActive: isBotActive}});
+        if(!result){
+            console.log("Doctor Not found");
+            return res.status(400).json({success : false,message : "Doctor not found"});
+        }
+        console.log("updated in the database");
+        return res.status(200).json({success : true,message : "updated in the database",result});
+
+    }
+    catch(error){
+        console.log("error in the data fetching..",error);
+        return res.status(500).json({success : false,message : error});
+    }
+};
 
 
 // operational hours
@@ -703,10 +790,3 @@ exports.getPaymentMsgTemplate = async (req,res)=>{
         res.status(500).json({ message: "Server error" });
       }
 };
-
-
-
-
-
-
-

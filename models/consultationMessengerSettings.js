@@ -146,6 +146,10 @@ const questionsMapWithQuery = new mongoose.Schema({
         type : [questionSchema],
         default : []
     },
+    isRead : {
+        type : Boolean,
+        default : false
+    },
     createdAt : {
         type : Date
     },

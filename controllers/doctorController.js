@@ -1316,3 +1316,59 @@ exports.getTotalAppointments = async (req, res) => {
     res.status(500).json({ success: false, message: "Internal server error" });
   }
 };
+exports.chatPatientWithDoctorAndIsReadCount = async (req, res) => {
+  const doctorId = req.user._id;
+
+  try {
+    // Step 1: Find all messages where doctor is the receiver
+    const result = await Message.find({ receiver: doctorId });
+
+    // Step 2: Collect patientIds
+    const patientIds = result.map(app => app.sender);
+
+    // Step 3: Fetch patient details
+    const patientFullDetails = await Promise.all(
+      patientIds.map(async (patientId) => {
+        return await PatientDetails.findOne({ _id: patientId }).select("-password");
+      })
+    );
+
+    // Step 4: Remove duplicates (unique by phone)
+    const uniqueData = Array.from(
+      new Map(
+        patientFullDetails
+          .filter(item => item !== null)
+          .map(item => [item.phone, item])
+      ).values()
+    );
+
+    // Step 5: Use aggregation to fetch unread counts per patient
+    const unreadCounts = uniqueData.map(patient => {
+      const count = result.filter(
+        msg => msg.sender === patient._id.toString() && msg.isRead === false
+      ).length;
+
+      return {
+        patientId: patient._id,
+        isReadFalseCount: count
+      };
+    });
+    
+
+    if (uniqueData.length === 0) {
+      console.log("No patient chat with doctor");
+      return res.json({ success: false, message: "no patient chat with doctor" });
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: "successfully fetched patientIds and unread counts",
+      uniqueData,
+      unreadCounts
+    });
+
+  } catch (error) {
+    console.log("error : ", error);
+    return res.status(500).json({ success: false, message: error.message });
+  }
+};

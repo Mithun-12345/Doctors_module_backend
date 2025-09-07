@@ -29,6 +29,8 @@ const Prescription = require('../models/Prescription');
 const mongoose = require("mongoose");
 const PatientNotification = require("../models/PatientNotification");
 const NotificationReminderSettings = require('../models/NotificationReminderSettings');
+const admin = require("../configs/firebase");
+const {pushnotificationModel} = require("../models/pushNotificationModel");
 
 
 
@@ -1195,14 +1197,19 @@ exports.bookAppointment = asyncHandler(async (req, res) => {
         message: "Doctor not found",
       });
     }
-    
-    // --- TIME SLOT VALIDATION REMOVED AS PER YOUR REQUEST ---
-    // The `if (!timeSlots.includes(timeSlot))` block has been deleted.
-    // The `timeSlots` array is kept for the chronic patient logic below.
+
+    // Validate time slot
     const timeSlots = [
       "10:00", "11:00", "12:00", "13:00",
       "14:00", "15:00", "16:00", "17:00",
     ];
+
+    if (!timeSlots.includes(timeSlot)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid time slot",
+      });
+    }
 
     // Validate date
     const currentDate = new Date();
@@ -1321,6 +1328,7 @@ exports.bookAppointment = asyncHandler(async (req, res) => {
 
     const savedAppointment = await newAppointment.save();
 
+
     // --- START: ADDED NOTIFICATION LOGIC ---
 
     const appointmentFullDate = new Date(`${appointmentDate}T${timeSlot}`);
@@ -1340,12 +1348,29 @@ exports.bookAppointment = asyncHandler(async (req, res) => {
 
     // --- END: ADDED NOTIFICATION LOGIC ---
 
+    // push notification 
+
+    const notification = await pushnotificationModel.findOne({patientId : user._id})
+
+    const date = savedAppointment.appointmentDate.toDateString();
+    const message = {
+      notification : {
+        title : "Appointment slot reserved",
+        body : `Appointment on ${date} at ${savedAppointment.timeSlot} Slot reserved temporarily. Please complete payment within 7 minutes.`
+      },
+      token : notification.token
+    }
+
+    const response = await admin.messaging().send(message);
+    console.log("notification sent to patient.");
+
+
     res.status(201).json({
       success: true,
       message:
         `Your appointment with ${doctor.name} for ${formattedDateTime} is reserved.`, 
       appointmentId: savedAppointment._id,
-      amount: savedAppointment.payment,
+      amount: savedAppointment.payment, // <-- ADDED THIS LINE
       expiresAt: new Date(Date.now() + 7 * 60 * 1000),
     });
   } catch (error) {
@@ -1386,6 +1411,22 @@ exports.deleteAppointment = asyncHandler(async (req, res) => {
     // Delete only this appointment
     await Appointment.deleteOne({ _id: appointmentId, patient: patientId });
     // await Appointment.deleteOne({_id: appointmentId,doctor : patientId});
+    const date = appointment.appointmentDate.toDateString();
+    // console.log("appointment date : "+date);
+    // push notification 
+
+    const notification = await pushnotificationModel.findOne({patientId : patientId});
+
+    const message = {
+      notification : {
+        title : "Appointment cancelled successfully ",
+        body : `Your Appointment on ${date} at ${appointment.timeSlot} was cancelled successfully`
+      },
+      token : notification.token
+    }
+
+    const response = await admin.messaging().send(message);
+    console.log("notification sent to patient.");
 
     res.status(200).json({
       success: true,
@@ -1507,13 +1548,29 @@ if (now > appointmentDateTime && now.toDateString() !== appointmentDateTime.toDa
 
   await appointment.save();
 
+  // push notification 
+
+  const notification = await pushnotificationModel.findOne({patientId : patientId});
+  const date = appointment.appointmentDate.toDateString();
+
+  const message = {
+    notification : {
+      title : "Appointment Edited successfully ",
+      body : `Your Appointment on ${date} at ${appointment.timeSlot} was rescheduled successfully`
+    },
+    token : notification.token
+  }
+
+  const response = await admin.messaging().send(message);
+  console.log("notification sent to patient.");
+
+
   res.status(200).json({
     success: true,
     message: "Appointment updated successfully",
     data: appointment
   });
 });
-
 // Optional: Add a cleanup job to remove expired reservations
 exports.cleanupExpiredReservations = asyncHandler(async (req, res) => {
   try {

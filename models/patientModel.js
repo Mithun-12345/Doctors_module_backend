@@ -22,6 +22,10 @@ const patientSchema = new mongoose.Schema(
       required: true,
       unique: true,
     },
+    isBotActive : {
+      type : Boolean,
+      default : true
+    },
     address: {
       type: String,
       required: false,

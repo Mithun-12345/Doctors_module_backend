@@ -31,6 +31,7 @@ const {
   getAppointedPatients,
   getAppointmentWithTimedata,
   consultationNotes,
+  chatPatientWithDoctorAndIsReadCount,
   secondFormDetails
 } = require("../controllers/doctorController");
 const {
@@ -124,6 +125,8 @@ router.get('/getAppointedPatients',validateToken,getAppointedPatients)
 router.get('/getAppointmentWithTimedata',validateToken,getAppointmentWithTimedata);
 router.post('/consultationNotes', validateToken, consultationNotes)
 router.get('/secondFormDetails', validateToken, secondFormDetails);
+// patient id's . whose are chat with doctor
+router.get("/chatPatientWithDoctorAndIsReadCount",validateToken,chatPatientWithDoctorAndIsReadCount);
 
 
 module.exports = router;
