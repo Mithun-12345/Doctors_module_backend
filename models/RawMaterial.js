@@ -9,7 +9,7 @@ const rawMaterialSchema = new mongoose.Schema({
   quantity: { type: Number, required: true, min: 0 },
   currentQuantity: { type: Number, required: true, min: 0 },
   thresholdQuantity: { type: Number, required: true, min: 0 },
-  expiryDate: { type: Date, required: true },
+  expiryDate: { type: Date, required: false },
   totalWeight:{type: Number},
   isAlcohol:{type:Boolean,default:false},
   totalLeakedQuantity:{type:Number,default:0},

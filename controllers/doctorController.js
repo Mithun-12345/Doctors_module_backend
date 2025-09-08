@@ -1372,3 +1372,52 @@ exports.chatPatientWithDoctorAndIsReadCount = async (req, res) => {
     return res.status(500).json({ success: false, message: error.message });
   }
 };
+exports.getTotalAppointmentsForDoctor = async (req, res) => {
+  try {
+    // 1. Get the logged-in doctor's ID from the token
+    const doctorId = req.user._id;
+
+    // 2. Count all documents where the 'doctor' field matches the ID
+    const totalAppointments = await Appointment.countDocuments({
+      doctor: doctorId,
+    });
+
+    res.status(200).json({ 
+        success: true, 
+        totalAppointments: totalAppointments 
+    });
+
+  } catch (error) {
+    console.error("Error fetching total appointments for doctor:", error);
+    res.status(500).json({ success: false, message: "Internal server error" });
+  }
+};
+exports.getTodaysAppointmentCount = async (req, res) => {
+  try {
+    // 1. Get the logged-in doctor's ID from the token
+    const doctorId = req.user._id;
+
+    // 2. Define the start and end of the current day
+    const now = new Date();
+    const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0);
+    const endOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
+
+    // 3. Count documents for the doctor within today's date range
+    const todaysCount = await Appointment.countDocuments({
+      doctor: doctorId,
+      appointmentDate: {
+        $gte: startOfToday,
+        $lte: endOfToday,
+      },
+    });
+
+    res.status(200).json({ 
+        success: true, 
+        count: todaysCount 
+    });
+
+  } catch (error) {
+    console.error("Error fetching today's appointment count for doctor:", error);
+    res.status(500).json({ success: false, message: "Internal server error" });
+  }
+};

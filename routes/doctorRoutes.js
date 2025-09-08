@@ -32,7 +32,9 @@ const {
   getAppointmentWithTimedata,
   consultationNotes,
   chatPatientWithDoctorAndIsReadCount,
-  secondFormDetails
+  secondFormDetails,
+  getTotalAppointmentsForDoctor,
+  getTodaysAppointmentCount
 } = require("../controllers/doctorController");
 const {
   upload,
@@ -127,6 +129,9 @@ router.post('/consultationNotes', validateToken, consultationNotes)
 router.get('/secondFormDetails', validateToken, secondFormDetails);
 // patient id's . whose are chat with doctor
 router.get("/chatPatientWithDoctorAndIsReadCount",validateToken,chatPatientWithDoctorAndIsReadCount);
+router.get("/appointments/total-count", validateToken, getTotalAppointmentsForDoctor);
+router.get("/appointments/today/count", validateToken, getTodaysAppointmentCount);
+
 
 
 module.exports = router;
