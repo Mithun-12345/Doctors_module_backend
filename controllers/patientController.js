@@ -3687,3 +3687,57 @@ exports.getCompletedPaymentsCount = async (req, res) => {
     res.status(500).json({ success: false, message: "Internal server error" });
   }
 };
+exports.rescheduleAppointment = async (req, res) => {
+  try {
+    const { appointmentId } = req.params;
+    const { appointmentDate, timeSlot } = req.body;
+
+    // 1. Validate inputs
+    if (!mongoose.Types.ObjectId.isValid(appointmentId)) {
+      return res.status(400).json({ message: "Invalid Appointment ID format." });
+    }
+    if (!appointmentDate || !timeSlot) {
+      return res.status(400).json({ message: "New appointmentDate and timeSlot are required." });
+    }
+
+    // 2. Find the existing appointment
+    const appointment = await Appointment.findById(appointmentId);
+    if (!appointment) {
+      return res.status(404).json({ message: "Appointment not found." });
+    }
+    if (appointment.status !== 'confirmed') {
+        return res.status(400).json({ message: "Only confirmed appointments can be rescheduled." });
+    }
+
+    // 3. (CRITICAL) Check if the NEW slot is available
+    const startOfDay = new Date(appointmentDate);
+    startOfDay.setHours(0, 0, 0, 0);
+    const endOfDay = new Date(appointmentDate);
+    endOfDay.setHours(23, 59, 59, 999);
+
+    const conflictingAppointment = await Appointment.findOne({
+      appointmentDate: { $gte: startOfDay, $lte: endOfDay },
+      timeSlot: timeSlot,
+      _id: { $ne: appointmentId } // Exclude the current appointment from the check
+    });
+
+    if (conflictingAppointment) {
+      return res.status(409).json({ message: "This time slot is already booked. Please choose another." });
+    }
+
+    // 4. Update and save the appointment
+    appointment.appointmentDate = new Date(appointmentDate);
+    appointment.timeSlot = timeSlot;
+    const updatedAppointment = await appointment.save();
+
+    res.status(200).json({
+      success: true,
+      message: "Appointment rescheduled successfully.",
+      appointment: updatedAppointment,
+    });
+
+  } catch (error) {
+    console.error("Error rescheduling appointment:", error);
+    res.status(500).json({ success: false, message: "Internal server error" });
+  }
+};

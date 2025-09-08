@@ -48,7 +48,8 @@ const {
   getCompletedPaymentsCount,
   getPastAppointmentsCount,
   getTotalAppointmentsCount,
-  getPatientById
+  getPatientById,
+  rescheduleAppointment
 } = require("../controllers/patientController");
 const {
   upload,
@@ -185,6 +186,7 @@ router.get('/prescriptions/week-view/:patientId', validateToken,getPrescriptions
 router.get('/getAppointedDocs',validateToken,familyMemberController.getAppointedDocs),
 router.get('/patientById/:id', familyMemberController.getPatientById);
 router.post("/appointments-by-date", getBookedAppointmentsByDate);
+router.patch("/:appointmentId/reschedule", validateToken, rescheduleAppointment);
 
 
 module.exports = router;
