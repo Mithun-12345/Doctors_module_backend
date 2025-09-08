@@ -13,6 +13,8 @@ const Payment = require("../models/Payment.js");
 const ConsultationNote = require("../models/ConsultationNots.js")
 const multer = require('multer');
 const upload = multer({ dest: 'uploads/' });
+const Message = require('../models/messageModel'); // Or whatever the path to your file is
+
 // ... other controller functions
 
 /**
@@ -1329,7 +1331,7 @@ exports.chatPatientWithDoctorAndIsReadCount = async (req, res) => {
     // Step 3: Fetch patient details
     const patientFullDetails = await Promise.all(
       patientIds.map(async (patientId) => {
-        return await PatientDetails.findOne({ _id: patientId }).select("-password");
+        return await patientDetails.findOne({ _id: patientId }).select("-password");
       })
     );
 

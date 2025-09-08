@@ -4,6 +4,7 @@ const {generateFeedbackQuestions,regenerateSingleQuestion} = require("./grokFunc
 const {PaymentIntimationPanelEnableSchema,  PaymentIntimationPanelSchema2,PaymentMsgTempSchema,RescheduleAndRefund,DoctorQuestionMapWithQuery,DoctorfeedbackSettings,ClinicOperationHours,AppointmentSlotTypes,ConsultationPriorityMapping,ShipmentPanel} = require("../models/consultationMessengerSettings");
 const { read } = require("pdfkit");
 const patientModel = require("../models/patientModel");
+const Message = require('../models/messageModel'); // Or whatever the path to your file is
 
 // feed back panel
 
@@ -232,25 +233,38 @@ exports.displayTheCreatedQuestionsForTheQuery = async (req,res)=>{
     }
 };
 
-exports.updateReadOptionForTheQuestions = async (req,res)=>{
-    const {isRead} = req.body;
-    const queryId = req.params.id;
 
-    try{
-        const result = await DoctorQuestionMapWithQuery.findOneAndUpdate({queryId : new mongoose.Types.ObjectId(queryId)},{$set : {isRead : isRead}});
-        if(!result){
-            console.log("No document is found in this queryId");
-            return res.status(400).json({success:false,message : "No document is found in this queryId"});
+exports.updateReadOptionForTheQuestions = async (req, res) => {
+    const { isRead } = req.body;
+    const documentId = req.params.id;
+
+    if (!mongoose.Types.ObjectId.isValid(documentId)) {
+        return res.status(400).json({ success: false, message: "Invalid ID format" });
+    }
+
+    try {
+        // ✅ STEP 2: Use the imported 'Message' model here
+        const updatedDocument = await Message.findByIdAndUpdate(
+            documentId,
+            { $set: { isRead: isRead } },
+            { new: true } // This option returns the updated document
+        );
+
+        if (!updatedDocument) {
+            return res.status(404).json({ success: false, message: "No document found with this ID" });
         }
-        console.log("updated in the database");
-        return res.status(200).json({success : true,message : "updated in the database",result});
-    }
-    catch(error){
-        console.log("error in the data fetching..",error);
-        return res.status(500).json({success : false,message : error});
-    }
-}
 
+        return res.status(200).json({
+            success: true,
+            message: "Update successful",
+            data: updatedDocument
+        });
+
+    } catch (error) {
+        console.log("Error during database update:", error);
+        return res.status(500).json({ success: false, message: "Internal server error" });
+    }
+};
 exports.updateIsBotOptionForThePatient = async (req,res)=>{
     const {isBotActive} = req.body;
     // const {id} = req.params.id;

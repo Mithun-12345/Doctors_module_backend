@@ -889,7 +889,7 @@ const logWastage = async (req, res) => {
           preparationVideoUrl: medicinePreparation.preparationVideoUrl,
           medPrepStartTime: medicinePreparation.medPrepStartTime,
           rawMaterialsUsed: medicinePreparation.rawMaterialsUsed, // Logs the used amounts before reset
-          attempt: Number(medicinePreparation.attempt) + 1,
+          attempt: medicinePreparation.attempt + 1,
           preparationPhoto: medicinePreparation.preparationPhoto
         },
       ],

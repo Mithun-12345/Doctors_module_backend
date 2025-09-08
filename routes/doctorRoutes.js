@@ -1,6 +1,8 @@
 const express = require("express");
 const validateToken = require("../middlewares/validateTokenHandler");
 // const {createAppointmentTimings} = require("../controllers/doctorAppointmentSettingsController");
+const Message = require('../models/messageModel'); // Or whatever the path to your file is
+
 const {
   addDoctor,
   getAvailableSlots,

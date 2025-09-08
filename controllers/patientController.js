@@ -31,6 +31,8 @@ const PatientNotification = require("../models/PatientNotification");
 const NotificationReminderSettings = require('../models/NotificationReminderSettings');
 const admin = require("../configs/firebase");
 const {pushnotificationModel} = require("../models/pushNotificationModel");
+const Message = require('../models/messageModel'); // Or whatever the path to your file is
+
 
 
 
@@ -1182,7 +1184,6 @@ exports.bookAppointment = asyncHandler(async (req, res) => {
       return res.status(400).json({ success: false, message: "Doctor not found" });
     }
     
-    // The `timeSlots` array is kept for the chronic patient logic below.
     const timeSlots = [
       "10:00", "11:00", "12:00", "13:00",
       "14:00", "15:00", "16:00", "17:00",
@@ -1232,7 +1233,7 @@ exports.bookAppointment = asyncHandler(async (req, res) => {
     }
 
     // ... (rest of your referral logic) ...
-
+    
     const newAppointment = new Appointment({
       patient: user._id,
       patientEmail: user.email,
@@ -1254,6 +1255,7 @@ exports.bookAppointment = asyncHandler(async (req, res) => {
 
     const savedAppointment = await newAppointment.save();
 
+    // This formatting is still done for the final API response
     const appointmentFullDate = new Date(`${appointmentDate}T${timeSlot}`);
     const istFormatter = new Intl.DateTimeFormat('en-IN', {
       timeZone: 'Asia/Kolkata',
@@ -1262,14 +1264,17 @@ exports.bookAppointment = asyncHandler(async (req, res) => {
     });
     const formattedDateTime = istFormatter.format(appointmentFullDate);
 
+    // --- NOTIFICATION LOGIC UPDATED ---
     await Notification.create({
       recipient: user._id,
-      message: `Your appointment with ${doctor.name} for ${formattedDateTime} is reserved.`,
+      // The message stored in the database is now unformatted
+      message: `Your appointment with ${doctor.name} for ${appointmentDate} at ${timeSlot} is reserved.`,
       type: "APPOINTMENT_RESERVED",
       link: `/appointments/${savedAppointment._id}`,
     });
+    // ------------------------------------
 
-    // --- CORRECTED FINAL RESPONSE ---
+    // The final API response remains unchanged, using the formatted date
     res.status(201).json({
       success: true,
       message: `Your appointment with ${doctor.name} for ${formattedDateTime} is reserved.`,
@@ -1277,7 +1282,6 @@ exports.bookAppointment = asyncHandler(async (req, res) => {
       amount: savedAppointment.payment,
       expiresAt: new Date(Date.now() + 7 * 60 * 1000),
     });
-    // ---------------------------------
     
   } catch (error) {
     console.error("Failed to reserve appointment:", error);

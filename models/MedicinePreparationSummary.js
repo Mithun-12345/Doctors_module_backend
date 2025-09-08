@@ -31,7 +31,7 @@ const medicinePreparationDetailSchema = new mongoose.Schema({
   medPrepStartTime:{type:Date,default:Date.now},
   rawMaterialsUsed: [rawMaterialUsedSchema],
   preparationPhoto:{type:String,trim:true},
-  attempt:{type:String,default:0},
+  attempt:{type:Number,default:0},
   instructions: {
     type: Map,
     of: Boolean,
