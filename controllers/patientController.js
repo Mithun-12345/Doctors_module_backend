@@ -1169,32 +1169,19 @@ exports.bookAppointment = asyncHandler(async (req, res) => {
   try {
     const user = await Patient.findOne({ phone });
     if (!user) {
-      return res.status(400).json({
-        success: false,
-        message: "Patient not found",
-      });
+      return res.status(400).json({ success: false, message: "Patient not found" });
     }
 
-    const medicalDetails = await MedicalDetails.findOne({
-      patientId: user._id,
-    });
+    const medicalDetails = await MedicalDetails.findOne({ patientId: user._id });
     if (!medicalDetails) {
-      return res.status(400).json({
-        success: false,
-        message: "Medical details not found",
-      });
+      return res.status(400).json({ success: false, message: "Medical details not found" });
     }
 
     const doctor = await Doctor.findById(doctorId);
     if (!doctor || doctor.role !== "admin-doctor") {
-      return res.status(400).json({
-        success: false,
-        message: "Doctor not found",
-      });
+      return res.status(400).json({ success: false, message: "Doctor not found" });
     }
-
-    // --- TIME SLOT VALIDATION REMOVED AS REQUESTED ---
-    // The `if (!timeSlots.includes(timeSlot))` block has been deleted.
+    
     // The `timeSlots` array is kept for the chronic patient logic below.
     const timeSlots = [
       "10:00", "11:00", "12:00", "13:00",
@@ -1206,18 +1193,11 @@ exports.bookAppointment = asyncHandler(async (req, res) => {
     const oneMonthLater = new Date();
     oneMonthLater.setMonth(currentDate.getMonth() + 1);
 
-    if (
-      appointmentDateObj < currentDate ||
-      appointmentDateObj > oneMonthLater
-    ) {
-      return res.status(400).json({
-        success: false,
-        message: "Invalid appointment date",
-      });
+    if (appointmentDateObj < currentDate || appointmentDateObj > oneMonthLater) {
+      return res.status(400).json({ success: false, message: "Invalid appointment date" });
     }
 
-    const isChronic =
-      medicalDetails.diseaseType.name.toLowerCase() === "chronic";
+    const isChronic = medicalDetails.diseaseType.name.toLowerCase() === "chronic";
     const isMorningSlot = (slot) => timeSlots.indexOf(slot) < 4;
 
     const existingAppointments = await Appointment.find({
@@ -1239,8 +1219,7 @@ exports.bookAppointment = asyncHandler(async (req, res) => {
       ) {
         return res.status(400).json({
           success: false,
-          message:
-            "The selected time slot is not available for chronic patients",
+          message: "The selected time slot is not available for chronic patients",
         });
       }
     } else {
@@ -1248,22 +1227,19 @@ exports.bookAppointment = asyncHandler(async (req, res) => {
         (appt) => appt.timeSlot === timeSlot
       );
       if (isSlotBooked) {
-        return res.status(400).json({
-          success: false,
-          message: "Time slot is not available",
-        });
+        return res.status(400).json({ success: false, message: "Time slot is not available" });
       }
     }
 
-    // ... (rest of your referral and appointment creation logic remains the same) ...
+    // ... (rest of your referral logic) ...
 
     const newAppointment = new Appointment({
       patient: user._id,
       patientEmail: user.email,
       patientName: user.name,
-      consultingFor: consultingFor,
+      consultingFor,
       reason: consultingReason,
-      symptom: symptom,
+      symptom,
       doctor: doctor._id,
       doctorName: doctor.name,
       appointmentDate,
@@ -1277,18 +1253,32 @@ exports.bookAppointment = asyncHandler(async (req, res) => {
     });
 
     const savedAppointment = await newAppointment.save();
-    
-    // ... (notification logic) ...
-    // ... (final response) ...
-    
-    res.status(201).json({
-        success: true,
-        message: "Appointment reserved.",
-        appointmentId: savedAppointment._id,
-        //...
+
+    const appointmentFullDate = new Date(`${appointmentDate}T${timeSlot}`);
+    const istFormatter = new Intl.DateTimeFormat('en-IN', {
+      timeZone: 'Asia/Kolkata',
+      dateStyle: 'long',
+      timeStyle: 'short'
+    });
+    const formattedDateTime = istFormatter.format(appointmentFullDate);
+
+    await Notification.create({
+      recipient: user._id,
+      message: `Your appointment with ${doctor.name} for ${formattedDateTime} is reserved.`,
+      type: "APPOINTMENT_RESERVED",
+      link: `/appointments/${savedAppointment._id}`,
     });
 
-
+    // --- CORRECTED FINAL RESPONSE ---
+    res.status(201).json({
+      success: true,
+      message: `Your appointment with ${doctor.name} for ${formattedDateTime} is reserved.`,
+      appointmentId: savedAppointment._id,
+      amount: savedAppointment.payment,
+      expiresAt: new Date(Date.now() + 7 * 60 * 1000),
+    });
+    // ---------------------------------
+    
   } catch (error) {
     console.error("Failed to reserve appointment:", error);
     res.status(400).json({
