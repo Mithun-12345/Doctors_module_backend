@@ -81,52 +81,51 @@ exports.generateDoctorFeedbackQuestions = async (req,res)=>{
     res.json({output : response});
 }
 
-
-exports.createDoctorFeedback = async (req,res) => {
-
-    
-    // call that gork api and save questions in this area
+exports.createDoctorFeedback = async (req, res) => {
     const doctorId = req.user._id;
 
-    const {messengerUsecase,purpose,totalQuestions,afterXhours,feedbackName,questionsinput} = req.body;
+    // Destructuring to match the frontend payload
+    const { messengerUsecase, purpose, totalQuestions, afterXhours, feedbackName, questions } = req.body;
 
-    const questions = questionsinput;
-    const questionsName = feedbackName;
-
-    const output = await DoctorfeedbackSettings.findOne({doctorId : doctorId , msgUseCase : messengerUsecase});
-
-    const queryId = output._id;
-
-    createdAt = Date.now();
-    const data1 = {
-        doctorId,
-        queryId,
-        messengerUsecase , 
-        afterXhours, 
-        purpose ,
-        totalQuestions,
-        questionsName,
-        questions,
-        createdAt
-    };
+    // A quick validation to ensure questions are provided
+    if (!questions || !Array.isArray(questions)) {
+        return res.status(400).json({ message: "The 'questions' field must be an array and is required." });
+    }
 
     try {
-        const result = await DoctorQuestionMapWithQuery.insertOne(data1);
+        // Find the related settings document
+        const output = await DoctorfeedbackSettings.findOne({ doctorId: doctorId, msgUseCase: messengerUsecase });
 
-        if(!result){
-            console.log("Not inserted : ",result);
-            return res.status(401).json({message : "not inserted "});
+        // --- FIX: Add a null check ---
+        if (!output) {
+            return res.status(404).json({ message: "Feedback settings not found for this doctor and use case." });
         }
 
-        console.log("successfully inserted ");
-        return res.status(201).json({message : "inserted successfully ",result : result});
+        const queryId = output._id;
+
+        const dataToInsert = {
+            doctorId,
+            queryId,
+            messengerUsecase,
+            afterXhours,
+            purpose,
+            totalQuestions,
+            questionsName: feedbackName, // Using feedbackName directly
+            questions, // Using the destructured 'questions'
+            createdAt: new Date()
+        };
+
+        // --- FIX: Use the correct Mongoose 'create' method ---
+        const result = await DoctorQuestionMapWithQuery.create(dataToInsert);
+
+        console.log("Successfully inserted");
+        return res.status(201).json({ message: "Inserted successfully", result: result });
+
+    } catch (error) {
+        console.log("Error in creating doctor feedback: ", error);
+        return res.status(500).json({ message: "An error occurred while saving the feedback.", error: error.message });
     }
-    catch(error){
-        console.log("error in inserting data into the collection ",error);
-        return res.status(500).json({message : "error occurs in inserting data in collection "})
-    }
-    
-}
+};
 
 exports.viewFeedbackQuestionsofParticularQuery = async (req, res) => {
     const doctorId = req.user._id;
