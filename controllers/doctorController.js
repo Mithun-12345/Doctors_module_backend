@@ -1319,45 +1319,25 @@ exports.getTotalAppointments = async (req, res) => {
   }
 };
 exports.chatPatientWithDoctorAndIsReadCount = async (req, res) => {
-    // We start by getting the doctorId from the request object, populated by middleware.
-    const doctorId = req.user._id;
-
-    // --- START DEBUG LOGS ---
-    console.log("\n--- Debugging chatPatientWithDoctorAndIsReadCount ---");
-    console.log(`1. Authenticated Doctor ID: ${doctorId} (Type: ${typeof doctorId})`);
-    // --- END DEBUG LOGS ---
+    const doctorId = req.user._id.toString();
 
     try {
-        // Step 1: Find all messages where the doctor is the receiver.
+        // Step 1: Find all messages where the doctor is the receiver
         const result = await Message.find({ receiver: doctorId });
 
-        // --- START DEBUG LOGS ---
-        console.log(`2. Found ${result.length} message(s) for this doctor.`);
-        if (result.length > 0) {
-            console.log("   -> Sample Message Receiver ID:", result[0].receiver, `(Type: ${typeof result[0].receiver})`);
-        }
-        // --- END DEBUG LOGS ---
-
-        // Step 2: Collect patientIds from the messages found.
+        // Step 2: Collect all patient (sender) IDs
         const patientIds = result.map(app => app.sender);
 
-        // --- START DEBUG LOGS ---
-        console.log("3. Extracted Patient IDs from messages:", patientIds);
-        // --- END DEBUG LOGS ---
-
-        // Step 3: Fetch the full details for each of those patient IDs.
+        // Step 3: Fetch the FULL PATIENT PROFILE for each of those patients
         const patientFullDetails = await Promise.all(
-            patientIds.map(async (patientId) => {
-                // This is a critical step. If 'patientDetails' is not the correct model name/casing, this will fail.
-                return await patientDetails.findOne({ patientId: patientId }).select("-password");
+            patientIds.map(async (id) => {
+                // ✅ CHANGE 1: Query the 'Patient' model instead of 'PatientDetails'
+                // We find the patient by their main unique _id.
+                return await Patient.findOne({ _id: id }).select("-password");
             })
         );
 
-        // --- START DEBUG LOGS ---
-        console.log("4. Fetched full patient details (raw result):", patientFullDetails);
-        // --- END DEBUG LOGS ---
-
-        // Step 4: Filter out any nulls and remove duplicates based on phone number.
+        // Step 4: Filter out any null results and create a unique list of patients by phone
         const uniqueData = Array.from(
             new Map(
                 patientFullDetails
@@ -1366,13 +1346,11 @@ exports.chatPatientWithDoctorAndIsReadCount = async (req, res) => {
             ).values()
         );
 
-        // --- START DEBUG LOGS ---
-        console.log(`5. Unique patient data after filtering: ${uniqueData.length} unique patient(s) found.`);
-        // --- END DEBUG LOGS ---
-
-        // Step 5: Calculate the number of unread messages for each unique patient.
+        // Step 5: For each unique patient, count their unread messages
         const unreadCounts = uniqueData.map(patient => {
             const count = result.filter(
+                // ✅ CHANGE 2: Match the sender with the patient's '_id'
+                // The Patient model uses '_id', not 'patientId'.
                 msg => msg.sender === patient._id.toString() && msg.isRead === false
             ).length;
 
@@ -1382,33 +1360,26 @@ exports.chatPatientWithDoctorAndIsReadCount = async (req, res) => {
             };
         });
         
-        // This is the final check before sending the response.
         if (uniqueData.length === 0) {
-            // --- START DEBUG LOGS ---
-            console.log("6. Final Check FAILED: uniqueData array is empty. Sending 'no patient chat' response.");
-            console.log("--- End of Debug ---");
-            // --- END DEBUG LOGS ---
-            return res.json({ success: false, message: "no patient chat with doctor" });
+            return res.status(200).json({ 
+                success: true, 
+                message: "No patient chat history found.",
+                uniqueData: [],
+                unreadCounts: []
+            });
         }
 
-        // --- START DEBUG LOGS ---
-        console.log("7. Final Check PASSED: Sending successful response.");
-        console.log("--- End of Debug ---");
-        // --- END DEBUG LOGS ---
+        // Return the successful response with the full patient profiles
         return res.status(200).json({
             success: true,
-            message: "successfully fetched patientIds and unread counts",
+            message: "Successfully fetched patientIds and unread counts",
             uniqueData,
             unreadCounts
         });
 
     } catch (error) {
-        // --- START DEBUG LOGS ---
-        console.error("!!! An error was caught in the try-catch block !!!");
-        console.error("Error details: ", error);
-        console.log("--- End of Debug ---");
-        // --- END DEBUG LOGS ---
-        return res.status(500).json({ success: false, message: error.message });
+        console.error("Error in chatPatientWithDoctorAndIsReadCount: ", error);
+        return res.status(500).json({ success: false, message: "Internal server error" });
     }
 };
 exports.getTotalAppointmentsForDoctor = async (req, res) => {
