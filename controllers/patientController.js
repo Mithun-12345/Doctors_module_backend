@@ -1624,7 +1624,7 @@ exports.updateFollowUpStatus = async (req, res) => {
     if (originalStatus === "Follow up-C" && appointment.follow === "Follow up-P") {
         await Notification.create({
             recipient: appointment.patient,
-            message: "With the completion of your appointment, you'll be taken to the next steps. Stay tuned for updates.",
+            message: "Following the conclusion of your appointment, we will guide you on the subsequent procedures. Please await further communication for updates.",
             type: "FOLLOW_UP_UPDATE", // You may need to add this to your Notification schema enum
             link: `/appointments/${appointment._id}`
         });

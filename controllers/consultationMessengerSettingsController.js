@@ -265,24 +265,47 @@ exports.updateReadOptionForTheQuestions = async (req, res) => {
         return res.status(500).json({ success: false, message: "Internal server error" });
     }
 };
-exports.updateIsBotOptionForThePatient = async (req,res)=>{
-    const {isBotActive} = req.body;
-    // const {id} = req.params.id;
+exports.updateIsBotOptionForThePatient = async (req, res) => {
+    // 1. Get patientId and isBotActive from the request body
+    const { patientId, isBotActive } = req.body;
 
-    try{
-        
-        const result = await patientModel.findOneAndUpdate({phone : req.user.phone},{$set : {isBotActive: isBotActive}});
-        if(!result){
-            console.log("Doctor Not found");
-            return res.status(400).json({success : false,message : "Doctor not found"});
-        }
-        console.log("updated in the database");
-        return res.status(200).json({success : true,message : "updated in the database",result});
-
+    // 2. Validate the incoming payload
+    if (!patientId || typeof isBotActive !== 'boolean') {
+        return res.status(400).json({
+            success: false,
+            message: "Payload must include 'patientId' (string) and 'isBotActive' (boolean)."
+        });
     }
-    catch(error){
-        console.log("error in the data fetching..",error);
-        return res.status(500).json({success : false,message : error});
+
+    // Optional but recommended: Validate if the ID is a valid MongoDB ObjectId
+    if (!mongoose.Types.ObjectId.isValid(patientId)) {
+        return res.status(400).json({ success: false, message: "Invalid patientId format." });
+    }
+
+    try {
+        // 3. Find the patient by their ID and update the isBotActive field
+        const updatedPatient = await patientModel.findByIdAndUpdate(
+            patientId,
+            { $set: { isBotActive: isBotActive } },
+            { new: true } // Returns the updated document instead of the old one
+        );
+
+        // 4. Check if a patient was found and updated
+        if (!updatedPatient) {
+            return res.status(404).json({ success: false, message: "Patient not found with the provided ID." });
+        }
+
+        // 5. Send a successful response
+        return res.status(200).json({
+            success: true,
+            message: "Bot activation status updated successfully.",
+            patient: updatedPatient
+        });
+
+    } catch (error) {
+        console.error("Error updating bot status:", error);
+        // Return a generic server error message
+        return res.status(500).json({ success: false, message: "Internal server error." });
     }
 };
 
