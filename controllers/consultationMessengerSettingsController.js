@@ -202,33 +202,40 @@ exports.ViewAllTheTypesOfQuery = async (req,res)=>{
     }
 };
 
-exports.displayTheCreatedQuestionsForTheQuery = async (req,res)=>{
-    const id = req.params.id;
-    const doctorId = req.user._id;
-    try{
-        const check = await DoctorfeedbackSettings.findOne({_id : id});
-        if(!check){
-            console.log("this user is not found in database");
-            return res.status(400).json({success :true ,message : "this user is not found"});
-        }
-        if(!check.isAvailable){
-            console.log("this type is not avaliable");
-            return res.status(400).json({success : false,message : "This type is not available"});
-        }
+exports.displayTheCreatedQuestionsForTheQuery = async (req, res) => {
+    // 1. Get the ID from the URL (works for any user)
+    const queryId = req.params.id;
 
-        const result = await DoctorQuestionMapWithQuery.find({queryId:id,doctorId :doctorId }).sort({createdAt : -1});
-        if(result.length === 0){
-            console.log("no feedback question is created for the given queryId ");
-            return res.status(400).json({success : false,message : "no feedback question is created for the given queryId"});
+    try {
+        // 2. Find the settings document using the ID from the URL
+        const settingsDoc = await DoctorfeedbackSettings.findOne({ _id: queryId });
+
+        if (!settingsDoc) {
+            return res.status(404).json({ success: false, message: "This feedback query was not found." });
+        }
+        if (!settingsDoc.isAvailable) {
+            return res.status(400).json({ success: false, message: "This feedback type is not currently available." });
         }
 
-        console.log("successfully fetched..");
-        return res.status(200).json({success : true,message : "successfully fetched",result : result[0]});
+        // 3. The key! Extract the doctor's ID FROM the settings document
+        const doctorId = settingsDoc.doctorId;
 
-    }
-    catch(error){
-        console.log("error in the data fetching..",error);
-        return res.status(500).json({success : false,message : error});
+        // 4. Use both IDs to find the exact questions needed
+        const result = await DoctorQuestionMapWithQuery.find({
+            queryId: queryId,
+            doctorId: doctorId
+        }).sort({ createdAt: -1 });
+
+        if (result.length === 0) {
+            return res.status(200).json({ success: true, message: "No questions found for this query.", result: [] });
+        }
+
+        // Return the most recent questions
+        return res.status(200).json({ success: true, message: "Successfully fetched", result: result[0] });
+
+    } catch (error) {
+        console.log("Error during data fetching:", error);
+        return res.status(500).json({ success: false, message: "An internal server error occurred." });
     }
 };
 
