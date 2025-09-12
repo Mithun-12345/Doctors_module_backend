@@ -4,6 +4,8 @@ const AppError = require("../utils/appError");
 const catchAsync = require("../utils/catchAsync");
 const OrderHistory = require('../models/vendorOrderSchema'); // Adjust path
 const EditLog = require('../models/vendorAmmendmentLog');
+const mongoose = require('mongoose');
+
 
 
 // Get all vendors
@@ -293,11 +295,6 @@ exports.compareMaterialPrices = catchAsync(async (req, res, next) => {
     },
   });
 });
-/**
- * @desc    Get a unique, case-insensitive list of all raw materials
- * @route   GET /api/v1/materials
- * @access  Public/Private
- */
 exports.getUniqueRawMaterials = catchAsync(async (req, res, next) => {
   const materials = await Vendor.aggregate([
     // Stage 1: Deconstruct the products array
@@ -391,6 +388,38 @@ exports.getAllLogs = catchAsync(async (req, res, next) => {
     results: logs.length,
     data: {
       logs,
+    },
+  });
+});
+exports.updateOrderReceivedStatus = catchAsync(async (req, res, next) => {
+  const { orderId } = req.params;
+  const { orderRecieved } = req.body; // Using the field name you mentioned
+
+  // --- Validation ---
+  if (typeof orderRecieved !== 'boolean') {
+    return next(new AppError('The "orderRecieved" field must be a boolean (true or false).', 400));
+  }
+
+  if (!mongoose.Types.ObjectId.isValid(orderId)) {
+    return next(new AppError('Invalid Order ID format.', 400));
+  }
+  
+  // --- Database Update ---
+  const updatedOrder = await OrderHistory.findByIdAndUpdate(
+    orderId,
+    { orderRecieved: orderRecieved }, // Update the existing field
+    { new: true, runValidators: true }
+  );
+
+  if (!updatedOrder) {
+    return next(new AppError('No order found with that ID', 404));
+  }
+
+  // --- Success Response ---
+  res.status(200).json({
+    status: 'success',
+    data: {
+      order: updatedOrder,
     },
   });
 });

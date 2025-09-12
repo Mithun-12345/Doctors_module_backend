@@ -273,9 +273,5 @@ router.delete('/:id/products/:productId', async (req, res) => {
     res.status(500).send('Server Error');
   }
 });
-
-// At the top of vendorRoutes.js
-
-
-
+router.patch('/:orderId/receive',validateToken,vendorController.updateOrderReceivedStatus);
 module.exports = router;

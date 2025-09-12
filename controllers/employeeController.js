@@ -37,30 +37,36 @@ const upload = multer({
   storage: storage,
 });
 // Controller to Add Employee
-exports.addEmployee = async (req, res) => {
+exports.addEmployee = (req, res) => {
   upload.fields([
     { name: "documents", maxCount: 5 },
     { name: "digitalSignature", maxCount: 1 },
   ])(req, res, async function (err) {
+    // 1. Handle Multer File Upload Errors
     if (err) {
       console.error("File upload error:", err.message);
-      return res.status(400).json({ error: err.message });
+      if (err.code === 'LIMIT_FILE_SIZE') {
+        return res.status(400).json({ error: `File is too large. Maximum size is 10MB.` });
+      }
+      return res.status(400).json({ error: `File upload error: ${err.message}` });
     }
 
+    // 2. Check for the presence of employeeData
+    if (!req.body.employeeData) {
+      return res.status(400).json({ error: "employeeData is missing in the request body" });
+    }
+
+    let employeeData;
+    // 3. Handle JSON Parsing Errors
     try {
-      console.log("Request body:", req.body);  // Log the entire request body
-      console.log("Uploaded files:", req.files); // Log the uploaded files
+      employeeData = JSON.parse(req.body.employeeData);
+    } catch (parseError) {
+      console.error("JSON Parsing Error:", parseError.message);
+      return res.status(400).json({ error: "Invalid format for employeeData. It must be a valid JSON string." });
+    }
 
-      // Check if employeeData exists and is a valid JSON string
-      if (!req.body.employeeData) {
-        return res.status(400).json({ error: "employeeData is missing in the request body" });
-      }
-
-      const employeeData = JSON.parse(req.body.employeeData);
-      if (!employeeData) {
-        return res.status(400).json({ error: "Invalid employee data" });
-      }
-
+    // Main logic block
+    try {
       // Handle uploaded documents
       const uploadedDocuments = req.files["documents"]?.map((file) => ({
         fileName: file.originalname,
@@ -80,7 +86,8 @@ exports.addEmployee = async (req, res) => {
           fileSize: digitalSignature.size,
         };
       }
-      console.log("details:",employeeData);
+      
+      console.log("details:", employeeData);
 
       // Save employee to database
       const newEmployee = new Employee(employeeData);
@@ -90,16 +97,36 @@ exports.addEmployee = async (req, res) => {
         message: "Employee added successfully!",
         employee: newEmployee,
       });
+      
     } catch (error) {
-      console.error("Error saving employee:", error.message);
-      res.status(500).json({ error: "Failed to add employee" });
-    }
-  });
+      console.error("Error saving employee:", error); // Log the full error for debugging
+
+      // 4. Handle Mongoose Validation Errors (e.g., required fields missing)
+      if (error.name === 'ValidationError') {
+        let validationErrors = {};
+        for (let field in error.errors) {
+          validationErrors[field] = error.errors[field].message;
+        }
+        return res.status(400).json({ 
+          error: "Validation failed. Please check your input.",
+          details: validationErrors 
+        });
+      }
+
+      // 5. Handle Mongoose Duplicate Key Errors (for unique fields)
+      if (error.code === 11000) {
+        const field = Object.keys(error.keyValue)[0];
+        const value = error.keyValue[field];
+        return res.status(409).json({ // 409 Conflict is appropriate here
+          error: `An employee with this ${field} ('${value}') already exists.`,
+        });
+      }
+
+      // 6. Generic Catch-All for any other server errors
+      res.status(500).json({ error: "Failed to add employee due to an unexpected server error." });
+    }
+  });
 };
-
-
-
-
 exports.generateEmployeeId = async (req, res) => {
   try {
     // Fetch the most recently created employee

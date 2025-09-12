@@ -24,7 +24,8 @@ const OrderItemSchema = new Schema({
   total: {
     type: Number,
     required: true
-  }
+  },
+
 });
 
 const OrderSchema = new Schema({
@@ -50,6 +51,7 @@ const OrderSchema = new Schema({
   expectedDeliveryDate: {
     type: Date
   },
+  
   deliveryDate: {
     type: Date
   },
