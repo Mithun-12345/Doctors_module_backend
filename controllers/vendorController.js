@@ -399,15 +399,28 @@ exports.updateOrderReceivedStatus = catchAsync(async (req, res, next) => {
   if (typeof orderRecieved !== 'boolean') {
     return next(new AppError('The "orderRecieved" field must be a boolean (true or false).', 400));
   }
-
   if (!mongoose.Types.ObjectId.isValid(orderId)) {
     return next(new AppError('Invalid Order ID format.', 400));
   }
   
+  // --- Prepare the update payload ---
+  const updatePayload = { 
+    orderRecieved: orderRecieved 
+  };
+
+  // If the order is being marked as received, also update its status.
+  if (orderRecieved === true) {
+    updatePayload.orderStatus = 'Delivered';
+  } 
+  // Optional: You could add an 'else' block to revert the status if needed
+  // else {
+  //   updatePayload.orderStatus = 'Shipped'; // Or whatever status is appropriate
+  // }
+  
   // --- Database Update ---
   const updatedOrder = await OrderHistory.findByIdAndUpdate(
     orderId,
-    { orderRecieved: orderRecieved }, // Update the existing field
+    updatePayload, // Use the new payload object with both fields
     { new: true, runValidators: true }
   );
 
