@@ -1176,6 +1176,8 @@ exports.getTodaysAppointments = async (req, res) => {
       appointmentId: appt._id,
       timeSlot: appt.timeSlot,
       status: appt.status,
+      diseaseName:appt.diseaseName,
+      consultingFor:appt.consultingFor,
       patient: appt.patient
         ? {
             id: appt.patient._id,
