@@ -10,7 +10,7 @@ router.get("/zoom/authorize", validateToken, zoomAuthorize);
 router.get("/zoom/callback", zoomCallback);
 
 // Google OAuth Authorization Route (Protected)
-router.get("/google/authorize", validateToken, googleAuthorize);
+router.get("/google/authorize", googleAuthorize);
 
 // Google OAuth Callback Route (Protected)
 router.get("/google/callback", googleCallback);
