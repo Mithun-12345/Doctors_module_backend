@@ -298,6 +298,12 @@ const prescriptionSchema = new mongoose.Schema({
   notes: {
     type: String,
   },
+  specialNote:{
+    type:String,
+  },
+  sendSpecialNote:{
+    type:Boolean,
+  },
   createdAt: {
     type: Date,
     default: Date.now,

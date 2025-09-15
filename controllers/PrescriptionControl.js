@@ -25,6 +25,8 @@ const createPrescription = async (req, res) => {
       parentPrescriptionId,
       consultingType,
       consultingFor,
+      specialNote, // <-- 1. Destructured new optional field
+      sendSpecialNote, // <-- 2. Destructured new optional field
     } = req.body;
 
     const doctorId = req.user._id;
@@ -37,7 +39,7 @@ const createPrescription = async (req, res) => {
       });
     }
 
-    // Validate patient & doctor
+    // Validate patient & doctor (existing logic)
     const [patient, doctor] = await Promise.all([
       Patient.findById(patientId),
       Doctor.findById(doctorId),
@@ -52,7 +54,7 @@ const createPrescription = async (req, res) => {
         .status(404)
         .json({ success: false, message: "Doctor not found" });
 
-    // Validate raw materials
+    // Validate raw materials (existing logic)
     for (const item of prescriptionItems) {
       if (item.rawMaterialDetails?.length) {
         for (const rmDetail of item.rawMaterialDetails) {
@@ -67,13 +69,13 @@ const createPrescription = async (req, res) => {
       }
     }
 
-    // Create prescription
+    // Create prescription object (existing logic)
     const prescription = new Prescription({
       patientId,
       doctorId,
       appointmentID,
       prescriptionItems: prescriptionItems.map((item) => {
-        // ... (all your existing complex mapping logic remains untouched) ...
+        // ... all your existing complex mapping logic remains untouched ...
         const frequencies = (item.frequencies || []).map((freq) => {
           const processedFreq = {
             consumptionPattern: freq.consumptionPattern || "single",
@@ -200,18 +202,20 @@ const createPrescription = async (req, res) => {
       followUpDays: followUpDays || 10,
       medicineCharges: medicineCharges || 0,
       shippingCharges: shippingCharges || 0,
-      additionalCharges:additionalCharges||0,
+      additionalCharges: additionalCharges || 0,
       notes: notes || "",
+      specialNote: specialNote || "", // <-- 3. Save new optional field
+      sendSpecialNote: sendSpecialNote || false, // <-- 4. Save new optional field
       medicineCourse,
       action: action || { status: "In Progress", closeComment: "" },
       consultingType: consultingType || "",
       consultingFor: consultingFor || "",
     });
 
-    // Save prescription
+    // Save prescription (existing logic)
     const savedPrescription = await prescription.save();
 
-    // Update appointment
+    // Update appointment (existing logic)
     const patientAppointment = await Appointment.findById(appointmentID);
     if (!patientAppointment) {
       return res.status(404).json({ message: "Appointment not found" });
@@ -220,27 +224,37 @@ const createPrescription = async (req, res) => {
     patientAppointment.prescriptionID = savedPrescription._id;
     await patientAppointment.save();
 
-    // Update parent prescription if sub-prescription
+    // Update parent prescription if sub-prescription (existing logic)
     if (parentPrescriptionId) {
       await Prescription.findByIdAndUpdate(parentPrescriptionId, {
         $push: { subPrescriptionID: savedPrescription._id },
       });
     }
 
-    // --- START: ADDED NOTIFICATION LOGIC ---
+    // --- EXISTING NOTIFICATION LOGIC ---
+    const totalCharges =
+      (medicineCharges || 0) +
+      (shippingCharges || 0) +
+      (additionalCharges || 0);
 
-    // 1. Calculate the total charges
-    const totalCharges = (medicineCharges || 0) + (shippingCharges || 0) + (additionalCharges||0);
-
-    // 2. Create the notification for the patient
     await Notification.create({
-      recipient: patientId, // The ID of the patient
+      recipient: patientId,
       message: `Your prescription is ready. The total amount to be paid is ₹${totalCharges}. Please complete the payment to proceed.`,
       type: "PRESCRIPTION_PAYMENT_DUE",
-      link: `/pay/prescription/${savedPrescription._id}`, // A direct link to the payment page
+      link: `/pay/prescription/${savedPrescription._id}`,
     });
 
-    // --- END: ADDED NOTIFICATION LOGIC ---
+    // --- START: ADDED CONDITIONAL NOTIFICATION LOGIC ---
+    // 5. Send a special note notification ONLY if requested and the note exists.
+    if (sendSpecialNote === true && specialNote) {
+      await Notification.create({
+        recipient: patientId, // The ID of the patient
+        message: specialNote, // The content of the special note
+        type: "PRESCRIPTION_SPECIAL_NOTE",
+        link: `/view/prescription/${savedPrescription._id}`, // A link to view the prescription
+      });
+    }
+    // --- END: ADDED CONDITIONAL NOTIFICATION LOGIC ---
 
     res.status(201).json({
       success: true,
