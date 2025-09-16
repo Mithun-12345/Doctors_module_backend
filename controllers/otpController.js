@@ -524,7 +524,7 @@ exports.loginUser = async (req, res) => {
     // Send the final, detailed response
     res.status(200).json({
       success: true,
-      accessToken: "Bearer " + accessToken,
+      accessToken:  accessToken,
       refreshToken: refreshToken,
       userId: user._id,
       name: user.name || '',
