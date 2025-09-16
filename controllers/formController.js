@@ -1,93 +1,9 @@
 const Patient = require("../models/patientModel");
 const MedicalDetails = require("../models/patientDetails");
-exports.createPatient = async (req, res) => {
-  console.log("Endpoint reached");
-  console.log(req.body);
-  try {
-    const {
-      consultingFor,
-      name,
-      age,
-      phone,
-      whatsappNumber,
-      email,
-      gender,
-      diseaseName,
-      diseaseType, // This will now be an object from the frontend
-      currentLocation,
-      patientEntry,
-      symptomNotKnown,
-    } = req.body;
-    const { referralCode, familyToken } = req.query; // Get the referral code from query params
+const bcrypt = require("bcryptjs");
+const nodemailer = require("nodemailer");
+const { sendTemporaryPasswordEmail } = require('../services/emailService');
 
-    // Validate diseaseType
-    let processedDiseaseType = {
-      name: "",
-      edit: false,
-    };
-
-    // If diseaseType is provided and is an object
-    if (diseaseType && typeof diseaseType === "object") {
-      processedDiseaseType = {
-        name: diseaseType.name || "",
-        edit: diseaseType.edit || false,
-      };
-    }
-
-    const basicDetails = new Patient({
-      name,
-      age,
-      phone,
-      whatsappNumber,
-      email,
-      gender,
-      patientEntry,
-      currentLocation,
-    });
-
-    const existingPatient = await Patient.findOne({ phone });
-    if (existingPatient) {
-      return res.status(400).json({
-        success: false,
-        message: "Phone number already registered",
-      });
-    }
-
-    const saveBasic = await basicDetails.save();
-
-    const medicalDetails = new MedicalDetails({
-      patientId: saveBasic._id,
-      consultingFor,
-      // name,
-      // age,
-      // phone,
-      // whatsappNumber,
-      // email,
-      // gender,
-      diseaseName,
-      diseaseType: processedDiseaseType,
-      // currentLocation,
-      // patientEntry,
-      symptomNotKnown,
-    });
-
-    // Find if the phone number is already registered
-
-    const saveMedical = await medicalDetails.save();
-    res.json({
-      success: true,
-      // patientId: saveBasic._id,
-      message: "Patient created successfully",
-    });
-  } catch (error) {
-    console.error("Error creating patient:", error);
-    res.status(500).json({
-      success: false,
-      error: "Failed to create patient",
-      message: error.message,
-    });
-  }
-};
 
 // predictionController.js                                                                                                                                                                                                                                                                                                                                                                             const express = require('express');
 const axios = require("axios");
@@ -121,3 +37,103 @@ exports.predict = async (req, res) => {
     }
   }
 };
+exports.createPatient = async (req, res) => {
+  console.log("Create patient endpoint reached");
+  try {
+    const {
+      consultingFor,
+      name,
+      age,
+      phone,
+      whatsappNumber,
+      email,
+      gender,
+      diseaseName,
+      diseaseType,
+      currentLocation,
+      patientEntry,
+      symptomNotKnown,
+    } = req.body;
+
+    // --- Validation ---
+    if (!email || !phone || !name) {
+        return res.status(400).json({ success: false, message: "Name, email, and phone are required." });
+    }
+    
+    const existingPatient = await Patient.findOne({ $or: [{ phone }, { email }] });
+    if (existingPatient) {
+      return res.status(400).json({
+        success: false,
+        message: "A patient with this phone number or email already exists.",
+      });
+    }
+
+    // --- Password Generation & Hashing ---
+    const temporaryPassword = Math.random().toString(36).slice(-8); // e.g., 'kjv7s8f9'
+    const salt = await bcrypt.genSalt(10);
+    const hashedPassword = await bcrypt.hash(temporaryPassword, salt);
+    console.log(`Generated Temp Password for ${email}: ${temporaryPassword}`);
+
+    // --- Create Patient Record ---
+    const newPatient = new Patient({
+      name,
+      age,
+      phone,
+      whatsappNumber,
+      email,
+      gender,
+      patientEntry,
+      currentLocation,
+      password: hashedPassword,
+      requiresPasswordReset: true, // Set flag to force reset on first login
+    });
+    
+    const savedPatient = await newPatient.save();
+
+    // --- Create Medical Details Record (Your original logic) ---
+    let processedDiseaseType = { name: "", edit: false };
+    if (diseaseType && typeof diseaseType === "object") {
+      processedDiseaseType = {
+        name: diseaseType.name || "",
+        edit: diseaseType.edit || false,
+      };
+    }
+    
+    const medicalDetails = new MedicalDetails({
+      patientId: savedPatient._id,
+      consultingFor,
+      diseaseName,
+      diseaseType: processedDiseaseType,
+      symptomNotKnown,
+    });
+
+    await medicalDetails.save();
+
+    // --- Send Welcome Email ---
+    // This is called *after* all database operations succeed.
+    await sendTemporaryPasswordEmail(savedPatient.email, temporaryPassword);
+
+    // --- Success Response ---
+    res.status(201).json({
+      success: true,
+      message: "Patient created successfully. A temporary password has been sent to their email.",
+      patientId: savedPatient._id
+    });
+
+  } catch (error) {
+    console.error("Error creating patient:", error);
+    res.status(500).json({
+      success: false,
+      error: "Failed to create patient due to a server error.",
+      message: error.message,
+    });
+  }
+};
+
+
+
+
+
+
+
+

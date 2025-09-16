@@ -131,6 +131,10 @@ const patientSchema = new mongoose.Schema(
      enum: [5, 10, 15],
      default: 10, // or choose your default
     },
+    requiresPasswordReset:{
+      type: Boolean,
+      default:false
+    }
   },
   { timestamps: true }
 );

@@ -1,9 +1,9 @@
+require("dotenv").config({ path: "./config/.env" });
 const asyncHandler = require("express-async-handler");
 const twilio = require("twilio");
 const jwt = require("jsonwebtoken");
 const bcrypt = require("bcryptjs");
 //const Chronic = require("../models/chronicModel");
-require("dotenv").config({ path: "./config/.env" });
 const MedPrep = require("../models/medPrepUserDetails");
 
 const OTP = require("../models/otpModel");
@@ -449,5 +449,77 @@ exports.changePassword = async (req, res) => {
   } catch (error) {
     console.error("Error changing password:", error);
     res.status(500).json({ message: "Internal Server Error" });
+  }
+};
+
+exports.loginUser = async (req, res) => {
+  try {
+    // 1. Get credentials from the request body (no 'role' needed)
+    const { identifier, password } = req.body;
+
+    if (!identifier || !password) {
+      return res.status(400).json({ message: "Please provide an identifier and password." });
+    }
+
+    const query = { $or: [{ email: identifier }, { phone: identifier }] };
+    
+    // 2. Try to find the user, starting with the Patient model
+    let user = await Patient.findOne(query);
+    let role = 'Patient'; // Assume Patient role first
+
+    // If not found as a Patient, try finding them as a Doctor
+    if (!user) {
+      user = await Doctor.findOne(query);
+      role = 'Doctor';
+    }
+
+    // 3. If user is not found in either collection, or has no password
+    if (!user || !user.password) {
+      return res.status(401).json({ message: "Invalid credentials." });
+    }
+
+    // 4. Compare passwords
+    const isMatch = await bcrypt.compare(password, user.password);
+    if (!isMatch) {
+      return res.status(401).json({ message: "Invalid credentials." });
+    }
+
+    // 5. Handle forced password reset (ONLY if the found user was a Patient)
+    if (role === 'Patient' && user.requiresPasswordReset) {
+      return res.status(200).json({
+        success: true,
+        requiresPasswordReset: true,
+        message: "Login successful, but you must reset your password.",
+        userId: user._id
+      });
+    }
+
+    // 6. If credentials are correct, create JWT
+    const payload = {
+      id: user._id,
+      name: user.name,
+      role: role // Use the role we figured out
+    };
+
+    const token = jwt.sign(
+      payload,
+      process.env.JWT_SECRET,
+      { expiresIn: '1d' }
+    );
+
+    res.status(200).json({
+      success: true,
+      message: "Logged in successfully!",
+      token: "Bearer " + token,
+      user: {
+        id: user._id,
+        name: user.name,
+        role: role
+      }
+    });
+
+  } catch (error) {
+    console.error("Login error:", error);
+    res.status(500).json({ message: "Server error during login." });
   }
 };

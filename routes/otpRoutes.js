@@ -19,5 +19,6 @@ router.post("/forgotPassword", validateToken, otpController.forgotPassword);
 router.post("/resetPassword", validateToken, otpController.resetPassword);
 router.post("/login", validateToken, otpController.login);
 router.post("/changePassword",validateToken,otpController.changePassword);
+router.post('/first-login', otpController.loginUser)
 
 module.exports = router;
