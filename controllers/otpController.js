@@ -461,6 +461,7 @@ exports.loginUser = async (req, res) => {
 
     const query = { $or: [{ email: identifier }, { phone: identifier }] };
     
+    // Sequentially search for the user and determine their role
     let user = await Patient.findOne(query);
     let role = 'Patient';
 
@@ -469,15 +470,18 @@ exports.loginUser = async (req, res) => {
       role = 'Doctor';
     }
 
+    // Handle user not found or password not set
     if (!user || !user.password) {
       return res.status(401).json({ message: "Invalid credentials." });
     }
 
+    // Compare passwords
     const isMatch = await bcrypt.compare(password, user.password);
     if (!isMatch) {
       return res.status(401).json({ message: "Invalid credentials." });
     }
 
+    // Handle the special case for a new patient's first login
     if (role === 'Patient' && user.requiresPasswordReset) {
       return res.status(200).json({
         success: true,
@@ -487,43 +491,47 @@ exports.loginUser = async (req, res) => {
       });
     }
 
+    // Create the JWT payload to be compatible with your middleware
     const payload = {
       user: {
         id: user._id,
-        phone: user.phone
+        phone: user.phone,
+        userType: role
       }
     };
 
+    // Create the short-lived Access Token
     const accessToken = jwt.sign(
       payload,
       process.env.ACCESS_TOKEN_SECRET,
       { expiresIn: '1d' }
     );
 
+    // Create the long-lived Refresh Token
     const refreshToken = jwt.sign(
       payload,
       process.env.REFRESH_TOKEN_SECRET,
       { expiresIn: '7d' }
     );
     
+    // Save the Refresh Token to the database for validation
     await OTP.findOneAndUpdate(
       { phone: user.phone },
       { refreshToken: refreshToken },
       { upsert: true, new: true }
     );
 
-    // ## MODIFIED RESPONSE BLOCK ##
-    // This section is updated to match your required output format.
+    // Send the final, detailed response
     res.status(200).json({
       success: true,
-      accessToken: accessToken,
+      accessToken: "Bearer " + accessToken,
       refreshToken: refreshToken,
       userId: user._id,
       name: user.name || '',
       email: user.email || '',
       phone: user.phone || '',
-      userType: role, // This is 'Patient' or 'Doctor'
-      role: user.role || '' // This is the specific role from the DB, e.g., 'admin-doctor'
+      userType: role,
+      role: user.role || ''
     });
 
   } catch (error) {

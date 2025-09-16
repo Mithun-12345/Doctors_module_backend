@@ -23,7 +23,6 @@ const validateToken = asyncHandler(async (req, res, next) => {
       const { phone } = decoded.user;
 
       // 3. Sequentially search for the user in all collections
-      // This logic is the same as your original, just more concise.
       const user =
         (await Patient.findOne({ phone })) ||
         (await Doctor.findOne({ phone })) ||
