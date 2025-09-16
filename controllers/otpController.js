@@ -408,16 +408,17 @@ exports.changePassword = async (req, res) => {
     const userId = req.user.id;
     const { oldPassword, newPassword, retypedNewPassword } = req.body;
 
-    // 1. Find the logged-in user (we still need to get the old password)
-    let user = await Doctor.findById(userId).select('+password'); // Include password for comparison
+    // 1. Find the logged-in user
+    let user = await Doctor.findById(userId).select('+password');
     if (!user) {
+      // Assuming 'regForm' is your Patient model
       user = await regForm.findById(userId).select('+password');
     }
     if (!user || !user.password) {
       return res.status(404).json({ message: "User not found or password not set." });
     }
 
-    // 2. (CRITICAL) Verify the old password is correct
+    // 2. Verify the old password is correct
     const isMatch = await bcrypt.compare(oldPassword, user.password);
     if (!isMatch) {
       return res.status(401).json({ message: "Incorrect old password." });
@@ -427,22 +428,30 @@ exports.changePassword = async (req, res) => {
     if (newPassword !== retypedNewPassword) {
       return res.status(400).json({ message: "Confirmation Password does not match the new password." });
     }
-    
-    // --- NEW LOGIC ADDED HERE ---
     if (oldPassword === newPassword) {
       return res.status(400).json({ message: "New password cannot be the same as the old password." });
     }
-    // ----------------------------
-
-    if (newPassword.length < 6) { // Example validation
-        return res.status(400).json({ message: "Password must be at least 6 characters long." });
+    if (newPassword.length < 6) {
+      return res.status(400).json({ message: "Password must be at least 6 characters long." });
     }
 
     // 4. Hash the new password
     const hashedPassword = await bcrypt.hash(newPassword, 10);
 
-    // 5. Use findByIdAndUpdate to save the new password
-    await user.constructor.findByIdAndUpdate(userId, { password: hashedPassword });
+    // --- NEW LOGIC ADDED HERE ---
+    // 5. Prepare the data for the update
+    let updateData = {
+      password: hashedPassword,
+    };
+
+    // If the user needs a password reset, add that to the update operation
+    if (user.requiresPasswordReset === true) {
+      updateData.requiresPasswordReset = false;
+    }
+    // ----------------------------
+
+    // 6. Save the new password and potentially the reset flag
+    await user.constructor.findByIdAndUpdate(userId, updateData);
 
     res.status(200).json({ success: true, message: "Password changed successfully." });
 
