@@ -451,48 +451,42 @@ exports.changePassword = async (req, res) => {
     res.status(500).json({ message: "Internal Server Error" });
   }
 };
-
 exports.loginUser = async (req, res) => {
   try {
-    // ... (steps 1-5 for finding and verifying the user remain the same) ...
     const { identifier, password } = req.body;
 
-    if (!identifier || !password) {
-      return res.status(400).json({ message: "Please provide an identifier and password." });
-    }
+    if (!identifier || !password) {
+      return res.status(400).json({ message: "Please provide an identifier and password." });
+    }
 
-    const query = { $or: [{ email: identifier }, { phone: identifier }] };
-    
-    let user = await Patient.findOne(query);
-    let role = 'Patient';
+    const query = { $or: [{ email: identifier }, { phone: identifier }] };
+    
+    let user = await Patient.findOne(query);
+    let role = 'Patient';
 
-    if (!user) {
-      user = await Doctor.findOne(query);
-      role = 'Doctor';
-    }
+    if (!user) {
+      user = await Doctor.findOne(query);
+      role = 'Doctor';
+    }
 
-    if (!user || !user.password) {
-      return res.status(401).json({ message: "Invalid credentials." });
-    }
+    if (!user || !user.password) {
+      return res.status(401).json({ message: "Invalid credentials." });
+    }
 
-    const isMatch = await bcrypt.compare(password, user.password);
-    if (!isMatch) {
-      return res.status(401).json({ message: "Invalid credentials." });
-    }
+    const isMatch = await bcrypt.compare(password, user.password);
+    if (!isMatch) {
+      return res.status(401).json({ message: "Invalid credentials." });
+    }
 
-    if (role === 'Patient' && user.requiresPasswordReset) {
-      return res.status(200).json({
-        success: true,
-        requiresPasswordReset: true,
-        message: "Login successful, but you must reset your password.",
-        userId: user._id
-      });
-    }
+    if (role === 'Patient' && user.requiresPasswordReset) {
+      return res.status(200).json({
+        success: true,
+        requiresPasswordReset: true,
+        message: "Login successful, but you must reset your password.",
+        userId: user._id
+      });
+    }
 
-
-    // ## NEW LOGIC STARTS HERE ##
-
-    // 6. Create the payload for the tokens
     const payload = {
       user: {
         id: user._id,
@@ -500,38 +494,36 @@ exports.loginUser = async (req, res) => {
       }
     };
 
-    // 7. Create the short-lived Access Token
     const accessToken = jwt.sign(
       payload,
       process.env.ACCESS_TOKEN_SECRET,
-      { expiresIn: '1d' } // Or a shorter time like '15m'
+      { expiresIn: '1d' }
     );
 
-    // 8. Create the long-lived Refresh Token
     const refreshToken = jwt.sign(
       payload,
       process.env.REFRESH_TOKEN_SECRET,
       { expiresIn: '7d' }
     );
     
-    // 9. Save the Refresh Token to the database (so the middleware can find it)
     await OTP.findOneAndUpdate(
       { phone: user.phone },
       { refreshToken: refreshToken },
       { upsert: true, new: true }
     );
 
-    // 10. Send BOTH tokens back to the client
+    // ## MODIFIED RESPONSE BLOCK ##
+    // This section is updated to match your required output format.
     res.status(200).json({
       success: true,
-      message: "Logged in successfully!",
-      accessToken: "Bearer " + accessToken, // Renamed for clarity
+      accessToken: "Bearer " + accessToken,
       refreshToken: refreshToken,
-      user: {
-        id: user._id,
-        name: user.name,
-        role: role
-      }
+      userId: user._id,
+      name: user.name || '',
+      email: user.email || '',
+      phone: user.phone || '',
+      userType: role, // This is 'Patient' or 'Doctor'
+      role: user.role || '' // This is the specific role from the DB, e.g., 'admin-doctor'
     });
 
   } catch (error) {
