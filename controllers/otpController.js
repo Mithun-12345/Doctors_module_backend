@@ -454,63 +454,79 @@ exports.changePassword = async (req, res) => {
 
 exports.loginUser = async (req, res) => {
   try {
-    // 1. Get credentials from the request body (no 'role' needed)
+    // ... (steps 1-5 for finding and verifying the user remain the same) ...
     const { identifier, password } = req.body;
 
-    if (!identifier || !password) {
-      return res.status(400).json({ message: "Please provide an identifier and password." });
-    }
+    if (!identifier || !password) {
+      return res.status(400).json({ message: "Please provide an identifier and password." });
+    }
 
-    const query = { $or: [{ email: identifier }, { phone: identifier }] };
-    
-    // 2. Try to find the user, starting with the Patient model
-    let user = await Patient.findOne(query);
-    let role = 'Patient'; // Assume Patient role first
+    const query = { $or: [{ email: identifier }, { phone: identifier }] };
+    
+    let user = await Patient.findOne(query);
+    let role = 'Patient';
 
-    // If not found as a Patient, try finding them as a Doctor
-    if (!user) {
-      user = await Doctor.findOne(query);
-      role = 'Doctor';
-    }
+    if (!user) {
+      user = await Doctor.findOne(query);
+      role = 'Doctor';
+    }
 
-    // 3. If user is not found in either collection, or has no password
-    if (!user || !user.password) {
-      return res.status(401).json({ message: "Invalid credentials." });
-    }
+    if (!user || !user.password) {
+      return res.status(401).json({ message: "Invalid credentials." });
+    }
 
-    // 4. Compare passwords
-    const isMatch = await bcrypt.compare(password, user.password);
-    if (!isMatch) {
-      return res.status(401).json({ message: "Invalid credentials." });
-    }
+    const isMatch = await bcrypt.compare(password, user.password);
+    if (!isMatch) {
+      return res.status(401).json({ message: "Invalid credentials." });
+    }
 
-    // 5. Handle forced password reset (ONLY if the found user was a Patient)
-    if (role === 'Patient' && user.requiresPasswordReset) {
-      return res.status(200).json({
-        success: true,
-        requiresPasswordReset: true,
-        message: "Login successful, but you must reset your password.",
-        userId: user._id
-      });
-    }
+    if (role === 'Patient' && user.requiresPasswordReset) {
+      return res.status(200).json({
+        success: true,
+        requiresPasswordReset: true,
+        message: "Login successful, but you must reset your password.",
+        userId: user._id
+      });
+    }
 
-    // 6. If credentials are correct, create JWT
+
+    // ## NEW LOGIC STARTS HERE ##
+
+    // 6. Create the payload for the tokens
     const payload = {
-      id: user._id,
-      name: user.name,
-      role: role // Use the role we figured out
+      user: {
+        id: user._id,
+        phone: user.phone
+      }
     };
 
-    const token = jwt.sign(
+    // 7. Create the short-lived Access Token
+    const accessToken = jwt.sign(
       payload,
-      process.env.JWT_SECRET,
-      { expiresIn: '1d' }
+      process.env.ACCESS_TOKEN_SECRET,
+      { expiresIn: '1d' } // Or a shorter time like '15m'
     );
 
+    // 8. Create the long-lived Refresh Token
+    const refreshToken = jwt.sign(
+      payload,
+      process.env.REFRESH_TOKEN_SECRET,
+      { expiresIn: '7d' }
+    );
+    
+    // 9. Save the Refresh Token to the database (so the middleware can find it)
+    await OTP.findOneAndUpdate(
+      { phone: user.phone },
+      { refreshToken: refreshToken },
+      { upsert: true, new: true }
+    );
+
+    // 10. Send BOTH tokens back to the client
     res.status(200).json({
       success: true,
       message: "Logged in successfully!",
-      token: "Bearer " + token,
+      accessToken: "Bearer " + accessToken, // Renamed for clarity
+      refreshToken: refreshToken,
       user: {
         id: user._id,
         name: user.name,
