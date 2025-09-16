@@ -519,7 +519,7 @@ exports.loginUser = async (req, res) => {
     // 2. Build the base response object with all user data.
     const finalResponse = {
       success: true,
-      accessToken: "Bearer " + accessToken,
+      accessToken:  accessToken,
       refreshToken: refreshToken,
       userId: user._id,
       name: user.name || '',
