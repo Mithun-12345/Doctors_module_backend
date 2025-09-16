@@ -470,7 +470,6 @@ exports.loginUser = async (req, res) => {
 
     const query = { $or: [{ email: identifier }, { phone: identifier }] };
     
-    // Sequentially search for the user and determine their role
     let user = await Patient.findOne(query);
     let role = 'Patient';
 
@@ -479,28 +478,18 @@ exports.loginUser = async (req, res) => {
       role = 'Doctor';
     }
 
-    // Handle user not found or password not set
     if (!user || !user.password) {
       return res.status(401).json({ message: "Invalid credentials." });
     }
 
-    // Compare passwords
     const isMatch = await bcrypt.compare(password, user.password);
     if (!isMatch) {
       return res.status(401).json({ message: "Invalid credentials." });
     }
+    
+    // --- LOGIC RESTRUCTURED FROM HERE ---
 
-    // Handle the special case for a new patient's first login
-    if (role === 'Patient' && user.requiresPasswordReset) {
-      return res.status(200).json({
-        success: true,
-        requiresPasswordReset: true,
-        message: "Login successful, but you must reset your password.",
-        userId: user._id
-      });
-    }
-
-    // Create the JWT payload to be compatible with your middleware
+    // 1. Always create tokens and save the refresh token after a successful password match.
     const payload = {
       user: {
         id: user._id,
@@ -509,31 +498,28 @@ exports.loginUser = async (req, res) => {
       }
     };
 
-    // Create the short-lived Access Token
     const accessToken = jwt.sign(
       payload,
       process.env.ACCESS_TOKEN_SECRET,
       { expiresIn: '1d' }
     );
 
-    // Create the long-lived Refresh Token
     const refreshToken = jwt.sign(
       payload,
       process.env.REFRESH_TOKEN_SECRET,
       { expiresIn: '7d' }
     );
     
-    // Save the Refresh Token to the database for validation
     await OTP.findOneAndUpdate(
       { phone: user.phone },
       { refreshToken: refreshToken },
       { upsert: true, new: true }
     );
 
-    // Send the final, detailed response
-    res.status(200).json({
+    // 2. Build the base response object with all user data.
+    const finalResponse = {
       success: true,
-      accessToken:  accessToken,
+      accessToken: "Bearer " + accessToken,
       refreshToken: refreshToken,
       userId: user._id,
       name: user.name || '',
@@ -541,7 +527,18 @@ exports.loginUser = async (req, res) => {
       phone: user.phone || '',
       userType: role,
       role: user.role || ''
-    });
+    };
+
+    // 3. Conditionally add the password reset flag and update the message.
+    if (role === 'Patient' && user.requiresPasswordReset) {
+      finalResponse.requiresPasswordReset = true;
+      finalResponse.message = "Login successful, but you must reset your password.";
+    } else {
+      finalResponse.message = "Logged in successfully!";
+    }
+
+    // 4. Send the single, complete response.
+    res.status(200).json(finalResponse);
 
   } catch (error) {
     console.error("Login error:", error);
