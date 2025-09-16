@@ -516,7 +516,7 @@ exports.loginUser = async (req, res) => {
     // This section is updated to match your required output format.
     res.status(200).json({
       success: true,
-      accessToken: "Bearer " + accessToken,
+      accessToken: accessToken,
       refreshToken: refreshToken,
       userId: user._id,
       name: user.name || '',
