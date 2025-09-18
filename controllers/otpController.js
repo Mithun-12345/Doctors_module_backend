@@ -13,6 +13,8 @@ const Patient = require("../models/patientModel");
 const accountSid = process.env.TWILIO_ACCOUNT_SID;
 const authToken = process.env.TWILIO_AUTH_TOKEN;
 const client = new twilio(accountSid, authToken);
+const { sendPasswordResetEmail } = require('../services/emailService');
+
 
 const generateOTP = () => {
   return Math.floor(100000 + Math.random() * 900000).toString();
@@ -324,7 +326,7 @@ exports.loginWithPassword = asyncHandler(async (req, res) => {
 
 
 //works along with resetPassword
-exports.forgotPassword = asyncHandler(async (req, res) => {
+/*exports.forgotPassword = asyncHandler(async (req, res) => {
   const { phone, role } = req.body;
 
   let user;
@@ -359,7 +361,7 @@ exports.forgotPassword = asyncHandler(async (req, res) => {
   res
     .status(200)
     .json({ success: true, message: "OTP sent for password reset", otp });
-});
+});*/
 
 //works along with forgotPassword
 exports.resetPassword = asyncHandler(async (req, res) => {
@@ -607,3 +609,39 @@ exports.loginUser = async (req, res) => {
     res.status(500).json({ message: "Server error during login." });
   }
 };
+exports.forgotPassword = asyncHandler(async (req, res) => {
+  // 1. Get user identifier (email or phone) from the request body
+  const { identifier } = req.body;
+
+  if (!identifier) {
+    return res.status(400).json({ message: "Please provide an email or phone number." });
+  }
+
+  // 2. Find the patient by their email or phone number
+  const user = await Patient.findOne({
+    $or: [{ email: identifier }, { phone: identifier }],
+  });
+
+  // 3. IMPORTANT: Always send a success response, even if the user is not found.
+  // This is a security best practice to prevent attackers from guessing which emails are registered.
+  if (user) {
+    try {
+      // 4. If user exists, generate a token using the *same method* as before
+      const resetToken = user.createPasswordSetToken();
+      await user.save({ validateBeforeSave: false });
+
+      // 5. Create the reset URL and send the new "password reset" email
+      const resetUrl = `http://localhost:5173/set-password/${resetToken}`;
+      await sendPasswordResetEmail(user.email, resetUrl);
+
+    } catch (error) {
+        console.error("Forgot password error:", error);
+        // We still don't want to alert the user that something failed on the backend.
+    }
+  }
+
+  res.status(200).json({
+    success: true,
+    message: "If an account with that identifier exists, a password reset link has been sent.",
+  });
+});

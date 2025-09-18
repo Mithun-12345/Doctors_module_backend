@@ -50,5 +50,40 @@ const sendSetPasswordEmail = async (userEmail, setPasswordUrl) => {
     throw new Error("Email could not be sent.");
   }
 };
+const sendPasswordResetEmail = async (userEmail, resetUrl) => {
+  try {
+    const transporter = nodemailer.createTransport({
+      service: "gmail",
+      auth: {
+        user: process.env.EMAIL_USER,
+        pass: process.env.EMAIL_PASS,
+      },
+    });
 
-module.exports = { sendSetPasswordEmail };
+    const mailOptions = {
+      from: `"Consult Homeopathy Clinic" <${process.env.EMAIL_USER}>`,
+      to: userEmail,
+      subject: "Password Reset Request for Your Account",
+      html: `
+        <div style="font-family: Arial, sans-serif; color: #333; line-height: 1.6;">
+          <h1 style="color: #2c3e50;">Password Reset Request</h1>
+          <p>We received a request to reset the password for your account.</p>
+          <p>If you made this request, please click the button below to set a new password. If you did not make this request, you can safely ignore this email.</p>
+          <a href="${resetUrl}" style="background-color: #e74c3c; color: white; padding: 12px 25px; text-decoration: none; border-radius: 5px; display: inline-block; font-size: 16px; margin: 20px 0;">
+            Reset Your Password
+          </a>
+          <p>This link is valid for the next 10 minutes.</p>
+        </div>
+      `,
+    };
+
+    await transporter.sendMail(mailOptions);
+    console.log("Password reset email sent successfully to:", userEmail);
+  } catch (error) {
+    console.error("Error sending password reset email:", error);
+    throw new Error("Email could not be sent.");
+  }
+};
+
+
+module.exports = { sendSetPasswordEmail,sendPasswordResetEmail};
