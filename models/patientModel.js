@@ -1,4 +1,6 @@
 const mongoose = require("mongoose");
+const crypto = require("crypto"); // --- NEW ADDITION ---
+const bcrypt = require("bcryptjs"); // --- NEW ADDITION ---
 
 const patientSchema = new mongoose.Schema(
   {
@@ -51,11 +53,6 @@ const patientSchema = new mongoose.Schema(
       type: String,
       default: "pending",
     },
-    // callFromApp: {
-    //   //no need in frontend set default as No
-    //   type: String,
-    //   default: "pending",
-    // },
     patientEntry: {
       //add in frontend with drop down as insta, fb, google
       type: String,
@@ -64,20 +61,17 @@ const patientSchema = new mongoose.Schema(
       //add in frontend
       type: String,
     },
-
     appointmentFixed: {
       //no need in frontend
       type: String,
       enum: ["Yes", "No"],
       default: "No",
     },
-
     appDownload: {
       //no need in frontend
       type: Number,
       default: 0,
     },
-
     coupon: {
       type: String,
       required: false,
@@ -128,15 +122,59 @@ const patientSchema = new mongoose.Schema(
     },
     reminderOffset: {
       type: Number,
-     enum: [5, 10, 15],
-     default: 10, // or choose your default
+      enum: [5, 10, 15],
+      default: 10, // or choose your default
     },
     requiresPasswordReset:{
       type: Boolean,
       default:false
-    }
+    },
+
+    // --- NEW FIELDS ADDED FOR PASSWORD SETTING ---
+    passwordSetToken: String,
+    passwordSetExpires: Date,
+    // ------------------------------------------
+
   },
   { timestamps: true }
 );
+
+
+// --- NEW ADDITION: HASH PASSWORD BEFORE SAVING ---
+// This function will automatically run when you save a patient with a new password
+patientSchema.pre("save", async function(next) {
+  // Only run this function if the password was actually modified and exists
+  if (!this.isModified("password") || !this.password) {
+    return next();
+  }
+
+  // Hash the password with a cost of 12
+  this.password = await bcrypt.hash(this.password, 12);
+
+  // Once the password is set, we don't need the token anymore
+  this.passwordSetToken = undefined;
+  this.passwordSetExpires = undefined;
+
+  next();
+});
+
+// --- NEW ADDITION: METHOD TO GENERATE THE SECURE TOKEN ---
+patientSchema.methods.createPasswordSetToken = function() {
+  // 1. Generate a random token
+  const setToken = crypto.randomBytes(32).toString("hex");
+
+  // 2. Hash the token and store it in the database (for security)
+  this.passwordSetToken = crypto
+    .createHash("sha256")
+    .update(setToken)
+    .digest("hex");
+
+  // 3. Set an expiration time (e.g., 10 minutes)
+  this.passwordSetExpires = Date.now() + 10 * 60 * 1000;
+
+  // 4. Return the UN-HASHED token to be sent in the email
+  return setToken;
+};
+
 
 module.exports = mongoose.model("Patient", patientSchema);

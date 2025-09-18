@@ -5,7 +5,7 @@ const jwt = require("jsonwebtoken");
 const bcrypt = require("bcryptjs");
 //const Chronic = require("../models/chronicModel");
 const MedPrep = require("../models/medPrepUserDetails");
-
+const crypto = require("crypto");
 const OTP = require("../models/otpModel");
 const regForm = require("../models/patientModel");
 const Doctor = require("../models/doctorModel");
@@ -460,6 +460,68 @@ exports.changePassword = async (req, res) => {
     res.status(500).json({ message: "Internal Server Error" });
   }
 };
+// --- NEW SET PASSWORD FUNCTION ---
+exports.setPassword = asyncHandler(async (req, res) => {
+  // 1. Get the token from the URL parameter
+  const { token } = req.params;
+  const { password, confirmPassword } = req.body;
+
+  // Basic validation
+  if (!password || !confirmPassword) {
+    return res.status(400).json({ message: "Please provide a password and confirm it." });
+  }
+  if (password !== confirmPassword) {
+    return res.status(400).json({ message: "Passwords do not match." });
+  }
+  if (password.length < 6) {
+    return res.status(400).json({ message: "Password must be at least 6 characters long." });
+  }
+
+  // 2. Hash the incoming token so we can find it in the database
+  const hashedToken = crypto
+    .createHash("sha256")
+    .update(token)
+    .digest("hex");
+
+  // 3. Find the user by the hashed token & check if the token has expired
+  const user = await Patient.findOne({
+    passwordSetToken: hashedToken,
+    passwordSetExpires: { $gt: Date.now() }, // Check if the expiry date is in the future
+  });
+
+  // 4. If no user is found, the token is invalid or has expired
+  if (!user) {
+    return res.status(400).json({ message: "Token is invalid or has expired." });
+  }
+
+  // 5. If the user is valid, set the new password and update flags
+  user.password = password;
+  user.requiresPasswordReset = false;
+  // The token fields will be cleared automatically by the `pre-save` hook in your model
+  
+  await user.save();
+
+  // 6. LOG THE USER IN: Create JWTs for a seamless experience
+  const payload = {
+    user: {
+      id: user._id,
+      phone: user.phone
+    }
+  };
+
+  const accessToken = jwt.sign(payload, process.env.ACCESS_TOKEN_SECRET, { expiresIn: '1d' });
+  const refreshToken = jwt.sign(payload, process.env.REFRESH_TOKEN_SECRET, { expiresIn: '7d' });
+
+  // 7. Send the tokens back to the frontend
+  res.status(200).json({
+    success: true,
+    message: "Password has been set successfully.",
+    accessToken: accessToken,
+    refreshToken: refreshToken,
+    userId: user._id,
+    name: user.name,
+  });
+});
 exports.loginUser = async (req, res) => {
   try {
     const { identifier, password } = req.body;
