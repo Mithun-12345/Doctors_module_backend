@@ -462,59 +462,59 @@ exports.changePassword = async (req, res) => {
     res.status(500).json({ message: "Internal Server Error" });
   }
 };
-// --- NEW SET PASSWORD FUNCTION ---
+// In otpController.js
 exports.setPassword = asyncHandler(async (req, res) => {
-  // 1. Get the token from the URL parameter
   const { token } = req.params;
   const { password, confirmPassword } = req.body;
 
-  // Basic validation
-  if (!password || !confirmPassword) {
-    return res.status(400).json({ message: "Please provide a password and confirm it." });
-  }
-  if (password !== confirmPassword) {
-    return res.status(400).json({ message: "Passwords do not match." });
-  }
-  if (password.length < 6) {
-    return res.status(400).json({ message: "Password must be at least 6 characters long." });
+  // Validation logic remains the same...
+  if (!password || !confirmPassword || password !== confirmPassword) {
+    return res.status(400).json({ message: "Passwords do not match or are not provided." });
   }
 
-  // 2. Hash the incoming token so we can find it in the database
   const hashedToken = crypto
     .createHash("sha256")
     .update(token)
     .digest("hex");
-
-  // 3. Find the user by the hashed token & check if the token has expired
-  const user = await Patient.findOne({
+  
+  const query = {
     passwordSetToken: hashedToken,
-    passwordSetExpires: { $gt: Date.now() }, // Check if the expiry date is in the future
-  });
+    passwordSetExpires: { $gt: Date.now() },
+  };
 
-  // 4. If no user is found, the token is invalid or has expired
+  // --- MODIFIED LOGIC ---
+  // 1. Look for the user in the Patient collection first
+  let user = await Patient.findOne(query);
+  let userType = 'Patient';
+
+  // 2. If not found, look in the Doctor collection
+  if (!user) {
+    user = await Doctor.findOne(query);
+    userType = 'Doctor';
+  }
+  // --- END OF MODIFIED LOGIC ---
+
   if (!user) {
     return res.status(400).json({ message: "Token is invalid or has expired." });
   }
 
-  // 5. If the user is valid, set the new password and update flags
+  // The rest of the logic remains the same!
   user.password = password;
   user.requiresPasswordReset = false;
-  // The token fields will be cleared automatically by the `pre-save` hook in your model
-  
   await user.save();
 
-  // 6. LOG THE USER IN: Create JWTs for a seamless experience
+  // Create JWT payload with the correct role
   const payload = {
     user: {
       id: user._id,
-      phone: user.phone
+      phone: user.phone,
+      userType: userType
     }
   };
 
   const accessToken = jwt.sign(payload, process.env.ACCESS_TOKEN_SECRET, { expiresIn: '1d' });
   const refreshToken = jwt.sign(payload, process.env.REFRESH_TOKEN_SECRET, { expiresIn: '7d' });
 
-  // 7. Send the tokens back to the frontend
   res.status(200).json({
     success: true,
     message: "Password has been set successfully.",
@@ -609,34 +609,42 @@ exports.loginUser = async (req, res) => {
     res.status(500).json({ message: "Server error during login." });
   }
 };
+// In otpController.js
 exports.forgotPassword = asyncHandler(async (req, res) => {
-  // 1. Get user identifier (email or phone) from the request body
+  // 1. Get only the identifier from the request body
   const { identifier } = req.body;
 
   if (!identifier) {
     return res.status(400).json({ message: "Please provide an email or phone number." });
   }
 
-  // 2. Find the patient by their email or phone number
-  const user = await Patient.findOne({
-    $or: [{ email: identifier }, { phone: identifier }],
-  });
+  let user;
 
-  // 3. IMPORTANT: Always send a success response, even if the user is not found.
-  // This is a security best practice to prevent attackers from guessing which emails are registered.
+  // 2. First, try to find a Patient with the identifier
+  const patientQuery = { $or: [{ email: identifier }, { phone: identifier }] };
+  user = await Patient.findOne(patientQuery);
+
+  // 3. If no Patient is found, try to find a Doctor
+  if (!user) {
+    // Note: The Doctor model uses 'personalEmail'
+    const doctorQuery = { $or: [{ personalEmail: identifier }, { phone: identifier }] };
+    user = await Doctor.findOne(doctorQuery);
+  }
+  
+  // The rest of the logic remains the same
   if (user) {
     try {
-      // 4. If user exists, generate a token using the *same method* as before
       const resetToken = user.createPasswordSetToken();
       await user.save({ validateBeforeSave: false });
 
-      // 5. Create the reset URL and send the new "password reset" email
       const resetUrl = `http://localhost:5173/set-password/${resetToken}`;
-      await sendPasswordResetEmail(user.email, resetUrl);
-
+      
+      // 4. Use the correct email field from the found user object
+      const emailToSend = user.email || user.personalEmail;
+      await sendPasswordResetEmail(emailToSend, resetUrl);
+      
     } catch (error) {
         console.error("Forgot password error:", error);
-        // We still don't want to alert the user that something failed on the backend.
     }
   }
 

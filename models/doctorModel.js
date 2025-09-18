@@ -1,4 +1,6 @@
 const mongoose = require("mongoose");
+const crypto = require("crypto"); // --- NEW ADDITION ---
+const bcrypt = require("bcryptjs"); // --- NEW ADDITION ---
 
 const doctorSchema = new mongoose.Schema(
   {
@@ -35,7 +37,6 @@ const doctorSchema = new mongoose.Schema(
     employmentType: { type: String, required: true },
     workLocation: { type: String, required: true },
     reportingManager: { type: String, required: true },
-    // workShift: { type: String, required: true },
     workShift: { type: String, required: true },
 
     // Compensation Details
@@ -54,7 +55,11 @@ const doctorSchema = new mongoose.Schema(
     usernameSystemAccess: { type: String, required: true, unique: true },
     password: { type: String, required: true },
     accessLevel: { type: String, required: true },
-    // digitalSignature: { type: String },
+
+    // --- NEW FIELDS ADDED FOR PASSWORD FUNCTIONALITY ---
+    passwordSetToken: String,
+    passwordSetExpires: Date,
+    // ---------------------------------------------------
 
     // Educational Background
     highestQualification: { type: String, required: true },
@@ -100,11 +105,34 @@ const doctorSchema = new mongoose.Schema(
     zoomAccessToken: { type: String }, // Field for Zoom access token
     zoomRefreshToken: { type: String }, // Field for Zoom refresh token
     zoomTokenExpiration: { type: Date },
-    // Timestamps
   },
   { timestamps: true }
 );
+// --- PASTE THE FOLLOWING CODE BLOCK HERE ---
 
+// HASHES PASSWORD WHEN IT'S MODIFIED
+doctorSchema.pre("save", async function (next) {
+  if (!this.isModified("password")) {
+    return next();
+  }
+  this.password = await bcrypt.hash(this.password, 12);
+  this.passwordSetToken = undefined;
+  this.passwordSetExpires = undefined;
+  next();
+});
+
+// GENERATES THE PASSWORD RESET TOKEN
+doctorSchema.methods.createPasswordSetToken = function () {
+  const setToken = crypto.randomBytes(32).toString("hex");
+  this.passwordSetToken = crypto
+    .createHash("sha256")
+    .update(setToken)
+    .digest("hex");
+  this.passwordSetExpires = Date.now() + 10 * 60 * 1000; // 10 minutes
+  return setToken;
+};
+
+// -----------------------------------------
 const Doctor = mongoose.model("Doctor", doctorSchema);
 
 module.exports = Doctor;
