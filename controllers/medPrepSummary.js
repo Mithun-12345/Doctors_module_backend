@@ -1347,7 +1347,7 @@ const getFollowUpAppointmentsPrescriptions = async (req, res) => {
   try {
     // 1. Find all appointments with the specific follow-up status
     const appointments = await Appointment.find({ 
-        follow: 'Follow up-MP' 
+        follow: 'Medicine Preparation' 
     }).select('prescriptionID medicinePrepared');
 
     if (!appointments.length) {
