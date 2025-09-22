@@ -3799,3 +3799,95 @@ exports.rescheduleAppointment = async (req, res) => {
     res.status(500).json({ success: false, message: "Internal server error" });
   }
 };
+exports.getNotInterestedAppointmentCounts =async (req, res) => {
+  try {
+    const { classification } = req.body;
+
+    // 1. Validate the input
+    if (!classification || !["acute", "chronic"].includes(classification.toLowerCase())) {
+      return res.status(400).json({ message: "Invalid or missing classification. Must be 'acute' or 'chronic'." });
+    }
+
+    // Convert classification to the boolean used in the Appointment schema
+    const isChronic = classification.toLowerCase() === 'chronic';
+
+    // 2. Define the aggregation pipeline
+    const pipeline = [
+      // Stage 1: Look up the medical details for each appointment
+      {
+        $lookup: {
+          from: "patientdetails", // Your medical details collection name
+          localField: "patient",
+          foreignField: "patientId",
+          as: "medicalDetails"
+        }
+      },
+      // Deconstruct the array to access the object
+      {
+        $unwind: "$medicalDetails"
+      },
+      // Stage 2: Match based on BOTH criteria
+      {
+        $match: {
+          "medicalDetails.enquiryStatus": "Not Interested", // First, filter by enquiryStatus
+          "isChronic": isChronic // Then, filter by the provided classification
+        }
+      },
+      // Stage 3: Run parallel counts using $facet
+      {
+        $facet: {
+          'stageCounts': [
+            { $group: { _id: "$follow", count: { $sum: 1 } } }
+          ],
+          'totalCount': [
+            { $count: 'count' }
+          ]
+        }
+      }
+    ];
+
+    // 3. Execute the aggregation query
+    const results = await Appointment.aggregate(pipeline);
+    const resultData = results[0];
+
+    // 4. Format the response
+    const allStages = [
+      "Consultation",
+      "Prescription",
+      "Payment",
+      "Medicine Preparation",
+      "Shipment",
+      "Patient Care"
+    ];
+
+    const countsByStage = {};
+    allStages.forEach(stage => {
+      countsByStage[stage] = 0;
+    });
+
+    if (resultData.stageCounts) {
+      resultData.stageCounts.forEach(result => {
+        if (allStages.includes(result._id)) {
+          countsByStage[result._id] = result.count;
+        }
+      });
+    }
+
+    const totalCount = resultData.totalCount[0] ? resultData.totalCount[0].count : 0;
+    
+    // 5. Send the final JSON response
+    res.status(200).json({
+      success: true,
+      filters: {
+        enquiryStatus: "Not Interested",
+        classification: classification
+      },
+      totalAppointments: totalCount,
+      countsByStage: countsByStage
+    });
+
+  } catch (error) {
+    console.error("Error fetching appointment counts:", error);
+    res.status(500).json({ message: "Internal server error" });
+  }
+};
