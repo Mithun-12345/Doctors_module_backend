@@ -49,7 +49,8 @@ const {
   getPastAppointmentsCount,
   getTotalAppointmentsCount,
   getPatientById,
-  rescheduleAppointment
+  rescheduleAppointment,
+  getAppointmentCountsBasedOnClassification
 } = require("../controllers/patientController");
 const {
   upload,
@@ -72,6 +73,7 @@ const validateToken = require("../middlewares/validateTokenHandler");
 
 const router = express.Router();
 router.get("/appointments/total/count", validateToken, getTotalAppointmentsCount);
+router.patch("/sort-classification", getAppointmentCountsBasedOnClassification );
 router.get("/appointments/past", validateToken, getPastAppointmentsCount);
 router.get("/payments/count", validateToken, getCompletedPaymentsCount);
 router.post("/sendRegForm", sendForm);

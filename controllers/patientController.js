@@ -1678,6 +1678,75 @@ exports.updateFollowUpStatus = async (req, res) => {
     res.status(500).json({ message: "Internal server error" });
   }
 };
+exports.getAppointmentCountsBasedOnClassification = async (req, res) => {
+  try {
+    const { classification } = req.body;
+
+    // 1. Validate the input to be strictly 'acute' or 'chronic'
+    if (!classification || !["acute", "chronic"].includes(classification)) {
+      return res.status(400).json({ message: "Invalid or missing classification. Must be 'acute' or 'chronic' in lowercase." });
+    }
+
+    // 2. Define the simplified aggregation pipeline
+    const pipeline = [
+      // Stage 1: Match directly on the 'classification' field in the Appointment model
+      {
+        $match: { classification: classification }
+      },
+      // Stage 2: Run two parallel operations for counting
+      {
+        $facet: {
+          'totalCount': [
+            { $count: 'count' }
+          ],
+          'stageCounts': [
+            { $group: { _id: "$follow", count: { $sum: 1 } } }
+          ]
+        }
+      }
+    ];
+
+    // 3. Execute the aggregation query
+    const result = await Appointment.aggregate(pipeline);
+
+    // 4. Format the response (this logic is unchanged)
+    const allStages = [
+      "Consultation",
+      "Prescription",
+      "Payment",
+      "Medicine Preparation",
+      "Shipment",
+      "Patient Care"
+    ];
+
+    const countsByStage = {};
+    allStages.forEach(stage => {
+      countsByStage[stage] = 0;
+    });
+
+    let totalCount = 0;
+    
+    if (result.length > 0 && result[0].stageCounts) {
+      totalCount = result[0].totalCount[0] ? result[0].totalCount[0].count : 0;
+      
+      result[0].stageCounts.forEach(stage => {
+        countsByStage[stage._id] = stage.count;
+      });
+    }
+
+    // 5. Send the final JSON response
+    res.status(200).json({
+      success: true,
+      classification: classification,
+      totalAppointments: totalCount,
+      countsByStage: countsByStage,
+    });
+
+  } catch (error) {
+    console.error("Error fetching appointment counts:", error);
+    res.status(500).json({ message: "Internal server error" });
+  }
+};
 // Update Call Status
 exports.updateFollowPatientCall = async (req, res) => {
   const { patientId } = req.params;
