@@ -868,7 +868,7 @@ exports.finalizeAppointment = asyncHandler(async (req, res) => {
     appointment.paymentId = paymentId;
 
     // Update patient follow-up status
-    user.follow = "Follow up-C";
+    user.follow = "Consultation";
     await user.save();
 
     // Save the updated appointment
