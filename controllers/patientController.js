@@ -1184,7 +1184,7 @@ exports.bookAppointment = asyncHandler(async (req, res) => {
     if (!medicalDetails) {
       return res.status(400).json({ success: false, message: "Medical details not found" });
     }
-    medicalDetails.follow = "Follow up-C";
+    medicalDetails.follow = "Consultation";
     await medicalDetails.save();
 
     const doctor = await Doctor.findById(doctorId);
@@ -1608,20 +1608,20 @@ exports.updateFollowUpStatus = async (req, res) => {
     // --- Update appointment status ---
     const originalStatus = appointment.follow;
     switch (appointment.follow) {
-      case "Follow up-C":
-        appointment.follow = "Follow up-P";
+      case "Consultation":
+        appointment.follow = "Prescription";
         break;
-      case "Follow up-P":
-        appointment.follow = "Follow up-Mship";
+      case "Prescription":
+        appointment.follow = "Payment";
         break;
-      case "Follow up-Mship":
-        appointment.follow = "Follow up-MP";
+      case "Payment":
+        appointment.follow = "Medicine Preparation";
         break;
-      case "Follow up-MP":
-        appointment.follow = "Follow up-ship";
+      case "Medicine Preparation":
+        appointment.follow = "Shipment";
         break;
-      case "Follow up-ship":
-        appointment.follow = "Follow up-PCare";
+      case "Shipment":
+        appointment.follow = "Patient Care";
         break;
       default:
         return res.status(400).json({ message: "Invalid follow-up status" });
@@ -1631,7 +1631,7 @@ exports.updateFollowUpStatus = async (req, res) => {
     patient.patientStage = appointment.follow;
     patient.follow=appointment.follow;
 
-    if (appointment.follow === "Follow up-PCare") {
+    if (appointment.follow === "Patient Care") {
       patient.firstCycleCompleted = true;
     }
 
@@ -1642,7 +1642,7 @@ exports.updateFollowUpStatus = async (req, res) => {
     // --- START: NOTIFICATION LOGIC ---
 
     // Notification for when status changes from C to P
-    if (originalStatus === "Follow up-C" && appointment.follow === "Follow up-P") {
+    if (originalStatus === "Consultation" && appointment.follow === "Prescription") {
         await Notification.create({
             recipient: appointment.patient,
             message: "Following the conclusion of your appointment, we will guide you on the subsequent procedures. Please await further communication for updates.",
@@ -1652,7 +1652,7 @@ exports.updateFollowUpStatus = async (req, res) => {
     }
 
     // Notification for when status changes from ship to PCare
-    if (originalStatus === "Follow up-ship" && appointment.follow === "Follow up-PCare") {
+    if (originalStatus === "Shipment" && appointment.follow === "Patient Care") {
         await Notification.create({
             recipient: appointment.patient,
             message: "You are now under patient care and will receive regular reminders for your prescribed medication intake.",
@@ -1695,7 +1695,7 @@ exports.updateFollowPatientCall = async (req, res) => {
 
     // If the new call status is 'Completed', update the follow-up status
     if (newCallStatus === "Completed") {
-      patient.follow = "Follow up-C"; // Change this to the desired follow-up status
+      patient.follow = "Consultation"; // Change this to the desired follow-up status
     }
 
     // Save the updated patient record
