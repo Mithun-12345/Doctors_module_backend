@@ -1678,7 +1678,44 @@ exports.updateFollowUpStatus = async (req, res) => {
     res.status(500).json({ message: "Internal server error" });
   }
 };
+exports.getPatientStatistics = async (req, res) => {
+  try {
+    // Use an aggregation pipeline to get all counts in one efficient query
+    const result = await Patient.aggregate([
+      {
+        $facet: {
+          // Operation A: Get the total count of all patients
+          "totalPatients": [
+            { $count: "count" }
+          ],
+          // Operation B: Group patients by their 'newExisting' status and count each group
+          "statusCounts": [
+            { $group: { _id: "$newExisting", count: { $sum: 1 } } }
+          ]
+        }
+      }
+    ]);
 
+    // Extract and format the results
+    const totalCount = result[0].totalPatients[0] ? result[0].totalPatients[0].count : 0;
+    
+    const statusCounts = result[0].statusCounts;
+    const newPatients = statusCounts.find(status => status._id === "New")?.count || 0;
+    const existingPatients = statusCounts.find(status => status._id === "Existing")?.count || 0;
+    
+    // Send the final JSON response
+    res.status(200).json({
+      success: true,
+      totalPatients: totalCount,
+      newPatients: newPatients,
+      existingPatients: existingPatients
+    });
+
+  } catch (error) {
+    console.error("Error fetching patient statistics:", error);
+    res.status(500).json({ message: "Internal server error" });
+  }
+};
 exports.getAppointmentCountsBasedOnClassification = async (req, res) => {
   try {
     const { classification, newExisting } = req.body;
