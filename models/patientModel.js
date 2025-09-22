@@ -108,8 +108,7 @@ const patientSchema = new mongoose.Schema(
     ],
     follow: {
       // no need in frontend set default as PCall
-      type: String,
-      default: "Follow up-PCall",
+      type: String
     },
     followComment: {
       //no need in frontend
@@ -128,6 +127,22 @@ const patientSchema = new mongoose.Schema(
     requiresPasswordReset:{
       type: Boolean,
       default:false
+    },
+    patientStage: {
+      type: String,
+      enum: [
+        "Follow up-C",
+        "Follow up-P",
+        "Follow up-Mship",
+        "Follow up-MP",
+        "Follow up-ship",
+        "Follow up-PCare",
+      ],
+      default: "Follow up-C", // Sets the initial stage for a new patient
+    },
+    firstCycleCompleted: {
+      type: Boolean,
+      default: false, // This will be set to true when the patient reaches the final stage
     },
 
     // --- NEW FIELDS ADDED FOR PASSWORD SETTING ---
