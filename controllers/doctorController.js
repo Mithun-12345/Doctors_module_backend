@@ -596,6 +596,7 @@ exports.getAllAppointmentsWithPatientData = async (req, res) => {
             appointmentDate: appointment.appointmentDate,
             timeSlot: appointment.timeSlot,
             diseaseName: appointment.diseaseName,
+            classification:appointment.classification,
             diseaseType: appointment.diseaseType,
             follow: appointment.follow,
             followComment: appointment.followComment,
