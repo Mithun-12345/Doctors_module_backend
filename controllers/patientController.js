@@ -1251,6 +1251,7 @@ exports.bookAppointment = asyncHandler(async (req, res) => {
       diseaseName: symptom,            // symptom maps to diseaseName
       doctor: doctor._id,
       doctorName: doctor.name,
+      follow:"Consultation",
       appointmentDate,
       timeSlot,
       isChronic,

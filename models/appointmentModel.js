@@ -76,7 +76,7 @@ const appointmentSchema = new mongoose.Schema(
     follow: {
       // no need in frontend set default as PCall
       type: String,
-      default: "Follow up-C",
+      default: "Consultation",
     },
     followComment: {
       //no need in frontend
