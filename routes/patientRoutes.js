@@ -53,7 +53,8 @@ const {
   getAppointmentCountsBasedOnClassification,
   getPatientStatistics,
   getNotInterestedAppointmentCounts,
-  getNotInterestedPatientCountsTotal
+  getNotInterestedPatientCountsTotal,
+  getDashboardStatistics
 } = require("../controllers/patientController");
 const {
   upload,
@@ -69,8 +70,7 @@ const {
   referFriendUI,
   appointments,
   getPatientPayments,
-  g
-} = require("../controllers/UIController");
+  } = require("../controllers/UIController");
 
 const validateToken = require("../middlewares/validateTokenHandler");
 
@@ -79,6 +79,7 @@ router.get("/appointments/total/count", validateToken, getTotalAppointmentsCount
 router.patch("/sort-classification", getAppointmentCountsBasedOnClassification );
 router.get("/sort-total-lost", getNotInterestedPatientCountsTotal );
 router.patch("/sort-lost-patients", getNotInterestedAppointmentCounts);
+router.get("/dashboard-statistics", getDashboardStatistics);
 router.get("/classified-total-count",getPatientStatistics);
 router.get("/appointments/past", validateToken, getPastAppointmentsCount);
 router.get("/payments/count", validateToken, getCompletedPaymentsCount);

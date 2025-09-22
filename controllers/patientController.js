@@ -3953,3 +3953,107 @@ exports.getNotInterestedPatientCountsTotal = async (req, res) => {
     res.status(500).json({ message: "Internal server error" });
   }
 };
+exports.getDashboardStatistics = async (req, res) => {
+  try {
+    // This pipeline calculates everything at once
+    const pipeline = [
+      {
+        $facet: {
+          // --- 1. All Appointments (Acute vs Chronic) ---
+          "allAppointments": [
+            { $group: { _id: "$classification", count: { $sum: 1 } } }
+          ],
+
+          // --- 2 & 3. New vs Existing Appointments (Acute vs Chronic) ---
+          "newOrExistingAppointments": [
+            // First, get the patient info for each appointment
+            {
+              $lookup: {
+                from: "patients",
+                localField: "patient",
+                foreignField: "_id",
+                as: "patientInfo"
+              }
+            },
+            { $unwind: "$patientInfo" },
+            // Group by both classification AND newExisting status
+            {
+              $group: {
+                _id: {
+                  classification: "$classification",
+                  newExisting: "$patientInfo.newExisting"
+                },
+                count: { $sum: 1 }
+              }
+            }
+          ],
+
+          // --- 4. "Not Interested" Patients (Acute vs Chronic Appointments) ---
+          "notInterestedAppointments": [
+            // First, get the patient's medical details
+            {
+              $lookup: {
+                from: "patientdetails",
+                localField: "patient",
+                foreignField: "patientId",
+                as: "medicalDetails"
+              }
+            },
+            { $unwind: "$medicalDetails" },
+            // Match only those with the "Not Interested" status
+            {
+              $match: { "medicalDetails.enquiryStatus": "Not Interested" }
+            },
+            // Group the results by classification and count
+            {
+              $group: {
+                _id: "$classification",
+                count: { $sum: 1 }
+              }
+            }
+          ]
+        }
+      }
+    ];
+
+    // Execute the aggregation query
+    const result = await Appointment.aggregate(pipeline);
+    const data = result[0];
+
+    // Helper function to extract counts safely
+    const getCount = (arr, key) => arr.find(item => item._id === key)?.count || 0;
+    
+    // Format the final response
+    const formattedResponse = {
+      allAppointments: {
+        total: (getCount(data.allAppointments, "acute") + getCount(data.allAppointments, "chronic")),
+        acute: getCount(data.allAppointments, "acute"),
+        chronic: getCount(data.allAppointments, "chronic")
+      },
+      newAppointments: {
+        total: data.newOrExistingAppointments.filter(item => item._id.newExisting === "New").reduce((sum, item) => sum + item.count, 0),
+        acute: data.newOrExistingAppointments.find(item => item._id.classification === "acute" && item._id.newExisting === "New")?.count || 0,
+        chronic: data.newOrExistingAppointments.find(item => item._id.classification === "chronic" && item._id.newExisting === "New")?.count || 0
+      },
+      existingAppointments: {
+        total: data.newOrExistingAppointments.filter(item => item._id.newExisting === "Existing").reduce((sum, item) => sum + item.count, 0),
+        acute: data.newOrExistingAppointments.find(item => item._id.classification === "acute" && item._id.newExisting === "Existing")?.count || 0,
+        chronic: data.newOrExistingAppointments.find(item => item._id.classification === "chronic" && item._id.newExisting === "Existing")?.count || 0
+      },
+      notInterestedPatients: {
+        total: (getCount(data.notInterestedAppointments, "acute") + getCount(data.notInterestedAppointments, "chronic")),
+        acute: getCount(data.notInterestedAppointments, "acute"),
+        chronic: getCount(data.notInterestedAppointments, "chronic")
+      }
+    };
+    
+    res.status(200).json({
+      success: true,
+      statistics: formattedResponse
+    });
+
+  } catch (error) {
+    console.error("Error fetching dashboard statistics:", error);
+    res.status(500).json({ message: "Internal server error" });
+  }
+};
