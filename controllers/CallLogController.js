@@ -303,45 +303,51 @@ try {
 };
 
 const PatientDetails = require('../models/patientDetails');
-
 exports.listPatients = async (req, res) => {
   try {
     const patients = await Patient.aggregate([
-      // Stage 1: Get medical details (This is your original, untouched lookup)
+      // Stage 1: Get medical details (untouched)
       {
         $lookup: {
-          from: "patientdetails", // Make sure this matches the collection name in MongoDB
+          from: "patientdetails",
           localField: "_id",
           foreignField: "patientId",
           as: "medicalDetails",
         },
       },
-      // --- NEW LOGIC ADDED HERE ---
-      // Stage 2: Get the single most recent appointment for each patient
+      // Stage 2: Get the single most recent appointment
       {
         $lookup: {
-          from: "appointments", // Make sure this matches your appointments collection name
+          from: "appointments",
           localField: "_id",
           foreignField: "patient",
           pipeline: [
-            { $sort: { createdAt: -1 } }, // Sort appointments by most recent first
-            { $limit: 1 },                 // Only take the latest one
+            { $sort: { createdAt: -1 } },
+            { $limit: 1 },
+            // --- MODIFIED LINE ---
+            // Also retrieve the classification field
+            { $project: { consultingFor: 1, classification: 1, _id: 0 } }
+            // -------------------
           ],
           as: "latestAppointment",
         },
       },
-      // ----------------------------
     ]);
 
-    const formattedPatients = patients.map(patient => ({
-      ...patient,
-      medicalDetails: patient.medicalDetails.length > 0 ? patient.medicalDetails[0] : null,
-      // --- NEW LOGIC ADDED HERE ---
-      // Extract 'consultingFor' from the latest appointment we found
-      consultingFor: patient.latestAppointment.length > 0 ? patient.latestAppointment[0].consultingFor : null,
-      latestAppointment: undefined, // This line cleans up the response by removing the temporary field
-      // ----------------------------
-    }));
+    const formattedPatients = patients.map(patient => {
+        const latestAppointment = patient.latestAppointment.length > 0 ? patient.latestAppointment[0] : null;
+
+        return {
+            ...patient,
+            medicalDetails: patient.medicalDetails.length > 0 ? patient.medicalDetails[0] : null,
+            // Extract 'consultingFor' from the latest appointment
+            consultingFor: latestAppointment ? latestAppointment.consultingFor : null,
+            // --- NEW LINE ADDED HERE ---
+            classification: latestAppointment ? latestAppointment.classification : null,
+            // -------------------------
+            latestAppointment: undefined, // Cleans up the response
+        };
+    });
     
     res.json(formattedPatients);
   } catch (error) {

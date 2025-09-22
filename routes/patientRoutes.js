@@ -52,7 +52,8 @@ const {
   rescheduleAppointment,
   getAppointmentCountsBasedOnClassification,
   getPatientStatistics,
-  getNotInterestedAppointmentCounts
+  getNotInterestedAppointmentCounts,
+  getNotInterestedPatientCountsTotal
 } = require("../controllers/patientController");
 const {
   upload,
@@ -68,7 +69,7 @@ const {
   referFriendUI,
   appointments,
   getPatientPayments,
-
+  g
 } = require("../controllers/UIController");
 
 const validateToken = require("../middlewares/validateTokenHandler");
@@ -76,6 +77,7 @@ const validateToken = require("../middlewares/validateTokenHandler");
 const router = express.Router();
 router.get("/appointments/total/count", validateToken, getTotalAppointmentsCount);
 router.patch("/sort-classification", getAppointmentCountsBasedOnClassification );
+router.get("/sort-total-lost", getNotInterestedPatientCountsTotal );
 router.patch("/sort-lost-patients", getNotInterestedAppointmentCounts);
 router.get("/classified-total-count",getPatientStatistics);
 router.get("/appointments/past", validateToken, getPastAppointmentsCount);

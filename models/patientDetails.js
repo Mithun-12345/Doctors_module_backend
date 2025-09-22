@@ -57,7 +57,7 @@ const patientDetailsSchema = new mongoose.Schema({
     follow: {
       // no need in frontend set default as PCall
       type: String,
-      default: "Follow up-PCall",
+      default: "Miscellaneous",
     },
     followComment: {
       //no need in frontend

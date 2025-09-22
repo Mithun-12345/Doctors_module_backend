@@ -3891,3 +3891,65 @@ exports.getNotInterestedAppointmentCounts =async (req, res) => {
     res.status(500).json({ message: "Internal server error" });
   }
 };
+exports.getNotInterestedPatientCountsTotal = async (req, res) => {
+  try {
+    const pipeline = [
+      // Stage 1: Find all documents where enquiryStatus is "Not Interested"
+      {
+        $match: { enquiryStatus: "Not Interested" }
+      },
+      // Stage 2: Look up the main patient data to get their "newExisting" status
+      {
+        $lookup: {
+          from: "patients", // Your main patients collection name
+          localField: "patientId",
+          foreignField: "_id",
+          as: "patientInfo"
+        }
+      },
+      // Deconstruct the array to access the patient object
+      {
+        $unwind: "$patientInfo"
+      },
+      // Stage 3: Run two parallel counting operations
+      {
+        $facet: {
+          // Operation A: Get the total count of all matched patients
+          "totalCount": [
+            { $count: "count" }
+          ],
+          // Operation B: Group the results by the 'newExisting' status and count each
+          "statusCounts": [
+            { $group: { _id: "$patientInfo.newExisting", count: { $sum: 1 } } }
+          ]
+        }
+      }
+    ];
+
+    // Execute the aggregation query
+    const result = await PatientDetails.aggregate(pipeline);
+    const resultData = result[0];
+
+    // Extract and format the results
+    const totalCount = resultData.totalCount[0] ? resultData.totalCount[0].count : 0;
+    
+    const statusCounts = resultData.statusCounts;
+    const newPatients = statusCounts.find(status => status._id === "New")?.count || 0;
+    const existingPatients = statusCounts.find(status => status._id === "Existing")?.count || 0;
+    
+    // Send the final JSON response
+    res.status(200).json({
+      success: true,
+      filter: {
+        enquiryStatus: "Not Interested"
+      },
+      totalNotInterested: totalCount,
+      newPatientCount: newPatients,
+      existingPatientCount: existingPatients,
+    });
+
+  } catch (error) {
+    console.error("Error fetching patient statistics:", error);
+    res.status(500).json({ message: "Internal server error" });
+  }
+};
