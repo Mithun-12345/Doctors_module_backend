@@ -50,10 +50,8 @@ const appointmentSchema = new mongoose.Schema(
     // },
     consultingFor: {
       type: String, // Changed from mongoose.Schema.Types.ObjectId
-      required: false,
-      default:"Self"
+      required: false
     },
-
     diseaseName: {
       //consultingReason
       type: String,
@@ -115,6 +113,10 @@ const appointmentSchema = new mongoose.Schema(
     },
     comments: [commentSchema],
     symptomNotKnown: {
+      //no need in frontend
+      type: String,
+    },
+    classification: {
       //no need in frontend
       type: String,
     },

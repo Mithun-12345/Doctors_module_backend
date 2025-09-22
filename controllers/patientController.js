@@ -1184,7 +1184,8 @@ exports.bookAppointment = asyncHandler(async (req, res) => {
     if (!medicalDetails) {
       return res.status(400).json({ success: false, message: "Medical details not found" });
     }
-    medicalDetails.follow = "Follow up-PCall";
+    medicalDetails.follow = "Follow up-C";
+    medicalDetails.diseaseName = symptom;
     await medicalDetails.save();
 
     const doctor = await Doctor.findById(doctorId);
@@ -1246,9 +1247,9 @@ exports.bookAppointment = asyncHandler(async (req, res) => {
       patient: user._id,
       patientEmail: user.email,
       patientName: user.name,
-      consultingFor,
-      reason: consultingReason,
-      symptom,
+      consultingFor: consultingFor,
+      classification: consultingReason, // consultingReason maps to classification
+      diseaseName: symptom,            // symptom maps to diseaseName
       doctor: doctor._id,
       doctorName: doctor.name,
       appointmentDate,

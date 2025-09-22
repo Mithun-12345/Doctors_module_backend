@@ -9,6 +9,7 @@ const Prescription = require("../models/Prescription");
 const Notification = require("../models/notificationHub");
 const authMiddleware = require("../middlewares/validateTokenHandler");
 const MedicalDetails = require("../models/patientDetails");
+const Patient = require("../models/patientModel");
 
 const router = express.Router();
 
