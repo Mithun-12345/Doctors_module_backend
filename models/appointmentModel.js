@@ -51,6 +51,7 @@ const appointmentSchema = new mongoose.Schema(
     consultingFor: {
       type: String, // Changed from mongoose.Schema.Types.ObjectId
       required: false,
+      default:"Self"
     },
 
     diseaseName: {

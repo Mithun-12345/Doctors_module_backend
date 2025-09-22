@@ -8,6 +8,7 @@ const Doctor = require("../models/doctorModel");
 const Prescription = require("../models/Prescription");
 const Notification = require("../models/notificationHub");
 const authMiddleware = require("../middlewares/validateTokenHandler");
+const MedicalDetails = require("../models/patientDetails");
 
 const router = express.Router();
 
@@ -312,6 +313,11 @@ router.post("/verify-prescription-payment", authMiddleware, async (req, res) => 
     }
 
     // --- End of Changes ---
+        await MedicalDetails.findOneAndUpdate(
+      { patientId: prescription.patientId },
+      { medicalPayment: "Yes" },
+      { session }
+    );
 
     // 3. Update the prescription to mark it as paid
     prescription.isPayementDone = true;

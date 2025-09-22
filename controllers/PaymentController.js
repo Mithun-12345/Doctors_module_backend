@@ -275,6 +275,12 @@ class PaymentController {
       if (!transaction) {
         throw new Error("Transaction not found or already processed");
       }
+          // --- NEW LOGIC ADDED HERE ---
+    // After successful payment, find the patient and update their 'appointmentFixed' status.
+    const patientId = transaction.patientId;
+    if (patientId) {
+      await Patient.findByIdAndUpdate(patientId, { appointmentFixed: "Yes" });
+    }
 
       res.status(200).json({
         success: true,
