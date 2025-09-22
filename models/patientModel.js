@@ -129,16 +129,7 @@ const patientSchema = new mongoose.Schema(
       default:false
     },
     patientStage: {
-      type: String,
-      enum: [
-        "Follow up-C",
-        "Follow up-P",
-        "Follow up-Mship",
-        "Follow up-MP",
-        "Follow up-ship",
-        "Follow up-PCare",
-      ],
-      default: "Follow up-C", // Sets the initial stage for a new patient
+      type: String
     },
     firstCycleCompleted: {
       type: Boolean,
