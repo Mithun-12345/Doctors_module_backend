@@ -307,66 +307,43 @@ const PatientDetails = require('../models/patientDetails');
 exports.listPatients = async (req, res) => {
   try {
     const patients = await Patient.aggregate([
-      // Stage 1: Get medical details (existing logic)
+      // Stage 1: Get medical details (This is your original, untouched lookup)
       {
         $lookup: {
-          from: "patientdetails", // The collection name for medical details
+          from: "patientdetails", // Make sure this matches the collection name in MongoDB
           localField: "_id",
           foreignField: "patientId",
           as: "medicalDetails",
         },
       },
-
       // --- NEW LOGIC ADDED HERE ---
-      // Stage 2: Look up all appointments for each patient
+      // Stage 2: Get the single most recent appointment for each patient
       {
         $lookup: {
-          from: "appointments", // The collection name for appointments
+          from: "appointments", // Make sure this matches your appointments collection name
           localField: "_id",
-          foreignField: "patient", // The field in appointments linking to the patient's ID
-          as: "appointments",
+          foreignField: "patient",
+          pipeline: [
+            { $sort: { createdAt: -1 } }, // Sort appointments by most recent first
+            { $limit: 1 },                 // Only take the latest one
+          ],
+          as: "latestAppointment",
         },
       },
       // ----------------------------
-
-      // Stage 3: Format the final output
-      {
-        $project: {
-          // Keep all original patient fields
-          name: 1,
-          age: 1,
-          phone: 1,
-          email: 1,
-          gender: 1,
-          patientStage: 1,
-          firstCycleCompleted: 1,
-          newExisting: 1,
-          follow: 1,
-          // Add any other patient fields you want to keep here...
-
-          // Unwind the medical details to get a single object or null
-          medicalDetails: { $arrayElemAt: ["$medicalDetails", 0] },
-          
-          // --- NEW LOGIC ADDED HERE ---
-          // Find the latest appointment and get its 'consultingFor' field
-          consultingFor: {
-            // Get the last element from the appointments array
-            $let: {
-              vars: {
-                lastAppointment: { $arrayElemAt: ["$appointments", -1] },
-              },
-              in: "$$lastAppointment.consultingFor", // Return the consultingFor field
-            },
-          },
-          // ----------------------------
-        },
-      },
     ]);
 
-    // The mapping is now handled by the aggregation, so this is no longer needed.
-    // const formattedPatients = patients.map(...) 
-
-    res.json(patients);
+    const formattedPatients = patients.map(patient => ({
+      ...patient,
+      medicalDetails: patient.medicalDetails.length > 0 ? patient.medicalDetails[0] : null,
+      // --- NEW LOGIC ADDED HERE ---
+      // Extract 'consultingFor' from the latest appointment we found
+      consultingFor: patient.latestAppointment.length > 0 ? patient.latestAppointment[0].consultingFor : null,
+      latestAppointment: undefined, // This line cleans up the response by removing the temporary field
+      // ----------------------------
+    }));
+    
+    res.json(formattedPatients);
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
