@@ -1185,7 +1185,6 @@ exports.bookAppointment = asyncHandler(async (req, res) => {
       return res.status(400).json({ success: false, message: "Medical details not found" });
     }
     medicalDetails.follow = "Follow up-C";
-    medicalDetails.diseaseName = symptom;
     await medicalDetails.save();
 
     const doctor = await Doctor.findById(doctorId);

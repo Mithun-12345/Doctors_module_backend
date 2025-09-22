@@ -306,24 +306,67 @@ const PatientDetails = require('../models/patientDetails');
 
 exports.listPatients = async (req, res) => {
   try {
-    // Fetch all patients and populate their medical details
     const patients = await Patient.aggregate([
+      // Stage 1: Get medical details (existing logic)
       {
         $lookup: {
-          from: "patientdetails", // Make sure this matches the collection name in MongoDB
+          from: "patientdetails", // The collection name for medical details
           localField: "_id",
           foreignField: "patientId",
           as: "medicalDetails",
         },
       },
+
+      // --- NEW LOGIC ADDED HERE ---
+      // Stage 2: Look up all appointments for each patient
+      {
+        $lookup: {
+          from: "appointments", // The collection name for appointments
+          localField: "_id",
+          foreignField: "patient", // The field in appointments linking to the patient's ID
+          as: "appointments",
+        },
+      },
+      // ----------------------------
+
+      // Stage 3: Format the final output
+      {
+        $project: {
+          // Keep all original patient fields
+          name: 1,
+          age: 1,
+          phone: 1,
+          email: 1,
+          gender: 1,
+          patientStage: 1,
+          firstCycleCompleted: 1,
+          newExisting: 1,
+          follow: 1,
+          // Add any other patient fields you want to keep here...
+
+          // Unwind the medical details to get a single object or null
+          medicalDetails: { $arrayElemAt: ["$medicalDetails", 0] },
+          
+          // --- NEW LOGIC ADDED HERE ---
+          // Find the latest appointment and get its 'consultingFor' field
+          consultingFor: {
+            // Get the last element from the appointments array
+            $let: {
+              vars: {
+                lastAppointment: { $arrayElemAt: ["$appointments", -1] },
+              },
+              in: "$$lastAppointment.consultingFor", // Return the consultingFor field
+            },
+          },
+          // ----------------------------
+        },
+      },
     ]);
 
-    const formattedPatients = patients.map(patient => ({
-      ...patient,
-      medicalDetails: patient.medicalDetails.length > 0 ? patient.medicalDetails[0] : null,
-    }));
-    // console.log(formattedPatients);
-    res.json(formattedPatients);
+    // The mapping is now handled by the aggregation, so this is no longer needed.
+    // const formattedPatients = patients.map(...) 
+
+    res.json(patients);
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
