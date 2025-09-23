@@ -1,21 +1,21 @@
 {
   "project_info": {
-    "project_number": "419213015077",
-    "project_id": "exponotification-fcf08",
-    "storage_bucket": "exponotification-fcf08.firebasestorage.app"
+    "project_number": "362970070307",
+    "project_id": "homeopathy-clinic-maarrs",
+    "storage_bucket": "homeopathy-clinic-maarrs.firebasestorage.app"
   },
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:419213015077:android:bab0799950d194baf7a7cc",
+        "mobilesdk_app_id": "1:362970070307:android:dcf90d668aba2b640e2096",
         "android_client_info": {
-          "package_name": "com.bragadeesh_710.rn_push_notification"
+          "package_name": "com.com.homeopathyclinic"
         }
       },
       "oauth_client": [],
       "api_key": [
         {
-          "current_key": "AIzaSyAOaJr7zYADQZoNQ2f8pMYdcYVQdQIe24A"
+          "current_key": "AIzaSyBg-Bw6O65dIWxIYQVWuEmT4adNZUZ3ioU"
         }
       ],
       "services": {
