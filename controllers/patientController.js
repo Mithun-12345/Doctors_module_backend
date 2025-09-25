@@ -4110,3 +4110,60 @@ exports.getDashboardStatistics = async (req, res) => {
     res.status(500).json({ message: "Internal server error" });
   }
 };
+
+exports.getAllAppointmentCountsByStagePerfect = async (req, res) => {
+  try {
+    const pipeline = [
+      {
+        $group: {
+          _id: "$follow",
+          count: { $sum: 1 }
+        }
+      },
+      {
+          $project: {
+              _id: 0,
+              stage: "$_id",
+              count: "$count"
+          }
+      }
+    ];
+
+    const results = await Appointment.aggregate(pipeline);
+
+    // --- NEW LOGIC ADDED HERE ---
+    // Calculate the total by summing the counts from the results
+    const totalAppointments = results.reduce((sum, stage) => sum + stage.count, 0);
+    // ----------------------------
+
+    const allStages = [
+      "Consultation",
+      "Prescription",
+      "Payment",
+      "Medicine Preparation",
+      "Shipment",
+      "Patient Care"
+    ];
+
+    const countsByStage = {};
+    allStages.forEach(stage => {
+      countsByStage[stage] = 0;
+    });
+
+    results.forEach(result => {
+      if (allStages.includes(result.stage)) {
+        countsByStage[result.stage] = result.count;
+      }
+    });
+    
+    res.status(200).json({
+      success: true,
+      totalAppointments: totalAppointments, // <-- Total count added here
+      appointmentCounts: countsByStage
+    });
+
+  } catch (error) {
+    console.error("Error fetching appointment counts:", error);
+    res.status(500).json({ message: "Internal server error" });
+  }
+};

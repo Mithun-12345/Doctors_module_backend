@@ -54,7 +54,8 @@ const {
   getPatientStatistics,
   getNotInterestedAppointmentCounts,
   getNotInterestedPatientCountsTotal,
-  getDashboardStatistics
+  getDashboardStatistics,
+  getAllAppointmentCountsByStagePerfect
 } = require("../controllers/patientController");
 const {
   upload,
@@ -78,6 +79,7 @@ const router = express.Router();
 router.get("/appointments/total/count", validateToken, getTotalAppointmentsCount);
 router.patch("/sort-classification", getAppointmentCountsBasedOnClassification );
 router.get("/sort-total-lost", getNotInterestedPatientCountsTotal );
+router.get("/perfect-sort-stage", getAllAppointmentCountsByStagePerfect );
 router.patch("/sort-lost-patients", getNotInterestedAppointmentCounts);
 router.get("/dashboard-statistics", getDashboardStatistics);
 router.get("/classified-total-count",getPatientStatistics);

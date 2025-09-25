@@ -5,6 +5,7 @@ const NotificationReminderSettings = require('../models/NotificationReminderSett
 const { pushnotificationModel } = require("../models/pushNotificationModel"); // Adjust path
 const admin = require("../configs/firebase"); // Your initialized Firebase Admin SDK
 
+// No changes to this function. It is correct.
 const generateAppointmentReminders = async () => {
   try {
     console.log('Running cron job: Checking for upcoming appointment reminders...');
@@ -82,30 +83,19 @@ const generateAppointmentReminders = async () => {
   }
 };
 
-// --- THIS IS THE MISSING FUNCTION ---
-/**
- * Schedules the reminder function to run.
- */
 const startReminderCronJob = () => {
-  // Runs every 5 minutes
   cron.schedule('*/5 * * * *', generateAppointmentReminders, {
     scheduled: true,
     timezone: "Asia/Kolkata"
   });
-
   console.log('✅ Appointment reminder cron job scheduled to run every 5 minutes.');
 };
-// ------------------------------------
 
-/**
- * Finds and sends pending medicine reminders.
- */
 const generateMedicineReminders = async () => {
     try {
-        console.log('Running cron job: Checking for medicine reminders...');
+        console.log('Running cron job: Checking for ADVANCE medicine reminders...');
         const now = new Date();
 
-        // 1. Find all reminders for today that haven't been sent yet
         const startOfToday = new Date();
         startOfToday.setHours(0, 0, 0, 0);
         const endOfToday = new Date();
@@ -117,7 +107,7 @@ const generateMedicineReminders = async () => {
         });
 
         if (pendingReminders.length === 0) {
-            console.log('No pending medicine reminders found for today.');
+            console.log('No pending advance medicine reminders found for today.');
             return;
         }
 
@@ -126,35 +116,29 @@ const generateMedicineReminders = async () => {
             const [hours, minutes] = reminder.doseTime.split(':');
             const doseDateTime = new Date(reminder.date);
             doseDateTime.setHours(hours, minutes, 0, 0);
-
-            // Calculate the exact time the reminder should be sent
-            const reminderMinutes = reminder.reminderSetting || 5; // Default to 5 mins if not set
+            const reminderMinutes = reminder.reminderSetting || 5;
             const scheduledReminderTime = new Date(doseDateTime.getTime() - reminderMinutes * 60 * 1000);
 
-            // If the scheduled time is now or in the past, it's time to send
             if (scheduledReminderTime <= now) {
                 remindersToSend.push(reminder);
             }
         }
 
         if (remindersToSend.length === 0) {
-            console.log('No medicine reminders due at this exact minute.');
+            console.log('No advance medicine reminders due at this exact minute.');
             return;
         }
 
-        const sentReminderIds = [];
-
         for (const reminder of remindersToSend) {
-            // Create a nicely formatted time string (e.g., "3:03 PM")
             const [hours, minutes] = reminder.doseTime.split(':');
             const doseTimeObject = new Date();
             doseTimeObject.setHours(hours, minutes, 0, 0);
             const formattedDoseTime = doseTimeObject.toLocaleTimeString('en-US', { hour: 'numeric', minute: 'numeric', hour12: true });
 
-            // This is the improved notification message
-            const notificationMessage = `Reminder: It's time to take your ${reminder.medicineName} at ${formattedDoseTime}.`;
-
-            // 2. Create the in-app notification
+            // --- IMPROVEMENT 1: Made the message clearer for the advance reminder ---
+            const reminderMinutes = reminder.reminderSetting || 5;
+            const notificationMessage = `Reminder: Your dose of ${reminder.medicineName} is due in ${reminderMinutes} minutes at ${formattedDoseTime}.`;
+            
             await Notification.create({
                 recipient: reminder.patientId,
                 message: notificationMessage,
@@ -162,7 +146,6 @@ const generateMedicineReminders = async () => {
                 link: `/prescriptions/${reminder.prescriptionId}`,
             });
 
-            // 3. Send the Push Notification
             try {
                 const pushInfo = await pushnotificationModel.findOne({ patientId: reminder.patientId });
                 if (pushInfo && pushInfo.token) {
@@ -173,44 +156,32 @@ const generateMedicineReminders = async () => {
                         },
                         token: pushInfo.token
                     });
-                    console.log(`Push notification sent for medicine reminder to patient: ${reminder.patientId}`);
+                    console.log(`Advance push notification sent to patient: ${reminder.patientId}`);
                 }
             } catch (pushError) {
-                console.error(`Failed to send medicine reminder push notification:`, pushError);
+                console.error(`Failed to send advance push notification:`, pushError);
             }
-
-            sentReminderIds.push(reminder._id);
+            
+            // Mark the reminder as sent immediately after processing
+            await NotificationReminderSettings.updateOne({ _id: reminder._id }, { $set: { reminderSent: true } });
         }
-
-        // 4. Mark the reminders as sent to prevent duplicates
-        if (sentReminderIds.length > 0) {
-            await NotificationReminderSettings.updateMany(
-                { _id: { $in: sentReminderIds } },
-                { $set: { reminderSent: true } }
-            );
-            console.log(`Successfully sent and updated ${sentReminderIds.length} medicine reminders.`);
-        }
-
+        console.log(`Successfully sent and updated ${remindersToSend.length} advance medicine reminders.`);
     } catch (error) {
-        console.error('Error running medicine reminder cron job:', error);
+        console.error('Error running advance medicine reminder cron job:', error);
     }
 };
 
-/**
- * Schedules the medicine reminder cron job to run.
- */
 const startMedicineReminderCronJob = () => {
-    // Runs every minute
     cron.schedule('* * * * *', generateMedicineReminders, {
         scheduled: true,
         timezone: "Asia/Kolkata"
     });
-
-    console.log('✅ Medicine reminder cron job scheduled to run every minute.');
+    console.log('✅ Advance medicine reminder cron job scheduled to run every minute.');
 };
+
 const generateExactTimeReminders = async () => {
     try {
-        console.log('Running cron job: Checking for exact-time medicine notifications...');
+        console.log('Running cron job: Checking for EXACT-TIME medicine notifications...');
         const now = new Date();
 
         const currentTime = now.toLocaleTimeString('en-IN', {
@@ -223,7 +194,8 @@ const generateExactTimeReminders = async () => {
         const dueReminders = await NotificationReminderSettings.find({
             date: { $gte: startOfToday, $lt: new Date(startOfToday.getTime() + 24 * 60 * 60 * 1000) },
             doseTime: currentTime,
-            reminderSent: false
+            onTimeNotificationSent: false,
+            status: null // Only send if the user hasn't already acted
         });
 
         if (dueReminders.length === 0) {
@@ -231,12 +203,9 @@ const generateExactTimeReminders = async () => {
             return;
         }
 
-        const sentReminderIds = [];
-
         for (const reminder of dueReminders) {
             const notificationMessage = `It's time to take your medicine: ${reminder.medicineName}.`;
             
-            // --- MODIFICATION IS HERE ---
             const pushInfo = await pushnotificationModel.findOne({ patientId: reminder.patientId });
             if (pushInfo && pushInfo.token) {
                 const message = {
@@ -244,24 +213,14 @@ const generateExactTimeReminders = async () => {
                         title: 'Time for your medicine! 💊',
                         body: notificationMessage
                     },
-                    // Add this data payload to trigger actions
                     data: {
-                        // A category for the app to identify the button layout
                         actionCategory: "MEDICATION_RESPONSE", 
-                        
-                        // Pass the exact details the app needs to call your API
                         patientId: reminder.patientId.toString(),
                         medicineName: reminder.medicineName,
                         doseTime: reminder.doseTime,
-                        date: reminder.date.toISOString().split('T')[0] // Format as YYYY-MM-DD
+                        date: reminder.date.toISOString().split('T')[0]
                     },
-                    apns: {
-                        payload: {
-                            aps: {
-                                category: "MEDICATION_RESPONSE" // For iOS
-                            }
-                        }
-                    },
+                    apns: { payload: { aps: { category: "MEDICATION_RESPONSE" } } },
                     token: pushInfo.token
                 };
                 
@@ -273,34 +232,33 @@ const generateExactTimeReminders = async () => {
                 }
             }
             
-            // The in-app notification remains the same
-            await Notification.create({ /* ... */ });
+            // --- IMPROVEMENT 2: Filled in the missing in-app notification ---
+            await Notification.create({
+                recipient: reminder.patientId,
+                message: notificationMessage,
+                type: 'MEDICINE_DOSE_TIME',
+                link: `/prescriptions/${reminder.prescriptionId}`
+            });
             
-            sentReminderIds.push(reminder._id);
+            // Mark this specific reminder as sent
+            await NotificationReminderSettings.updateOne({ _id: reminder._id }, { $set: { onTimeNotificationSent: true } });
         }
-
-        if (sentReminderIds.length > 0) {
-            await NotificationReminderSettings.updateMany(
-                { _id: { $in: sentReminderIds } },
-                { $set: { reminderSent: true } }
-            );
-            console.log(`Successfully sent and updated ${sentReminderIds.length} actionable reminders.`);
-        }
-
+        console.log(`Successfully sent and updated ${dueReminders.length} actionable reminders.`);
     } catch (error) {
         console.error('Error running exact-time reminder cron job:', error);
     }
 };
+
 const startExactTimeReminderCronJob = () => {
-    // Runs every minute
     cron.schedule('* * * * *', generateExactTimeReminders, {
         scheduled: true,
         timezone: "Asia/Kolkata"
     });
-
     console.log('✅ Exact-time medicine reminder cron job scheduled to run every minute.');
 };
 
-
-// Now the export will work correctly because the function exists
-module.exports = { startReminderCronJob,startMedicineReminderCronJob,startExactTimeReminderCronJob};
+module.exports = { 
+    startReminderCronJob,
+    startMedicineReminderCronJob,
+    startExactTimeReminderCronJob
+};

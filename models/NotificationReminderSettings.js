@@ -53,6 +53,10 @@ reminderSent: {
 type: Boolean,
 default: false
 },
+onTimeNotificationSent: {
+      type: Boolean,
+      default: false // <-- ADD THIS NEW FIELD for the ON-TIME reminder
+    },
 status: {
 type: Boolean,
 default: null // Can be true (acknowledged), false (missed), or null (pending)
