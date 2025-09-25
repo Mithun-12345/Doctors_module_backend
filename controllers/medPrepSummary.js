@@ -13,6 +13,8 @@ const Appointment = require("../models/appointmentModel");
 const WastageLog = require('../models/wastageSchema');
 const MasterInstructions = require('../models/medPrepSettings');
 const Notification = require('../models/notificationHub');
+const { pushnotificationModel } = require("../models/pushNotificationModel");
+const admin = require("../configs/firebase");
 
 const initializeMedicinePreparation = async (req, res) => {
   try {
@@ -68,23 +70,44 @@ const initializeMedicinePreparation = async (req, res) => {
       await summary.save();
     }
 
-    // --- START: ADDED NOTIFICATION LOGIC ---
+    // --- START: NOTIFICATION LOGIC ---
 
-    // 1. Find the prescription to get the patient's ID
     const prescription = await Prescription.findById(prescriptionId);
     
-    // 2. If the prescription exists, create the notification for the patient
     if (prescription) {
         await Notification.create({
-            recipient: prescription.patientId, // The patient associated with the prescription
+            recipient: prescription.patientId,
             message: "Your medicine is under preparation. We will update you further. Stay tuned.",
             type: "MEDICINE_PREPARATION_STARTED",
-            link: `/track-order/${prescriptionId}` // Example link to an order tracking page
+            link: `/track-order/${prescriptionId}`
         });
+
+        // =================================================================
+        // --- NEW PUSH NOTIFICATION LOGIC ADDED HERE ---
+        // =================================================================
+        try {
+            const pushInfo = await pushnotificationModel.findOne({ patientId: prescription.patientId });
+            if (pushInfo && pushInfo.token) {
+                await admin.messaging().send({
+                    notification: {
+                        title: "Preparation Started",
+                        body: "Your medicine is under preparation. We will update you further. Stay tuned."
+                    },
+                    token: pushInfo.token
+                });
+                console.log(`Push notification for 'Medicine Preparation' sent to patient: ${prescription.patientId}`);
+            }
+        } catch (pushError) {
+            console.error(`Failed to send 'Medicine Preparation' push notification:`, pushError);
+        }
+        // =================================================================
+        // --- END OF NEW PUSH NOTIFICATION LOGIC ---
+        // =================================================================
     }
 
-    // --- END: ADDED NOTIFICATION LOGIC ---
+    // --- END: NOTIFICATION LOGIC ---
 
+    // This final response remains UNCHANGED.
     return res.status(201).json({
       message: 'Medicine preparation initialized successfully',
       data: summary
@@ -1285,7 +1308,6 @@ const setMedicineExpiryDate = async (req, res) => {
     res.status(500).json({ message: 'Server error while updating expiry date.' });
   }
 };
-
 const updateShipmentStatus = async (req, res) => {
   const { prescriptionId } = req.params;
   const { shipmentStatus } = req.body;
@@ -1307,34 +1329,52 @@ const updateShipmentStatus = async (req, res) => {
       return res.status(404).json({ message: 'Preparation summary not found for this prescription.' });
     }
     if (result.modifiedCount === 0 && shipmentStatus === false) {
-       // If status is false and nothing was modified, it's not a "shipped" event.
       return res.status(200).json({ message: 'Shipment status is already set to not shipped.' });
     }
     
-    // --- START: ADDED NOTIFICATION LOGIC ---
+    // --- START: NOTIFICATION LOGIC ---
 
-    // Only send a notification if the status was successfully updated to TRUE (shipped)
     if (shipmentStatus === true) {
-      // 1. Fetch the necessary details for the notification message
       const summary = await MedicinePreparationSummary.findOne({ prescriptionId: prescriptionId });
       const prescription = await Prescription.findById(prescriptionId);
 
       if (summary && prescription) {
-        // Use the first medicine's name for a concise message
         const medicineName = summary.medicinePreparations?.[0]?.medicineName || 'order';
 
-        // 2. Create the notification
         await Notification.create({
-          recipient: prescription.patientId, // Get the patient's ID
+          recipient: prescription.patientId,
           message: `Your ${medicineName} that was prepared has been shipped successfully.`,
           type: "MEDICINE_SHIPMENT_DONE",
-          link: `/track-order/${prescriptionId}`, // Example link to a tracking page
+          link: `/track-order/${prescriptionId}`,
         });
+
+        // =================================================================
+        // --- NEW PUSH NOTIFICATION LOGIC ADDED HERE ---
+        // =================================================================
+        try {
+            const pushInfo = await pushnotificationModel.findOne({ patientId: prescription.patientId });
+            if (pushInfo && pushInfo.token) {
+                await admin.messaging().send({
+                    notification: {
+                        title: "Order Shipped!",
+                        body: `Your ${medicineName} that was prepared has been shipped successfully.`
+                    },
+                    token: pushInfo.token
+                });
+                console.log(`Push notification for 'Shipment' sent to patient: ${prescription.patientId}`);
+            }
+        } catch (pushError) {
+            console.error(`Failed to send 'Shipment' push notification:`, pushError);
+        }
+        // =================================================================
+        // --- END OF NEW PUSH NOTIFICATION LOGIC ---
+        // =================================================================
       }
     }
 
-    // --- END: ADDED NOTIFICATION LOGIC ---
+    // --- END: NOTIFICATION LOGIC ---
 
+    // This final response remains UNCHANGED.
     res.status(200).json({ message: 'Shipment status updated successfully.' });
 
   } catch (error) {
@@ -1342,7 +1382,6 @@ const updateShipmentStatus = async (req, res) => {
     res.status(500).json({ message: 'Server error while updating shipment status.' });
   }
 };
-
 const getFollowUpAppointmentsPrescriptions = async (req, res) => {
   try {
     // 1. Find all appointments with the specific follow-up status

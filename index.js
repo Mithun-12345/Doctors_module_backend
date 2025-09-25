@@ -87,7 +87,7 @@ const geminiTextServiceRoutes=require("./routes/geminiTextServiceRoutes.js")
 const validateToken = require("./middlewares/validateTokenHandler");
 
 // ✅ SERVICES
-const { startReminderCronJob } = require('./utils/notificationScheduler.js');
+const { startReminderCronJob,startMedicineReminderCronJob,generateExactTimeReminders} = require('./utils/notificationScheduler.js');
 const { analyzePatientMessage, triggerActionFromIntent, conversationalFallback } = require("./services/groqservice");
 
 // =================================================================================
@@ -543,6 +543,8 @@ server.listen(PORT, () => {
   console.log(`🚀 Server running on port ${PORT}`);
   console.log(`🔌 Socket.io server ready for connections`);
   startReminderCronJob();
+  startMedicineReminderCronJob();
+  generateExactTimeReminders()
 });
 
 // Graceful Shutdown Logic

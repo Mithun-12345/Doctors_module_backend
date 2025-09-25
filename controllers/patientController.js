@@ -33,9 +33,6 @@ const admin = require("../configs/firebase");
 const {pushnotificationModel} = require("../models/pushNotificationModel");
 const Message = require('../models/messageModel'); // Or whatever the path to your file is
 
-
-
-
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID;
 const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET;
 const GOOGLE_REDIRECT_URI = process.env.GOOGLE_REDIRECT_URI;
@@ -1156,6 +1153,8 @@ exports.patientAppointmentDates = asyncHandler(async (req,res) =>{
   return res.json({ message : true , lastAppointmentDocument : matchedAppointment});
 
 });
+
+
 exports.bookAppointment = asyncHandler(async (req, res) => {
   const phone = req.user.phone;
   const {
@@ -1248,7 +1247,7 @@ exports.bookAppointment = asyncHandler(async (req, res) => {
       patientName: user.name,
       consultingFor: consultingFor,
       classification: consultingReason, // consultingReason maps to classification
-      diseaseName: symptom,            // symptom maps to diseaseName
+      diseaseName: symptom,           // symptom maps to diseaseName
       doctor: doctor._id,
       doctorName: doctor.name,
       follow:"Consultation",
@@ -1264,7 +1263,6 @@ exports.bookAppointment = asyncHandler(async (req, res) => {
 
     const savedAppointment = await newAppointment.save();
 
-    // This formatting is still done for the final API response
     const appointmentFullDate = new Date(`${appointmentDate}T${timeSlot}`);
     const istFormatter = new Intl.DateTimeFormat('en-IN', {
       timeZone: 'Asia/Kolkata',
@@ -1273,17 +1271,43 @@ exports.bookAppointment = asyncHandler(async (req, res) => {
     });
     const formattedDateTime = istFormatter.format(appointmentFullDate);
 
-    // --- NOTIFICATION LOGIC UPDATED ---
     await Notification.create({
       recipient: user._id,
-      // The message stored in the database is now unformatted
       message: `Your appointment with ${doctor.name} for ${appointmentDate} at ${timeSlot} is reserved.`,
       type: "APPOINTMENT_RESERVED",
       link: `/appointments/${savedAppointment._id}`,
     });
-    // ------------------------------------
 
-    // The final API response remains unchanged, using the formatted date
+    // =================================================================
+    // --- NEW PUSH NOTIFICATION LOGIC ADDED HERE ---
+    // =================================================================
+    try {
+      // 1. Find the patient's FCM token from your push notification collection
+      const pushInfo = await pushnotificationModel.findOne({ patientId: user._id });
+
+      // 2. If the patient has a token, send them a push notification
+      if (pushInfo && pushInfo.token) {
+        const message = {
+          notification: {
+            title: "Appointment Reserved!",
+            body: `Your appointment with ${doctor.name} on ${appointmentDate} at ${timeSlot} is reserved.`,
+          },
+          token: pushInfo.token,
+        };
+
+        await admin.messaging().send(message);
+        // This is the message acknowledgement you requested (it will appear in your server console)
+        console.log(`Push notification sent successfully to patient: ${user._id}`);
+      }
+    } catch (pushError) {
+      // We log the error but do not stop the main function, so the user still gets a success response.
+      console.error(`Failed to send push notification to patient ${user._id}:`, pushError);
+    }
+    // =================================================================
+    // --- END OF NEW PUSH NOTIFICATION LOGIC ---
+    // =================================================================
+
+    // This final response remains UNCHANGED.
     res.status(201).json({
       success: true,
       message: `Your appointment with ${doctor.name} for ${formattedDateTime} is reserved.`,
@@ -1600,13 +1624,11 @@ exports.updateFollowUpStatus = async (req, res) => {
       return res.status(404).json({ message: "appointment not found" });
     }
 
-    // Find the associated patient
     const patient = await Patient.findById(appointment.patient);
     if (!patient) {
         return res.status(404).json({ message: "Associated patient not found" });
     }
 
-    // --- Update appointment status ---
     const originalStatus = appointment.follow;
     switch (appointment.follow) {
       case "Consultation":
@@ -1628,21 +1650,18 @@ exports.updateFollowUpStatus = async (req, res) => {
         return res.status(400).json({ message: "Invalid follow-up status" });
     }
     
-    // --- Update the Patient Document ---
     patient.patientStage = appointment.follow;
-    patient.follow=appointment.follow;
+    patient.follow = appointment.follow;
 
     if (appointment.follow === "Patient Care") {
       patient.firstCycleCompleted = true;
     }
 
-    // Save both the updated appointment and patient documents
     await appointment.save();
     await patient.save();
     
     // --- START: NOTIFICATION LOGIC ---
 
-    // Notification for when status changes from C to P
     if (originalStatus === "Consultation" && appointment.follow === "Prescription") {
         await Notification.create({
             recipient: appointment.patient,
@@ -1650,9 +1669,25 @@ exports.updateFollowUpStatus = async (req, res) => {
             type: "FOLLOW_UP_UPDATE",
             link: `/appointments/${appointment._id}`
         });
+
+        // --- PUSH NOTIFICATION ADDED HERE ---
+        try {
+            const pushInfo = await pushnotificationModel.findOne({ patientId: appointment.patient });
+            if (pushInfo && pushInfo.token) {
+                await admin.messaging().send({
+                    notification: {
+                        title: "Consultation Update",
+                        body: "Following the conclusion of your appointment, we will guide you on the subsequent procedures. Please await further communication for updates."
+                    },
+                    token: pushInfo.token
+                });
+                console.log(`Push notification sent for 'Prescription' status to patient: ${appointment.patient}`);
+            }
+        } catch (pushError) {
+            console.error(`Failed to send 'Prescription' push notification:`, pushError);
+        }
     }
 
-    // Notification for when status changes from ship to PCare
     if (originalStatus === "Shipment" && appointment.follow === "Patient Care") {
         await Notification.create({
             recipient: appointment.patient,
@@ -1660,10 +1695,28 @@ exports.updateFollowUpStatus = async (req, res) => {
             type: "PATIENT_CARE_STARTED",
             link: `/patient-care/${appointment.patient}`
         });
+
+        // --- PUSH NOTIFICATION ADDED HERE ---
+        try {
+            const pushInfo = await pushnotificationModel.findOne({ patientId: appointment.patient });
+            if (pushInfo && pushInfo.token) {
+                await admin.messaging().send({
+                    notification: {
+                        title: "Patient Care Started",
+                        body: "You are now under patient care and will receive regular reminders for your prescribed medication intake."
+                    },
+                    token: pushInfo.token
+                });
+                console.log(`Push notification sent for 'Patient Care' status to patient: ${appointment.patient}`);
+            }
+        } catch (pushError) {
+            console.error(`Failed to send 'Patient Care' push notification:`, pushError);
+        }
     }
 
     // --- END: NOTIFICATION LOGIC ---
 
+    // This final response remains UNCHANGED.
     res.status(200).json({
       message: "Follow-up status updated successfully",
       appointment: {
