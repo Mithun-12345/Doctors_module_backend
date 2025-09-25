@@ -291,7 +291,16 @@ const generateExactTimeReminders = async () => {
         console.error('Error running exact-time reminder cron job:', error);
     }
 };
+const startExactTimeReminderCronJob = () => {
+    // Runs every minute
+    cron.schedule('* * * * *', generateExactTimeReminders, {
+        scheduled: true,
+        timezone: "Asia/Kolkata"
+    });
+
+    console.log('✅ Exact-time medicine reminder cron job scheduled to run every minute.');
+};
 
 
 // Now the export will work correctly because the function exists
-module.exports = { startReminderCronJob,startMedicineReminderCronJob,generateExactTimeReminders};
+module.exports = { startReminderCronJob,startMedicineReminderCronJob,startExactTimeReminderCronJob};
