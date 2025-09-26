@@ -55,7 +55,15 @@ const doctorSchema = new mongoose.Schema(
     usernameSystemAccess: { type: String, required: true, unique: true },
     password: { type: String, required: true },
     accessLevel: { type: String, required: true },
-
+    lastLoginAt: {
+      type: Date,
+      default: null,
+    },
+    userStatus: {
+      type: String,
+      enum: ['Active', 'Inactive', 'Dormant', 'Exit'],
+      default: 'Active'
+    },
     // --- NEW FIELDS ADDED FOR PASSWORD FUNCTIONALITY ---
     passwordSetToken: String,
     passwordSetExpires: Date,

@@ -550,6 +550,8 @@ exports.loginUser = async (req, res) => {
     if (!isMatch) {
       return res.status(401).json({ message: "Invalid credentials." });
     }
+    user.lastLoginAt = new Date();
+    await user.save();
     
     // --- LOGIC RESTRUCTURED FROM HERE ---
 

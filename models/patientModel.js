@@ -24,6 +24,11 @@ const patientSchema = new mongoose.Schema(
       required: true,
       unique: true,
     },
+    userStatus: {
+      type: String,
+      enum: ['Active', 'Inactive', 'Dormant', 'Exit'],
+      default: 'Active'
+    },
     isBotActive : {
       type : Boolean,
       default : true
@@ -123,6 +128,10 @@ const patientSchema = new mongoose.Schema(
       type: Number,
       enum: [5, 10, 15],
       default: 10, // or choose your default
+    },
+    lastLoginAt: {
+      type: Date,
+      default: null,
     },
     requiresPasswordReset:{
       type: Boolean,

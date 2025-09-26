@@ -256,9 +256,56 @@ const startExactTimeReminderCronJob = () => {
     });
     console.log('✅ Exact-time medicine reminder cron job scheduled to run every minute.');
 };
+const updateUserActivityStatus = async () => {
+  try {
+    console.log('Running cron job: Updating user activity statuses...');
+    const now = new Date();
 
+    // Define the date thresholds from today
+    const activeThreshold = new Date(now.getTime() - (60 * 24 * 60 * 60 * 1000));
+    const inactiveThreshold = new Date(now.getTime() - (120 * 24 * 60 * 60 * 1000));
+    const dormantThreshold = new Date(now.getTime() - (365 * 24 * 60 * 60 * 1000));
+
+    // --- Update Patients ---
+    const patientUpdates = [
+      // Active: Last login within 60 days
+      Patient.updateMany({ lastLoginAt: { $gte: activeThreshold } }, { userStatus: 'Active' }),
+      // Inactive: Last login between 61 and 120 days
+      Patient.updateMany({ lastLoginAt: { $lt: activeThreshold, $gte: inactiveThreshold } }, { userStatus: 'Inactive' }),
+      // Dormant: Last login between 121 and 365 days
+      Patient.updateMany({ lastLoginAt: { $lt: inactiveThreshold, $gte: dormantThreshold } }, { userStatus: 'Dormant' }),
+      // Exit: Last login more than 365 days ago
+      Patient.updateMany({ lastLoginAt: { $lt: dormantThreshold } }, { userStatus: 'Exit' })
+    ];
+    
+    // --- Update Doctors ---
+    const doctorUpdates = [
+      Doctor.updateMany({ lastLoginAt: { $gte: activeThreshold } }, { userStatus: 'Active' }),
+      Doctor.updateMany({ lastLoginAt: { $lt: activeThreshold, $gte: inactiveThreshold } }, { userStatus: 'Inactive' }),
+      Doctor.updateMany({ lastLoginAt: { $lt: inactiveThreshold, $gte: dormantThreshold } }, { userStatus: 'Dormant' }),
+      Doctor.updateMany({ lastLoginAt: { $lt: dormantThreshold } }, { userStatus: 'Exit' })
+    ];
+    
+    // Run all updates in parallel for efficiency
+    await Promise.all([...patientUpdates, ...doctorUpdates]);
+
+    console.log('✅ User activity statuses updated successfully.');
+  } catch (error) {
+    console.error('Error running user status update cron job:', error);
+  }
+};
+// --- NEW SCHEDULER FUNCTION ---
+const startUserStatusCronJob = () => {
+  // Schedule to run at 1:00 AM every day
+  cron.schedule('0 1 * * *', updateUserActivityStatus, {
+    scheduled: true,
+    timezone: "Asia/Kolkata"
+  });
+  console.log('✅ User status update cron job scheduled to run daily at 1:00 AM.');
+};
 module.exports = { 
     startReminderCronJob,
     startMedicineReminderCronJob,
-    startExactTimeReminderCronJob
+    startExactTimeReminderCronJob,
+    startUserStatusCronJob
 };
