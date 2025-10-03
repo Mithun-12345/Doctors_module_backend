@@ -947,190 +947,7 @@ exports.createDoctorAppointmentInitialSetup = asyncHandler(async (req,res)=>{
   }
 });
 
-function to24Hour(timeStr) {
-  let [hr, min, period] = timeStr.match(/(\d+):(\d+)\s*(AM|PM)/).slice(1,4);
-  hr = parseInt(hr, 10);
-  min = parseInt(min, 10);
-  if (period === "PM" && hr !== 12) hr += 12;
-  if (period === "AM" && hr === 12) hr = 0;
-  return { hr, min };
-}
 
-function getTimeSlots24(start, end, interval) {
-  let result = [];
-  const s = to24Hour(start);
-  const e = to24Hour(end);
-
-  let current = new Date(0, 0, 0, s.hr, s.min);
-  const endDate = new Date(0, 0, 0, e.hr, e.min);
-
-  while (current <= endDate) {
-    let hh = current.getHours().toString().padStart(2, "0");
-    let mm = current.getMinutes().toString().padStart(2, "0");
-    result.push(`${hh}:${mm}`); // Only 24-hour format, no AM/PM
-    current.setMinutes(current.getMinutes() + interval);
-  }
-  return result;
-}
-
-function removeSlots(slotsToRemove, slots) {
-  const removalSet = new Set(slotsToRemove);
-  return slots.filter(slot => !removalSet.has(slot));
-}
-
-function getFrequency(arr) {
-  const freq = { Acute: 0, Chronic: 0, Others: 0 };
-
-  for (const word of arr) {
-    if (freq.hasOwnProperty(word)) {
-      freq[word] += 1;
-    }
-  }
-
-  return freq;
-}
-
-function calculateSlots(total, percentObj) {
-  const result = {};
-  let sum = 0;
-
-  for (const [key, percent] of Object.entries(percentObj)) {
-    result[key] = Math.floor((percent / 100) * total);
-    sum += result[key];
-  }
-
-  // Adjust to ensure the total is exactly equal to totalSlots
-  let remainder = total - sum;
-  if (remainder > 0) {
-    // Assign remainder to the category with highest percentage (Acute here)
-    result['Acute'] += remainder;
-  }
-
-  return result;
-}
-
-//give timeslots 
-// const Appointment = require("../models/appointmentModel"); 
-const {ClinicOperationHours} = require("../models/consultationMessengerSettings");
-
-exports.appointmentBookingTimeSlot = async (req,res)=>{
-  const doctorId = req.user._id;
-  const {appointmentType,date} = req.body;
-
-  try{
-    if (!date) {
-      return res.status(400).json({ message: "Date is required" });
-    }
-    
-    const inputDate = new Date(date);
-  // Get day of week
-    const days = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
-    const dayName = days[inputDate.getDay()];
-    console.log("Particular day : ",dayName);
-
-    // check the  status 
-    const result = await ClinicOperationHours.find({day : dayName});
-
-    console.log("result : ",result);
-    if(result.status === false){
-      console.log("Not calculated");
-      return res.json({message : "Not available for this day "});
-    }
-
-    // get all the appointments in that day 
-
-    // Convert input date into start and end of the day
-    const start = new Date(date);
-    start.setHours(0, 0, 0, 0);
-
-    const end = new Date(date);
-    end.setHours(23, 59, 59, 999);
-
-    const appointments = await Appointment.find({
-      appointmentDate: { $gte: start, $lte: end }
-    });
-
-    // this timeslots having the booked appointments times 
-    const timeSlots = appointments.map(app => app.timeSlot);
-    // array of disease category actue,chronic 
-    const categorydisease = appointments.map(app => app.diseaseType.name);
-
-
-    const startingTime = result[0].startingTime;
-    const endingTime = result[0].endingTime
-
-    const answer = await DoctorPrefinedAppointmentDetails.find({});
-    const consultationTime = answer[0].consultationTime;
-    const totalslot = answer[0].totalslotPerday;
-
-    const percentages = {
-      Acute: 70,
-      Chronic: 20,
-      Others: 10,
-    };
-    const categoryrealdata = calculateSlots(totalslot,percentages);
-    const frequencyOfCategoryDisease = getFrequency(categorydisease);
-
-    if(appointmentType === "Acute"){
-      if(categoryrealdata.Acute <= frequencyOfCategoryDisease.Acute){
-        return res.json("Acute limit reached today ");
-      }
-    }
-    else if(appointmentType === "Chronic"){
-      if(categoryrealdata.Chronic <= frequencyOfCategoryDisease.Chronic){
-        return res.json("Chronic limit reached today ");
-      }
-    }
-    else{
-      if(categoryrealdata.Others <= frequencyOfCategoryDisease.Others){
-        return res.json("Other limit reached today");
-      }
-    }
-
-    const alltimeslot = getTimeSlots24(startingTime,endingTime,consultationTime);
-
-    const output = removeSlots(timeSlots,alltimeslot);
-    
-    return res.json({result : output });
-
-  }
-  catch(error){
-    console.log("error : ",error);
-    return res.json({message : "error"});
-  }
-
-
-}
-
-function getMostRecentAppointment(appointmentDates) {
-  const today = new Date();
-  const fifteenDaysBefore = new Date();
-  fifteenDaysBefore.setDate(today.getDate() - 15);
-
-  // Filter only appointments within the last 15 days
-  const pastAppointments = appointmentDates
-      .map(dateStr => new Date(dateStr))
-      .filter(date => date >= fifteenDaysBefore && date <= today);
-
-  // Sort descending (latest first)
-  pastAppointments.sort((a, b) => b - a);
-
-  // Return the most recent one (first in sorted array)
-  return pastAppointments.length > 0 ? pastAppointments[0] : null;
-}
-
-function findAppointmentsByDate(appointments, requestedDate) {
-  // Normalize requested date to YYYY-MM-DD
-  const reqDate = new Date(requestedDate).toISOString().split("T")[0];
-
-  // Filter full documents where date matches
-  const matchedAppointments = appointments.filter(app => {
-    const appDate = new Date(app.appointmentDate).toISOString().split("T")[0];
-    return appDate === reqDate;
-  });
-
-  return matchedAppointments;
-}
 // patent appointment dates 
 
 exports.patientAppointmentDates = asyncHandler(async (req,res) =>{
@@ -3296,6 +3113,249 @@ exports.getPendingPaymentsByPatient = async (req, res) => {
     console.error("Error fetching pending payments:", error);
     res.status(500).json({ message: "Internal server error" });
   }
+};
+function to24Hour(timeStr) {
+  let [hr, min, period] = timeStr.match(/(\d+):(\d+)\s*(AM|PM)/).slice(1,4);
+  hr = parseInt(hr, 10);
+  min = parseInt(min, 10);
+  if (period === "PM" && hr !== 12) hr += 12;
+  if (period === "AM" && hr === 12) hr = 0;
+  return { hr, min };
+}
+
+function getTimeSlots24(start, end, interval) {
+  let result = [];
+  const s = to24Hour(start);
+  const e = to24Hour(end);
+
+  let current = new Date(0, 0, 0, s.hr, s.min);
+  const endDate = new Date(0, 0, 0, e.hr, e.min);
+
+  while (current <= endDate) {
+    let hh = current.getHours().toString().padStart(2, "0");
+    let mm = current.getMinutes().toString().padStart(2, "0");
+    result.push(`${hh}:${mm}`); // Only 24-hour format, no AM/PM
+    current.setMinutes(current.getMinutes() + interval);
+  }
+  return result;
+}
+
+function removeSlots(slotsToRemove, slots) {
+  const removalSet = new Set(slotsToRemove);
+  return slots.filter(slot => !removalSet.has(slot));
+}
+
+function getFrequency(arr) {
+  const freq = { Acute: 0, Chronic: 0, Others: 0 };
+
+  for (const word of arr) {
+    if (freq.hasOwnProperty(word)) {
+      freq[word] += 1;
+    }
+  }
+
+  return freq;
+}
+
+function calculateSlots(total, percentObj) {
+  const result = {};
+  let sum = 0;
+
+  for (const [key, percent] of Object.entries(percentObj)) {
+    result[key] = Math.floor((percent / 100) * total);
+    sum += result[key];
+  }
+
+  // Adjust to ensure the total is exactly equal to totalSlots
+  let remainder = total - sum;
+  if (remainder > 0) {
+    // Assign remainder to the category with highest percentage (Acute here)
+    result['Acute'] += remainder;
+  }
+
+  return result;
+}
+
+//give timeslots 
+// const Appointment = require("../models/appointmentModel"); 
+const {ClinicOperationHours,AppointmentSlotTypes} = require("../models/consultationMessengerSettings");
+/**
+ * Helper function to calculate the number of slots per category.
+ * @param {number} totalSlots - The total number of slots available in a day.
+ * @param {object} percentages - An object with percentages for each category.
+ * @returns {object} - An object with the calculated number of slots for each category.
+ */
+function calculateSlots(totalSlots, percentages) {
+  const slots = {};
+  for (const key in percentages) {
+    slots[key] = Math.floor(totalSlots * (percentages[key] / 100));
+  }
+  return slots;
+}
+
+/**
+ * Helper function to count the frequency of each item in an array.
+ * @param {Array<string>} arr - The array of items to count.
+ * @returns {object} - An object with the frequency of each item.
+ */
+function getFrequency(arr) {
+  return arr.reduce((acc, value) => {
+    acc[value] = (acc[value] || 0) + 1;
+    return acc;
+  }, {});
+}
+
+/**
+ * Helper function to convert 12-hour AM/PM time to 24-hour format.
+ * @param {string} timeStr - Time in "hh:mm AM/PM" or "HH:mm" format.
+ * @returns {string} - Time in "HH:mm" format.
+ */
+function convertTo24Hour(timeStr) {
+  const time = timeStr.toUpperCase();
+  const [hoursMinutes, modifier] = time.split(' ');
+  let [hours, minutes] = hoursMinutes.split(':');
+
+  if (modifier === 'PM' && hours !== '12') {
+    hours = parseInt(hours, 10) + 12;
+  }
+  if (modifier === 'AM' && hours === '12') {
+    hours = '00';
+  }
+
+  // Pad hours with a leading zero if needed
+  return `${String(hours).padStart(2, '0')}:${minutes}`;
+}
+
+
+/**
+ * NEW AND IMPROVED HELPER FUNCTION
+ * Generates time slots and handles both 24-hour and 12-hour AM/PM formats.
+ * @param {string} start - Start time (e.g., "09:00 AM" or "09:00").
+ * @param {string} end - End time (e.g., "05:00 PM" or "17:00").
+ * @param {number} duration - Duration of each slot in minutes.
+ * @returns {Array<string>} - An array of time slots.
+ */
+function getTimeSlots24(start, end, duration) {
+    // Convert times to 24-hour format first
+    const startTime24 = convertTo24Hour(start);
+    const endTime24 = convertTo24Hour(end);
+
+    const slots = [];
+    let currentTime = new Date(`1970-01-01T${startTime24}:00`);
+    const endTime = new Date(`1970-01-01T${endTime24}:00`);
+
+    if (endTime <= currentTime) {
+        endTime.setDate(endTime.getDate() + 1);
+    }
+
+    while (currentTime < endTime) {
+        slots.push(currentTime.toTimeString().substring(0, 5));
+        currentTime.setMinutes(currentTime.getMinutes() + duration);
+    }
+    return slots;
+}
+
+/**
+ * Helper function to remove booked slots from a list of all possible slots.
+ * @param {Array<string>} booked - An array of booked time slots.
+ * @param {Array<string>} allSlots - An array of all possible time slots.
+ * @returns {Array<string>} - An array of available time slots.
+ */
+function removeSlots(booked, allSlots) {
+  const bookedSet = new Set(booked);
+  return allSlots.filter(slot => !bookedSet.has(slot));
+}
+
+
+// --- Main Controller Function ---
+
+exports.appointmentBookingTimeSlot = async (req, res) => {
+  const { appointmentType, date } = req.body;
+
+  try {
+    if (!date || !appointmentType) {
+      return res.status(400).json({ message: "Date and appointmentType are required" });
+    }
+
+    const inputDate = new Date(date);
+    const days = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+    const dayName = days[inputDate.getDay()];
+
+    // --- 1. Fetch all necessary data in parallel ---
+    const [
+      clinicDayInfo,
+      allSlotTypes,
+      appointmentsForDay,
+      doctorDetails,
+    ] = await Promise.all([
+      ClinicOperationHours.findOne({ day: dayName }),
+      AppointmentSlotTypes.find({}),
+      Appointment.find({
+        appointmentDate: {
+          $gte: new Date(inputDate).setHours(0, 0, 0, 0),
+          $lte: new Date(inputDate).setHours(23, 59, 59, 999),
+        },
+      }),
+      DoctorPrefinedAppointmentDetails.findOne({}),
+    ]);
+
+    if (!clinicDayInfo || !doctorDetails) {
+      return res.status(404).json({ message: "Clinic or doctor settings not found." });
+    }
+
+    // --- 2. Perform Illness Type Quota Check FIRST ---
+    const bookedTimeSlots = appointmentsForDay.map(app => app.timeSlot);
+    const categoryDisease = appointmentsForDay.map(app => app.diseaseType.name);
+
+    const percentages = { Acute: 70, Chronic: 20, Others: 10 };
+    const categorySlotLimits = calculateSlots(doctorDetails.totalslotPerday, percentages);
+    const frequencyOfCategoryDisease = getFrequency(categoryDisease);
+
+    if (frequencyOfCategoryDisease[appointmentType] >= categorySlotLimits[appointmentType]) {
+        return res.status(200).json({ message: `${appointmentType} limit reached for today.` });
+    }
+
+    // --- 3. If Quota Check Passes, Proceed to Generate Time Slots ---
+    const { consultationTime } = doctorDetails;
+    const availableSlotsResponse = {};
+
+    // A. Handle Week Off
+    if (clinicDayInfo.status === false) {
+      const weekoffType = allSlotTypes.find(st => st.slotType === "Weekoff");
+      if (weekoffType && weekoffType.allowBooking) {
+        const allPossibleSlots = getTimeSlots24(weekoffType.startingTime, weekoffType.endingTime, consultationTime);
+        const available = removeSlots(bookedTimeSlots, allPossibleSlots);
+        if (available.length > 0) {
+            availableSlotsResponse["Weekoff"] = available.map(time => ({ time, price: weekoffType.price }));
+        }
+      }
+    }
+    // B. Handle Working Day
+    else {
+      for (const slotType of allSlotTypes) {
+        if (slotType.slotType === "Weekoff") continue; // Skip weekoff type on a working day
+
+        if (slotType.allowBooking) {
+          const allPossibleSlots = getTimeSlots24(slotType.startingTime, slotType.endingTime, consultationTime);
+          const available = removeSlots(bookedTimeSlots, allPossibleSlots);
+          if (available.length > 0) {
+            availableSlotsResponse[slotType.slotType] = available.map(time => ({ time, price: slotType.price }));
+          }
+        }
+      }
+    }
+
+    // --- 4. Return the final structured response ---
+    if (Object.keys(availableSlotsResponse).length === 0) {
+      return res.status(200).json({ message: "No available slots for this day.", result: {} });
+    }
+
+    return res.status(200).json({ result: availableSlotsResponse });
+
+  } catch (error) {
+    console.error("Error in appointmentBookingTimeSlot:", error);
+    return res.status(500).json({ message: "An internal server error occurred." });
+  }
 };
 exports.getAllPaymentsByPatient = async (req, res) => {
   try {
