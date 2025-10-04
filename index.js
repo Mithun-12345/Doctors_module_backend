@@ -83,6 +83,7 @@ const doctorAppointmentSettingsRoutes = require("./routes/consultationMessengerS
 const pushNotificationRouter = require("./routes/pushNotificationRouter.js");
 const geminiTextServiceRoutes=require("./routes/geminiTextServiceRoutes.js")
 const creditDebitRoutes = require('./routes/debitCreditRoutes.js');
+const dashboardAnalyticsRoutes= require('./routes/dashboardAnalyticsRoutes.js')
 
 
 // ✅ CUSTOM MIDDLEWARE
@@ -135,6 +136,7 @@ app.use("/api/", limiter);
 //                                API ROUTES SETUP
 // =================================================================================
 app.use("/api/otp", otpRoute);
+app.use("/api/analytics",dashboardAnalyticsRoutes);
 app.use("/api/patient", patientRoute);
 app.use("/api/doctor", doctorRoute);
 app.use("/api/post", postRoute);

@@ -247,7 +247,7 @@ const prescriptionSchema = new mongoose.Schema({
     ref: "Doctor",
     required: true,
   },
-  appointmentId: {
+  appointmentID: {
     type: mongoose.Schema.Types.ObjectId,
     ref: "Appointment",
   },
@@ -286,6 +286,10 @@ const prescriptionSchema = new mongoose.Schema({
     default: false 
   },
   shippedDate: {
+  type: Date,
+  default: null
+  },
+  receivedDate: {
   type: Date,
   default: null
   },
