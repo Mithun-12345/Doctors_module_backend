@@ -4227,3 +4227,80 @@ exports.getAllAppointmentCountsByStagePerfect = async (req, res) => {
     res.status(500).json({ message: "Internal server error" });
   }
 };
+
+/**
+ * @desc    Get unique patient entry sources and their counts
+ * @route   GET /api/patients/analytics/entry-counts
+ * @access  Private (assuming you want to protect this)
+ */
+exports.getPatientEntryCounts = async (req, res) => {
+    try {
+        const entryCounts = await Patient.aggregate([
+            // Stage 1: Filter out documents where patientEntry is not set
+            {
+                $match: {
+                    patientEntry: { $exists: true, $ne: null, $ne: "" }
+                }
+            },
+            // Stage 2: Group by the patientEntry field and count occurrences
+            {
+                $group: {
+                    _id: "$patientEntry", // Group by the unique values in patientEntry
+                    count: { $sum: 1 }    // Count how many documents are in each group
+                }
+            },
+            // Stage 3: Reshape the output for better readability
+            {
+                $project: {
+                    _id: 0, // Exclude the default _id field
+                    source: "$_id", // Rename _id to 'source'
+                    count: 1 // Keep the count field
+                }
+            },
+            // Stage 4: (Optional) Sort by the highest count first
+            {
+                $sort: {
+                    count: -1
+                }
+            }
+        ]);
+
+        res.status(200).json(entryCounts);
+
+    } catch (error) {
+        console.error("Error fetching patient entry counts:", error);
+        res.status(500).json({ message: "Server error while fetching analytics." });
+    }
+};
+/**
+ * @desc    Get the count of patients grouped by userStatus
+ * @route   GET /api/patients/status-counts
+ * @access  Private/Admin
+ */
+exports.getPatientStatusCounts = async (req, res) => {
+    try {
+        const statusCounts = await Patient.aggregate([
+            {
+                // Stage 1: Group documents by the 'userStatus' field
+                $group: {
+                    _id: '$userStatus', // Group by the value of the userStatus field
+                    count: { $sum: 1 }  // For each document in the group, add 1 to the count
+                }
+            },
+            {
+                // Stage 2 (Optional but recommended): Reshape the output for clarity
+                $project: {
+                    _id: 0, // Exclude the default '_id' field from the output
+                    status: '$_id', // Rename '_id' to 'status'
+                    count: 1 // Include the 'count' field
+                }
+            }
+        ]);
+
+        res.status(200).json(statusCounts);
+
+    } catch (error) {
+        console.error("Error fetching patient status counts:", error);
+        res.status(500).json({ message: "Server error while fetching patient counts." });
+    }
+};

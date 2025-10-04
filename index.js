@@ -167,7 +167,7 @@ app.use("/api/doctorAppointmentSettings", doctorAppointmentSettingsRoutes);
 app.use("/api/notification", pushNotificationRouter);
 app.use("/api/payments", paymentRoutes);
 app.use("/api/gemini",geminiTextServiceRoutes);
-app.use('/api/notes', creditDebitRoutes );
+app.use('/api/notes', creditDebitRoutes);
 
 // =================================================================================
 //                              SOCKET.IO LOGIC

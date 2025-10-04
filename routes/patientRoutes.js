@@ -55,7 +55,9 @@ const {
   getNotInterestedAppointmentCounts,
   getNotInterestedPatientCountsTotal,
   getDashboardStatistics,
-  getAllAppointmentCountsByStagePerfect
+  getAllAppointmentCountsByStagePerfect,
+  getPatientStatusCounts,
+  getPatientEntryCounts
 } = require("../controllers/patientController");
 const {
   upload,
@@ -198,6 +200,10 @@ router.get('/getAppointedDocs',validateToken,familyMemberController.getAppointed
 router.get('/patientById/:id', familyMemberController.getPatientById);
 router.post("/appointments-by-date", getBookedAppointmentsByDate);
 router.patch("/:appointmentId/reschedule", validateToken, rescheduleAppointment);
+router.get('/analytics/entry-counts', validateToken, getPatientEntryCounts);
+router.get('/status-counts', getPatientStatusCounts);
+
+
 
 
 module.exports = router;
