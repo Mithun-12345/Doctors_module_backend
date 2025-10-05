@@ -36,7 +36,11 @@ const {
   chatPatientWithDoctorAndIsReadCount,
   secondFormDetails,
   getTotalAppointmentsForDoctor,
-  getTodaysAppointmentCount
+  getTodaysAppointmentCount,
+  markShipmentAsLost,
+  markAppointmentAsNoShow,
+  allowPhoneCalls, 
+  incrementCallCount
 } = require("../controllers/doctorController");
 const {
   upload,
@@ -58,6 +62,13 @@ router.get("/zoom/authorize", zoomAuth);
 router.get("/zoom/callback", zoomCallback);
 router.get("/show-every-payment", getAllDoctorPaymentsTotal);
 router.post("/todays-appointments",validateToken,getTodaysAppointments);
+// ... other patient routes like GET, POST, etc.
+
+// 2. Define the route to allow phone calls
+router.patch('/:patientId/allow-calls',validateToken, allowPhoneCalls);
+
+// 3. Define the route to increment the call count
+router.patch('/:patientId/increment-call',validateToken, incrementCallCount);
 
 
 // @route   POST /api/doctor/addDoctor
@@ -108,6 +119,7 @@ router.patch(
   "/prescriptions/:prescriptionId/start",
   startPrescription
 );
+router.patch('/:prescriptionId/mark-lost',validateToken,markShipmentAsLost);
 router.patch(
   '/prescriptions/:prescriptionId/tracking', 
   upload.single('shipmentImage'), 
@@ -133,6 +145,7 @@ router.get('/secondFormDetails', validateToken, secondFormDetails);
 router.get("/chatPatientWithDoctorAndIsReadCount",validateToken,chatPatientWithDoctorAndIsReadCount);
 router.get("/appointments/total-count", validateToken, getTotalAppointmentsForDoctor);
 router.get("/appointments/today/count", validateToken, getTodaysAppointmentCount);
+router.patch("/:appointmentId/no-show", validateToken,  markAppointmentAsNoShow);
 
 
 

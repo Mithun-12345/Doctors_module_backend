@@ -519,3 +519,102 @@ exports.calculateOverallTatAnalytics = async (req, res) => {
         res.status(500).json({ success: false, message: "Server error during analytics calculation." });
     }
 };
+exports.getMedicinePreparationStatus = async (req, res) => {
+    try {
+        // --- 1. Get the filter from the request body ---
+        const { filter } = req.body; // e.g., "day", "week", "month"
+
+        // --- 2. Calculate the date range based on the filter ---
+        let startDate;
+        const endDate = new Date();
+
+        if (filter === 'day') {
+            startDate = new Date();
+            startDate.setHours(0, 0, 0, 0);
+        } else if (filter === 'week') {
+            startDate = new Date();
+            startDate.setDate(startDate.getDate() - startDate.getDay()); // Start of the week (Sunday)
+            startDate.setHours(0, 0, 0, 0);
+        } else if (filter === 'month') {
+            startDate = new Date(endDate.getFullYear(), endDate.getMonth(), 1);
+            startDate.setHours(0, 0, 0, 0);
+        }
+        
+        // --- 3. Create the match condition for our queries ---
+        const dateMatchCondition = {};
+        if (startDate) {
+            dateMatchCondition.createdAt = { $gte: startDate, $lte: endDate };
+        }
+
+        // --- Part 1: Get Counts using an Aggregation Pipeline ---
+        const countsPipeline = [
+            // NEW: Add the date match stage at the very beginning for efficiency
+            { $match: dateMatchCondition },
+            
+            // The rest of the pipeline remains the same
+            {
+                $lookup: { from: 'appointments', localField: 'prescriptionId', foreignField: 'prescriptionID', as: 'appointmentInfo' }
+            },
+            {
+                $unwind: { path: '$appointmentInfo', preserveNullAndEmptyArrays: true }
+            },
+            {
+                $group: {
+                    _id: null,
+                    totalInitialized: { $sum: { $size: '$medicinePreparations' } },
+                    completedCount: {
+                        $sum: {
+                            $cond: [ { $eq: ['$appointmentInfo.medicinePrepared', true] }, { $size: '$medicinePreparations' }, 0 ]
+                        }
+                    }
+                }
+            }
+        ];
+
+        const countResults = await MedicinePreparationSummary.aggregate(countsPipeline);
+
+        // --- Part 2: Generate the Detailed Leakage Report ---
+        const leakageFindFilter = {
+            "medicinePreparations.rawMaterialsUsed.leakageDetected": true,
+            ...dateMatchCondition // Add the same date filter here
+        };
+
+        const summariesWithLeakage = await MedicinePreparationSummary.find(leakageFindFilter).lean();
+
+        const leakageReport = [];
+        summariesWithLeakage.forEach(summary => {
+            summary.medicinePreparations.forEach(med => {
+                const leakedMaterials = med.rawMaterialsUsed.filter(rm => rm.leakageDetected === true);
+                if (leakedMaterials.length > 0) {
+                    leakageReport.push({
+                        prescriptionId: summary.prescriptionId,
+                        medicineName: med.medicineName,
+                        leakedItems: leakedMaterials.map(item => ({
+                            materialName: item.materialName,
+                            quantityLeaked: item.quantityLeaked || 0
+                        }))
+                    });
+                }
+            });
+        });
+
+        // --- Part 3: Combine and Send the Final Response ---
+        const stats = countResults[0] || { totalInitialized: 0, completedCount: 0 };
+        const pendingCount = stats.totalInitialized - stats.completedCount;
+
+        res.status(200).json({
+            success: true,
+            filter: filter || 'overall', // Let the frontend know which filter was applied
+            data: {
+                totalInitializedMedicines: stats.totalInitialized,
+                completedMedicines: stats.completedCount,
+                pendingMedicines: pendingCount,
+                leakageDetails: leakageReport
+            }
+        });
+
+    } catch (error) {
+        console.error("Error fetching medicine preparation status:", error);
+        res.status(500).json({ success: false, message: "Server error." });
+    }
+};

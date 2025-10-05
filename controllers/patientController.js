@@ -3899,6 +3899,7 @@ exports.rescheduleAppointment = async (req, res) => {
     // 4. Update and save the appointment
     appointment.appointmentDate = new Date(appointmentDate);
     appointment.timeSlot = timeSlot;
+    appointment.reschedule = true;
     const updatedAppointment = await appointment.save();
 
     res.status(200).json({

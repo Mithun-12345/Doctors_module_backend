@@ -56,6 +56,7 @@ const {
   getNotInterestedPatientCountsTotal,
   getDashboardStatistics,
   getAllAppointmentCountsByStagePerfect,
+  
 } = require("../controllers/patientController");
 const {
   upload,

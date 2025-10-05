@@ -1141,6 +1141,161 @@ exports.getDoctorPatientMedicationSummary = async (req, res) => {
     return res.status(500).json({ message: "Server error", error });
   }
 };
+/**
+ * @desc    Mark an appointment as a 'no-show'.
+ * @route   PATCH /api/appointments/:appointmentId/no-show
+ * @access  Private
+ */
+exports.markAppointmentAsNoShow = async (req, res) => {
+    try {
+        const { appointmentId } = req.params;
+
+        // 1. Validate the appointment ID
+        if (!mongoose.Types.ObjectId.isValid(appointmentId)) {
+            return res.status(400).json({ message: "Invalid Appointment ID format." });
+        }
+
+        // 2. Find the appointment and update it in one step
+        const updatedAppointment = await Appointment.findByIdAndUpdate(
+            appointmentId,
+            { noShow: true },
+            { new: true } // This option returns the updated document
+        );
+
+        // 3. Check if the appointment was found
+        if (!updatedAppointment) {
+            return res.status(404).json({ message: "Appointment not found." });
+        }
+
+        // 4. Send the successful response
+        res.status(200).json({
+            success: true,
+            message: "Appointment marked as no-show.",
+            appointment: updatedAppointment,
+        });
+
+    } catch (error) {
+        console.error("Error marking appointment as no-show:", error);
+        res.status(500).json({ success: false, message: "Internal server error" });
+    }
+};
+/**
+ * @desc    Mark a prescription's shipment as lost.
+ * @route   PATCH /api/prescriptions/:prescriptionId/mark-lost
+ * @access  Private (Admin/Logistics)
+ */
+exports.markShipmentAsLost = async (req, res) => {
+    try {
+        const { prescriptionId } = req.params;
+
+        // 1. Validate the prescription ID format
+        if (!mongoose.Types.ObjectId.isValid(prescriptionId)) {
+            return res.status(400).json({ message: "Invalid Prescription ID format." });
+        }
+
+        // 2. Find the prescription and update the shipmentLost field in a single operation
+        const updatedPrescription = await Prescription.findByIdAndUpdate(
+            prescriptionId,
+            { 
+                shipmentLost: true,
+                updatedAt: new Date() // Also update the 'updatedAt' timestamp
+            },
+            { new: true } // This option ensures the updated document is returned
+        );
+
+        // 3. Check if a prescription was found and updated
+        if (!updatedPrescription) {
+            return res.status(404).json({ message: "Prescription not found." });
+        }
+
+        // 4. Send a successful response
+        res.status(200).json({
+            success: true,
+            message: "Shipment successfully marked as lost.",
+            data: updatedPrescription,
+        });
+
+    } catch (error) {
+        console.error("Error marking shipment as lost:", error);
+        res.status(500).json({ success: false, message: "Internal server error" });
+    }
+};
+/**
+ * @desc    Allow phone calls for a specific patient.
+ * @route   PATCH /api/patients/:patientId/allow-calls
+ * @access  Private
+ */
+exports.allowPhoneCalls = async (req, res) => {
+    try {
+        const { patientId } = req.params;
+
+        // 1. Validate the patient ID format
+        if (!mongoose.Types.ObjectId.isValid(patientId)) {
+            return res.status(400).json({ message: "Invalid Patient ID format." });
+        }
+
+        // 2. Find the patient and update the 'phoneAllowed' field
+        const updatedPatient = await Patient.findByIdAndUpdate(
+            patientId,
+            { phoneAllowed: true },
+            { new: true } // This option returns the updated document
+        );
+
+        // 3. Check if the patient was found
+        if (!updatedPatient) {
+            return res.status(404).json({ message: "Patient not found." });
+        }
+
+        // 4. Send a successful response
+        res.status(200).json({
+            success: true,
+            message: "Phone calls are now allowed for this patient.",
+            data: updatedPatient,
+        });
+
+    } catch (error) {
+        console.error("Error allowing phone calls:", error);
+        res.status(500).json({ success: false, message: "Internal server error" });
+    }
+};
+/**
+ * @desc    Increment the phone calls received count for a patient by 1.
+ * @route   PATCH /api/patients/:patientId/increment-call
+ * @access  Private
+ */
+exports.incrementCallCount = async (req, res) => {
+    try {
+        const { patientId } = req.params;
+
+        // 1. Validate the patient ID format
+        if (!mongoose.Types.ObjectId.isValid(patientId)) {
+            return res.status(400).json({ message: "Invalid Patient ID format." });
+        }
+
+        // 2. Find the patient and increment the 'phoneReceived' field
+        const updatedPatient = await Patient.findByIdAndUpdate(
+            patientId,
+            { $inc: { phoneReceived: 1 } }, // Use the $inc operator to increment
+            { new: true } // Return the updated document
+        );
+
+        // 3. Check if the patient was found
+        if (!updatedPatient) {
+            return res.status(404).json({ message: "Patient not found." });
+        }
+
+        // 4. Send a successful response
+        res.status(200).json({
+            success: true,
+            message: "Patient call count incremented successfully.",
+            data: updatedPatient,
+        });
+
+    } catch (error) {
+        console.error("Error incrementing call count:", error);
+        res.status(500).json({ success: false, message: "Internal server error" });
+    }
+};
 exports.getTodaysAppointments = async (req, res) => {
   try {
     // 1. Get doctorId from logged-in user and date from query

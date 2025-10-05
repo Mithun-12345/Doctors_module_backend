@@ -24,6 +24,14 @@ const patientSchema = new mongoose.Schema(
       required: true,
       unique: true,
     },
+    phoneAllowed:{
+      type: Boolean,
+      default:false 
+    },
+    phoneReceived:{
+        type:Number,
+        default: 0
+    },
     userStatus: {
       type: String,
       enum: ['Active', 'Inactive', 'Dormant', 'Exit'],

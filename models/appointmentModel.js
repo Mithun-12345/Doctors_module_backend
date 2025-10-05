@@ -97,6 +97,14 @@ const appointmentSchema = new mongoose.Schema(
       type: Boolean,
       default: false,
     },
+    noShow:{
+      type:Boolean,
+      default:false
+    },
+    reschedule:{
+      type:Boolean,
+      default:false
+    },    
     medicinePrepared:{
       type:Boolean,
       default: false,
