@@ -6,7 +6,10 @@ const {
   getPendingPaymentsSummary,
   getDebitCreditSummary,
   calculateOverallTatAnalytics,
-  getMedicinePreparationStatus
+  getMedicinePreparationStatus,
+  getAppointmentSummaryForDay,
+  getShipmentSummary,
+  getPatientAdherenceSummary
 } = require("../controllers/dashboardAnalyticsController");
 const {
   upload,
@@ -22,6 +25,11 @@ router.get('/pending-payments', getPendingPaymentsSummary);
 router.patch('/debit-credit-summary', getDebitCreditSummary);
 router.patch('/TAT',calculateOverallTatAnalytics);
 router.patch('/preparation-status', getMedicinePreparationStatus);
+router.patch('/appointment-summary-by-date', getAppointmentSummaryForDay);
+router.patch('/adherence-summary', getPatientAdherenceSummary);
+router.patch('/shipment-summary',getShipmentSummary);
+
+
 
 
 

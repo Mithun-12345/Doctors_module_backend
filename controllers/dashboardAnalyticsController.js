@@ -519,6 +519,147 @@ exports.calculateOverallTatAnalytics = async (req, res) => {
         res.status(500).json({ success: false, message: "Server error during analytics calculation." });
     }
 };
+/**
+ * @desc    Get a summary of patient medication adherence.
+ * @route   POST /api/patients/adherence-summary
+ * @access  Private (Patient Care)
+ * @body    { "filter": "[day|week|month]" } // Optional filter
+ */
+exports.getPatientAdherenceSummary = async (req, res) => {
+    try {
+        const { filter } = req.body;
+        const matchQuery = {};
+
+        // 1. Standard time filter logic
+        if (filter) {
+            const now = new Date();
+            let startDate;
+            switch (filter) {
+                case 'day':
+                    startDate = new Date(new Date().setHours(0, 0, 0, 0));
+                    break;
+                case 'week':
+                    const firstDayOfWeek = now.getDate() - now.getDay();
+                    startDate = new Date(new Date().setDate(firstDayOfWeek));
+                    startDate.setHours(0, 0, 0, 0);
+                    break;
+                case 'month':
+                    startDate = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
+                    break;
+                default:
+                    return res.status(400).json({ message: "Invalid filter value." });
+            }
+            if (startDate) {
+                // --- THIS IS THE ONLY LINE THAT CHANGED ---
+                matchQuery.date = { $gte: startDate }; // Now filters by the reminder's scheduled date
+            }
+        }
+
+        // 2. Build the complex aggregation pipeline
+        const pipeline = [
+            // Stage A: Initial match for the date range AND to filter out future reminders
+            {
+                $match: {
+                    ...matchQuery,
+                    $expr: {
+                        $lte: [
+                            // Construct the full reminder datetime from parts
+                            {
+                                $dateFromParts: {
+                                    year: { $year: "$date" },
+                                    month: { $month: "$date" },
+                                    day: { $dayOfMonth: "$date" },
+                                    hour: { $toInt: { $substr: ["$doseTime", 0, 2] } },
+                                    minute: { $toInt: { $substr: ["$doseTime", 3, 2] } },
+                                    timezone: "Asia/Kolkata"
+                                }
+                            },
+                            // Compare it to the current time
+                            "$$NOW"
+                        ]
+                    }
+                }
+            },
+            // Stage B: Group by patient to calculate individual adherence
+            {
+                $group: {
+                    _id: "$patientId",
+                    totalDoses: { $sum: 1 },
+                    takenDoses: {
+                        $sum: { $cond: [{ $eq: ["$status", true] }, 1, 0] }
+                    }
+                }
+            },
+            // Stage C: Calculate the adherence percentage for each patient
+            {
+                $project: {
+                    _id: 1,
+                    adherencePercentage: {
+                        $cond: {
+                            if: { $gt: ["$totalDoses", 0] },
+                            then: { $multiply: [{ $divide: ["$takenDoses", "$totalDoses"] }, 100] },
+                            else: 0
+                        }
+                    }
+                }
+            },
+            // Stage D: Group ALL patients together to count them into categories
+            {
+                $group: {
+                    _id: null,
+                    consistentPatients: {
+                        $sum: { $cond: [{ $gt: ["$adherencePercentage", 90] }, 1, 0] }
+                    },
+                    inconsistentPatients: {
+                        $sum: {
+                            $cond: [
+                                { $and: [
+                                    { $lte: ["$adherencePercentage", 90] },
+                                    { $gt: ["$adherencePercentage", 70] }
+                                ]}, 1, 0
+                            ]
+                        }
+                    },
+                    nonAdherentPatients: {
+                        $sum: { $cond: [{ $lte: ["$adherencePercentage", 70] }, 1, 0] }
+                    }
+                }
+            },
+            // Stage E: Format the final output
+            {
+                $project: {
+                    _id: 0,
+                    consistentPatients: 1,
+                    inconsistentPatients: 1,
+                    nonAdherentPatients: 1
+                }
+            }
+        ];
+
+        const result = await NotificationReminderSettings.aggregate(pipeline);
+
+        // 3. Prepare and send the final response
+        let summary;
+        if (result.length > 0) {
+            summary = result[0];
+        } else {
+            summary = {
+                consistentPatients: 0,
+                inconsistentPatients: 0,
+                nonAdherentPatients: 0
+            };
+        }
+
+        res.status(200).json({
+            success: true,
+            summary: summary
+        });
+
+    } catch (error) {
+        console.error("Error fetching patient adherence summary:", error);
+        res.status(500).json({ success: false, message: "Internal server error" });
+    }
+};
 exports.getMedicinePreparationStatus = async (req, res) => {
     try {
         // --- 1. Get the filter from the request body ---
@@ -616,5 +757,365 @@ exports.getMedicinePreparationStatus = async (req, res) => {
     } catch (error) {
         console.error("Error fetching medicine preparation status:", error);
         res.status(500).json({ success: false, message: "Server error." });
+    }
+};
+
+/**
+ * @desc    Get a summary of appointment counts and percentages for a specific day.
+ * @route   GET /api/appointments/summary-by-date?appointmentDate=YYYY-MM-DD
+ * @access  Private
+ */
+exports.getAppointmentSummaryForDay = async (req, res) => {
+    try {
+        const { appointmentDate } = req.query;
+        if (!appointmentDate) {
+            return res.status(400).json({ message: "An 'appointmentDate' query parameter is required." });
+        }
+
+        const startOfDay = new Date(appointmentDate);
+        startOfDay.setUTCHours(0, 0, 0, 0);
+
+        const endOfDay = new Date(appointmentDate);
+        endOfDay.setUTCHours(23, 59, 59, 999);
+
+        if (isNaN(startOfDay.getTime())) {
+            return res.status(400).json({ message: "Invalid date format. Please use YYYY-MM-DD." });
+        }
+
+        const pipeline = [
+            // Stage 1: Match appointments within the given day (no changes here)
+            {
+                $match: {
+                    appointmentDate: {
+                        $gte: startOfDay,
+                        $lte: endOfDay
+                    }
+                }
+            },
+            // Stage 2: Group and calculate all counts (no changes here)
+            {
+                $group: {
+                    _id: null,
+                    bookedAppointments: { $sum: 1 },
+                    appointmentsComplete: {
+                        $sum: { $cond: [{ $and: [ { $eq: ["$status", "completed"] }, { $eq: ["$noShow", false] } ]}, 1, 0] }
+                    },
+                    appointmentsMissed: {
+                        $sum: { $cond: [{ $eq: ["$noShow", true] }, 1, 0] }
+                    },
+                    appointmentsRescheduled: {
+                        $sum: { $cond: [{ $eq: ["$reschedule", true] }, 1, 0] }
+                    },
+                    appointmentsDue: {
+                        $sum: { $cond: [{ $and: [ { $ne: ["$status", "completed"] }, { $ne: ["$noShow", true] } ]}, 1, 0] }
+                    }
+                }
+            },
+            // Stage 3: MODIFIED to calculate and format the final output
+            {
+                $project: {
+                    _id: 0,
+                    // Keep the original counts
+                    bookedAppointments: 1,
+                    appointmentsComplete: 1,
+                    appointmentsMissed: 1,
+                    appointmentsRescheduled: 1,
+                    appointmentsDue: 1,
+                    // --- NEW: Add percentage calculations ---
+                    completionPercentage: {
+                        $cond: {
+                            if: { $gt: ["$bookedAppointments", 0] },
+                            then: { $multiply: [{ $divide: ["$appointmentsComplete", "$bookedAppointments"] }, 100] },
+                            else: 0
+                        }
+                    },
+                    missedPercentage: {
+                        $cond: {
+                            if: { $gt: ["$bookedAppointments", 0] },
+                            then: { $multiply: [{ $divide: ["$appointmentsMissed", "$bookedAppointments"] }, 100] },
+                            else: 0
+                        }
+                    },
+                    reschedulePercentage: {
+                        $cond: {
+                            if: { $gt: ["$bookedAppointments", 0] },
+                            then: { $multiply: [{ $divide: ["$appointmentsRescheduled", "$bookedAppointments"] }, 100] },
+                            else: 0
+                        }
+                    }
+                }
+            }
+        ];
+
+        const result = await Appointment.aggregate(pipeline);
+
+        let summary;
+        if (result.length > 0) {
+            // Round the percentages to two decimal places for a cleaner look
+            const rawSummary = result[0];
+            summary = {
+                ...rawSummary,
+                completionPercentage: parseFloat(rawSummary.completionPercentage.toFixed(2)),
+                missedPercentage: parseFloat(rawSummary.missedPercentage.toFixed(2)),
+                reschedulePercentage: parseFloat(rawSummary.reschedulePercentage.toFixed(2))
+            };
+        } else {
+            // MODIFIED: Update the default object to include percentages
+            summary = {
+                bookedAppointments: 0,
+                appointmentsComplete: 0,
+                appointmentsMissed: 0,
+                appointmentsRescheduled: 0,
+                appointmentsDue: 0,
+                completionPercentage: 0,
+                missedPercentage: 0,
+                reschedulePercentage: 0
+            };
+        }
+
+        res.status(200).json({
+            success: true,
+            date: appointmentDate,
+            summary: summary,
+        });
+
+    } catch (error) {
+        console.error("Error fetching appointment summary:", error);
+        res.status(500).json({ success: false, message: "Internal server error" });
+    }
+};
+/**
+ * @desc    Get a summary of shipment statuses (shipped, received, lost, awaiting).
+ * @route   GET /api/prescriptions/shipment-summary
+ * @access  Private (Admin/Logistics)
+ * @body    { "filter": "[day|week|month]" } // Optional filter
+ */
+exports.getShipmentSummary = async (req, res) => {
+    try {
+        const { filter } = req.body;
+
+        const matchQuery = {};
+
+        if (filter) {
+            const now = new Date();
+            let startDate;
+            switch (filter) {
+                case 'day':
+                    startDate = new Date(now.setHours(0, 0, 0, 0));
+                    break;
+                case 'week':
+                    const firstDayOfWeek = now.getDate() - now.getDay();
+                    startDate = new Date(now.setDate(firstDayOfWeek));
+                    startDate.setHours(0, 0, 0, 0);
+                    break;
+                case 'month':
+                    startDate = new Date(now.getFullYear(), now.getMonth(), 1);
+                    break;
+                default:
+                    return res.status(400).json({ message: "Invalid filter value. Use 'day', 'week', or 'month'." });
+            }
+            if (startDate) {
+                matchQuery.createdAt = { $gte: startDate };
+            }
+        }
+
+        const pipeline = [
+            {
+                $match: matchQuery
+            },
+            // Stage 2: MODIFIED to include the new 'awaitingDispatch' counter
+            {
+                $group: {
+                    _id: null,
+                    productsShipped: {
+                        $sum: { $cond: [{ $eq: ["$isProductShipped", true] }, 1, 0] }
+                    },
+                    productsReceived: {
+                        $sum: { $cond: [{ $eq: ["$isProductReceived", true] }, 1, 0] }
+                    },
+                    shipmentsLost: {
+                        $sum: { $cond: [{ $eq: ["$shipmentLost", true] }, 1, 0] }
+                    },
+                    // --- NEW COUNTER ADDED HERE ---
+                    awaitingDispatch: {
+                        $sum: { $cond: [{ $eq: ["$isProductShipped", false] }, 1, 0] }
+                    }
+                }
+            },
+            // Stage 3: MODIFIED to include the new field in the output
+            {
+                $project: {
+                    _id: 0,
+                    productsShipped: 1,
+                    productsReceived: 1,
+                    shipmentsLost: 1,
+                    awaitingDispatch: 1 // --- ADDED HERE ---
+                }
+            }
+        ];
+
+        const result = await Prescription.aggregate(pipeline);
+
+        let summary;
+        if (result.length > 0) {
+            summary = result[0];
+        } else {
+            // MODIFIED: Update the default object
+            summary = {
+                productsShipped: 0,
+                productsReceived: 0,
+                shipmentsLost: 0,
+                awaitingDispatch: 0 // --- ADDED HERE ---
+            };
+        }
+
+        res.status(200).json({
+            success: true,
+            summary: summary
+        });
+
+    } catch (error) {
+        console.error("Error fetching shipment summary:", error);
+        res.status(500).json({ success: false, message: "Internal server error" });
+    }
+};
+/**
+
+ * @desc    Get a summary of chat message analytics.
+ * @route   POST /api/messages/summary
+ * @access  Private (Admin)
+ * @body    { "filter": "[day|week|month]" } // Optional filter
+ */
+exports.getMessageSummary = async (req, res) => {
+    try {
+        const { filter } = req.body;
+
+        const matchQuery = {};
+        const now = new Date();
+
+        // 1. Standard time filter logic
+        if (filter) {
+            let startDate;
+            switch (filter) {
+                case 'day':
+                    startDate = new Date(new Date().setHours(0, 0, 0, 0));
+                    break;
+                case 'week':
+                    const firstDayOfWeek = now.getDate() - now.getDay();
+                    startDate = new Date(new Date().setDate(firstDayOfWeek));
+                    startDate.setHours(0, 0, 0, 0);
+                    break;
+                case 'month':
+                    startDate = new Date(now.getFullYear(), now.getMonth(), 1);
+                    break;
+                default:
+                    return res.status(400).json({ message: "Invalid filter value." });
+            }
+            if (startDate) {
+                matchQuery.timestamp = { $gte: startDate }; // Filter by message timestamp
+            }
+        }
+
+        // Define what "outstanding" means (e.g., unread for more than 3 days)
+        const OUTSTANDING_THRESHOLD_DAYS = 3;
+        const outstandingDateLimit = new Date(now.setDate(now.getDate() - OUTSTANDING_THRESHOLD_DAYS));
+
+        // 2. Build the complex aggregation pipeline
+        const pipeline = [
+            // Stage A: Initial match on the message collection based on the filter
+            { $match: matchQuery },
+
+            // Stage B: Join with the Patients collection to verify the receiver
+            {
+                $lookup: {
+                    from: 'patients', // The name of the patients collection
+                    let: { receiverId: { $toObjectId: '$receiver' } }, // Convert string ID to ObjectId
+                    pipeline: [{ $match: { $expr: { $eq: ['$_id', '$$receiverId'] } } }],
+                    as: 'patientInfo'
+                }
+            },
+
+            // Stage C: Join with the Doctors collection to verify the sender
+            {
+                $lookup: {
+                    from: 'doctors', // The name of the doctors collection
+                    let: { senderId: { $toObjectId: '$sender' } }, // Convert string ID to ObjectId
+                    pipeline: [{ $match: { $expr: { $eq: ['$_id', '$$senderId'] } } }],
+                    as: 'doctorInfo'
+                }
+            },
+
+            // Stage D: Group everything to calculate all metrics at once
+            {
+                $group: {
+                    _id: null,
+                    // Count messages where sender is a doctor AND receiver is a patient
+                    doctorToPatientResponses: {
+                        $sum: {
+                            $cond: [{ $and: [
+                                { $gt: [{ $size: "$doctorInfo" }, 0] },
+                                { $gt: [{ $size: "$patientInfo" }, 0] }
+                            ]}, 1, 0]
+                        }
+                    },
+                    // Count messages that are unread AND older than our threshold
+                    outstandingMessages: {
+                        $sum: {
+                            $cond: [{ $and: [
+                                { $eq: ["$isRead", false] },
+                                { $lt: ["$timestamp", outstandingDateLimit] }
+                            ]}, 1, 0]
+                        }
+                    },
+                    // Collect unique patient IDs who received a message
+                    uniquePatientsWithMessage: {
+                        $addToSet: {
+                            $cond: [{ $gt: [{ $size: "$patientInfo" }, 0] }, "$receiver", null]
+                        }
+                    },
+                    // Collect unique patient IDs with unread messages
+                    uniquePatientsWithUnread: {
+                        $addToSet: {
+                            $cond: [{ $and: [
+                                { $gt: [{ $size: "$patientInfo" }, 0] },
+                                { $eq: ["$isRead", false] }
+                            ]}, "$receiver", null]
+                        }
+                    }
+                }
+            },
+
+            // Stage E: Project the final counts from the unique sets
+            {
+                $project: {
+                    _id: 0,
+                    doctorToPatientResponses: 1,
+                    outstandingMessages: 1,
+                    patientsWithMessage: { $size: { $ifNull: ["$uniquePatientsWithMessage", []] } },
+                    patientsWithUnreadMessages: { $size: { $ifNull: ["$uniquePatientsWithUnread", []] } }
+                }
+            }
+        ];
+
+        const result = await Message.aggregate(pipeline);
+
+        // 3. Prepare and send the final response
+        let summary;
+        if (result.length > 0) {
+            summary = result[0];
+        } else {
+            summary = {
+                patientsWithMessage: 0,
+                doctorToPatientResponses: 0,
+                patientsWithUnreadMessages: 0,
+                outstandingMessages: 0
+            };
+        }
+
+        res.status(200).json({ success: true, summary });
+
+    } catch (error) {
+        console.error("Error fetching message summary:", error);
+        res.status(500).json({ success: false, message: "Internal server error" });
     }
 };
