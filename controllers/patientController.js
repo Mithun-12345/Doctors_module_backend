@@ -3273,92 +3273,84 @@ function removeSlots(booked, allSlots) {
 // --- Main Controller Function ---
 
 exports.appointmentBookingTimeSlot = async (req, res) => {
-  const { appointmentType, date } = req.body;
+    // 'appointmentType' is no longer needed from the request body
+    const { date } = req.body;
 
-  try {
-    if (!date || !appointmentType) {
-      return res.status(400).json({ message: "Date and appointmentType are required" });
-    }
+    try {
+        // Validation now only checks for date
+        if (!date) {
+            return res.status(400).json({ message: "Date is required" });
+        }
 
-    const inputDate = new Date(date);
-    const days = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
-    const dayName = days[inputDate.getDay()];
+        const inputDate = new Date(date);
+        const days = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+        const dayName = days[inputDate.getDay()];
 
-    // --- 1. Fetch all necessary data in parallel ---
-    const [
-      clinicDayInfo,
-      allSlotTypes,
-      appointmentsForDay,
-      doctorDetails,
-    ] = await Promise.all([
-      ClinicOperationHours.findOne({ day: dayName }),
-      AppointmentSlotTypes.find({}),
-      Appointment.find({
-        appointmentDate: {
-          $gte: new Date(inputDate).setHours(0, 0, 0, 0),
-          $lte: new Date(inputDate).setHours(23, 59, 59, 999),
-        },
-      }),
-      DoctorPrefinedAppointmentDetails.findOne({}),
-    ]);
+        // --- 1. Fetch all necessary data in parallel ---
+        const [
+            clinicDayInfo,
+            allSlotTypes,
+            appointmentsForDay,
+            doctorDetails,
+        ] = await Promise.all([
+            ClinicOperationHours.findOne({ day: dayName }),
+            AppointmentSlotTypes.find({}),
+            Appointment.find({
+                appointmentDate: {
+                    $gte: new Date(inputDate).setHours(0, 0, 0, 0),
+                    $lte: new Date(inputDate).setHours(23, 59, 59, 999),
+                },
+            }),
+            DoctorPrefinedAppointmentDetails.findOne({}),
+        ]);
 
-    if (!clinicDayInfo || !doctorDetails) {
-      return res.status(404).json({ message: "Clinic or doctor settings not found." });
-    }
+        if (!clinicDayInfo || !doctorDetails) {
+            return res.status(404).json({ message: "Clinic or doctor settings not found." });
+        }
 
-    // --- 2. Perform Illness Type Quota Check FIRST ---
-    const bookedTimeSlots = appointmentsForDay.map(app => app.timeSlot);
-    const categoryDisease = appointmentsForDay.map(app => app.diseaseType.name);
+        // --- 2. Generate Time Slots ---
+        // The quota check for 'Acute', 'Chronic', etc., has been removed.
+        const bookedTimeSlots = appointmentsForDay.map(app => app.timeSlot);
+        const { consultationTime } = doctorDetails;
+        const availableSlotsResponse = {};
 
-    const percentages = { Acute: 70, Chronic: 20, Others: 10 };
-    const categorySlotLimits = calculateSlots(doctorDetails.totalslotPerday, percentages);
-    const frequencyOfCategoryDisease = getFrequency(categoryDisease);
+        // A. Handle Week Off
+        if (clinicDayInfo.status === false) {
+            const weekoffType = allSlotTypes.find(st => st.slotType === "Weekoff");
+            if (weekoffType && weekoffType.allowBooking) {
+                const allPossibleSlots = getTimeSlots24(weekoffType.startingTime, weekoffType.endingTime, consultationTime);
+                const available = removeSlots(bookedTimeSlots, allPossibleSlots);
+                if (available.length > 0) {
+                    availableSlotsResponse["Weekoff"] = available.map(time => ({ time, price: weekoffType.price }));
+                }
+            }
+        }
+        // B. Handle Working Day
+        else {
+            for (const slotType of allSlotTypes) {
+                if (slotType.slotType === "Weekoff") continue; // Skip weekoff type on a working day
 
-    if (frequencyOfCategoryDisease[appointmentType] >= categorySlotLimits[appointmentType]) {
-        return res.status(200).json({ message: `${appointmentType} limit reached for today.` });
-    }
+                if (slotType.allowBooking) {
+                    const allPossibleSlots = getTimeSlots24(slotType.startingTime, slotType.endingTime, consultationTime);
+                    const available = removeSlots(bookedTimeSlots, allPossibleSlots);
+                    if (available.length > 0) {
+                        availableSlotsResponse[slotType.slotType] = available.map(time => ({ time, price: slotType.price }));
+                    }
+                }
+            }
+        }
 
-    // --- 3. If Quota Check Passes, Proceed to Generate Time Slots ---
-    const { consultationTime } = doctorDetails;
-    const availableSlotsResponse = {};
+        // --- 3. Return the final structured response ---
+        if (Object.keys(availableSlotsResponse).length === 0) {
+            return res.status(200).json({ message: "No available slots for this day.", result: {} });
+        }
 
-    // A. Handle Week Off
-    if (clinicDayInfo.status === false) {
-      const weekoffType = allSlotTypes.find(st => st.slotType === "Weekoff");
-      if (weekoffType && weekoffType.allowBooking) {
-        const allPossibleSlots = getTimeSlots24(weekoffType.startingTime, weekoffType.endingTime, consultationTime);
-        const available = removeSlots(bookedTimeSlots, allPossibleSlots);
-        if (available.length > 0) {
-            availableSlotsResponse["Weekoff"] = available.map(time => ({ time, price: weekoffType.price }));
-        }
-      }
-    }
-    // B. Handle Working Day
-    else {
-      for (const slotType of allSlotTypes) {
-        if (slotType.slotType === "Weekoff") continue; // Skip weekoff type on a working day
+        return res.status(200).json({ result: availableSlotsResponse });
 
-        if (slotType.allowBooking) {
-          const allPossibleSlots = getTimeSlots24(slotType.startingTime, slotType.endingTime, consultationTime);
-          const available = removeSlots(bookedTimeSlots, allPossibleSlots);
-          if (available.length > 0) {
-            availableSlotsResponse[slotType.slotType] = available.map(time => ({ time, price: slotType.price }));
-          }
-        }
-      }
-    }
-
-    // --- 4. Return the final structured response ---
-    if (Object.keys(availableSlotsResponse).length === 0) {
-      return res.status(200).json({ message: "No available slots for this day.", result: {} });
-    }
-
-    return res.status(200).json({ result: availableSlotsResponse });
-
-  } catch (error) {
-    console.error("Error in appointmentBookingTimeSlot:", error);
-    return res.status(500).json({ message: "An internal server error occurred." });
-  }
+    } catch (error) {
+        console.error("Error in appointmentBookingTimeSlot:", error);
+        return res.status(500).json({ message: "An internal server error occurred." });
+    }
 };
 exports.getAllPaymentsByPatient = async (req, res) => {
   try {
