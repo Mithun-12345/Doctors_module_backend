@@ -284,6 +284,23 @@ router.post("/verify-prescription-payment", authMiddleware, async (req, res) => 
       paidFor: "Medicine"
     });
     await newPayment.save({ session }); // Use the session here
+            // --- NEW LOGIC ADDED HERE ---
+        
+        // Update the associated appointment's follow status
+        appointment.follow = "Medicine Preparation";
+        await appointment.save({ session });
+
+        // Update the patient's stage and follow status
+        await Patient.findByIdAndUpdate(
+            prescription.patientId,
+            {
+                stage: "Medicine Preparation",
+                follow: "Medicine Preparation"
+            },
+            { session } // Ensure this operation is part of the transaction
+        );
+
+        // --- ENDS HERE ---
 
     // 6. Create a notification for the user
     await Notification.create([{ // Using array to create within session

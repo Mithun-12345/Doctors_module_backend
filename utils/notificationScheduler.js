@@ -4,6 +4,8 @@ const Notification = require('../models/notificationHub');  // Adjust path
 const NotificationReminderSettings = require('../models/NotificationReminderSettings'); // Adjust path
 const { pushnotificationModel } = require("../models/pushNotificationModel"); // Adjust path
 const admin = require("../configs/firebase"); // Your initialized Firebase Admin SDK
+const { calculateOverallTatAnalytics } = require('../controllers/dashboardAnalyticsController'); // Adjust path
+
 
 // No changes to this function. It is correct.
 const generateAppointmentReminders = async () => {
@@ -303,9 +305,28 @@ const startUserStatusCronJob = () => {
   });
   console.log('✅ User status update cron job scheduled to run daily at 1:00 AM.');
 };
+// --- NEW CRON JOB FOR TAT ANALYTICS ---
+const startTatAnalyticsCronJob = () => {
+    // Schedule to run at 2:00 AM every day
+    cron.schedule('0 2 * * *', async () => {
+        console.log('Running daily cron job: Calculating TAT Analytics...');
+        try {
+            // Call the function directly, no need for req, res, or axios
+            await calculateOverallTatAnalytics();
+        } catch (error) {
+            console.error('Error running TAT Analytics cron job:', error.message);
+        }
+    }, {
+        scheduled: true,
+        timezone: "Asia/Kolkata"
+    });
+    console.log('✅ TAT Analytics cron job scheduled to run daily at 2:00 AM.');
+};
+
 module.exports = { 
     startReminderCronJob,
     startMedicineReminderCronJob,
     startExactTimeReminderCronJob,
-    startUserStatusCronJob
+    startUserStatusCronJob,
+    startTatAnalyticsCronJob
 };

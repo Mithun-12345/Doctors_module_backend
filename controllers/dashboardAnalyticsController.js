@@ -35,6 +35,8 @@ const Message = require('../models/messageModel'); // Or whatever the path to yo
 const DebitCreditNote = require('../models/debitCredit'); // Adjust the path as needed
 const MedicinePreparationSummary = require('../models/MedicinePreparationSummary'); // Adjust path
 const Analytics = require('../models/dashboardAnalytics'); // The model we created earlier
+const Feedback = require('../models/appRatings');
+
 
 /**
  * @desc    Get detailed analytics for patient entry sources.
@@ -1116,6 +1118,485 @@ exports.getMessageSummary = async (req, res) => {
 
     } catch (error) {
         console.error("Error fetching message summary:", error);
+        res.status(500).json({ success: false, message: "Internal server error" });
+    }
+};
+
+/**
+ * @desc    Get a summary of chat message analytics.
+ * @route   POST /api/messages/summary
+ * @access  Private (Admin)
+ * @body    { "filter": "[day|week|month]" } // Optional filter
+ */
+exports.getMessageSummary = async (req, res) => {
+    try {
+        const { filter } = req.body;
+
+        const matchQuery = {};
+        const now = new Date();
+
+        // 1. Standard time filter logic
+        if (filter) {
+            let startDate;
+            switch (filter) {
+                case 'day':
+                    startDate = new Date(new Date().setHours(0, 0, 0, 0));
+                    break;
+                case 'week':
+                    const firstDayOfWeek = now.getDate() - now.getDay();
+                    startDate = new Date(new Date().setDate(firstDayOfWeek));
+                    startDate.setHours(0, 0, 0, 0);
+                    break;
+                case 'month':
+                    startDate = new Date(now.getFullYear(), now.getMonth(), 1);
+                    break;
+                default:
+                    return res.status(400).json({ message: "Invalid filter value." });
+            }
+            if (startDate) {
+                matchQuery.timestamp = { $gte: startDate }; // Filter by message timestamp
+            }
+        }
+
+        // Define what "outstanding" means (e.g., unread for more than 3 days)
+        const OUTSTANDING_THRESHOLD_DAYS = 3;
+        const outstandingDateLimit = new Date(now.setDate(now.getDate() - OUTSTANDING_THRESHOLD_DAYS));
+
+        // 2. Build the complex aggregation pipeline
+        const pipeline = [
+            // Stage A: Initial match on the message collection based on the filter
+            { $match: matchQuery },
+
+            // Stage B: Join with the Patients collection to verify the receiver
+            {
+                $lookup: {
+                    from: 'patients', // The name of the patients collection
+                    let: { receiverId: { $toObjectId: '$receiver' } }, // Convert string ID to ObjectId
+                    pipeline: [{ $match: { $expr: { $eq: ['$_id', '$$receiverId'] } } }],
+                    as: 'patientInfo'
+                }
+            },
+
+            // Stage C: Join with the Doctors collection to verify the sender
+            {
+                $lookup: {
+                    from: 'doctors', // The name of the doctors collection
+                    let: { senderId: { $toObjectId: '$sender' } }, // Convert string ID to ObjectId
+                    pipeline: [{ $match: { $expr: { $eq: ['$_id', '$$senderId'] } } }],
+                    as: 'doctorInfo'
+                }
+            },
+
+            // Stage D: Group everything to calculate all metrics at once
+            {
+                $group: {
+                    _id: null,
+                    // Count messages where sender is a doctor AND receiver is a patient
+                    doctorToPatientResponses: {
+                        $sum: {
+                            $cond: [{ $and: [
+                                { $gt: [{ $size: "$doctorInfo" }, 0] },
+                                { $gt: [{ $size: "$patientInfo" }, 0] }
+                            ]}, 1, 0]
+                        }
+                    },
+                    // Count messages that are unread AND older than our threshold
+                    outstandingMessages: {
+                        $sum: {
+                            $cond: [{ $and: [
+                                { $eq: ["$isRead", false] },
+                                { $lt: ["$timestamp", outstandingDateLimit] }
+                            ]}, 1, 0]
+                        }
+                    },
+                    // Collect unique patient IDs who received a message
+                    uniquePatientsWithMessage: {
+                        $addToSet: {
+                            $cond: [{ $gt: [{ $size: "$patientInfo" }, 0] }, "$receiver", null]
+                        }
+                    },
+                    // Collect unique patient IDs with unread messages
+                    uniquePatientsWithUnread: {
+                        $addToSet: {
+                            $cond: [{ $and: [
+                                { $gt: [{ $size: "$patientInfo" }, 0] },
+                                { $eq: ["$isRead", false] }
+                            ]}, "$receiver", null]
+                        }
+                    }
+                }
+            },
+
+            // Stage E: Project the final counts from the unique sets
+            {
+                $project: {
+                    _id: 0,
+                    doctorToPatientResponses: 1,
+                    outstandingMessages: 1,
+                    patientsWithMessage: { $size: { $ifNull: ["$uniquePatientsWithMessage", []] } },
+                    patientsWithUnreadMessages: { $size: { $ifNull: ["$uniquePatientsWithUnread", []] } }
+                }
+            }
+        ];
+
+        const result = await Message.aggregate(pipeline);
+
+        // 3. Prepare and send the final response
+        let summary;
+        if (result.length > 0) {
+            summary = result[0];
+        } else {
+            summary = {
+                patientsWithMessage: 0,
+                doctorToPatientResponses: 0,
+                patientsWithUnreadMessages: 0,
+                outstandingMessages: 0
+            };
+        }
+
+        res.status(200).json({ success: true, summary });
+
+    } catch (error) {
+        console.error("Error fetching message summary:", error);
+        res.status(500).json({ success: false, message: "Internal server error" });
+    }
+};
+
+/**
+ * @desc    Get a summary of raw material stock levels, including expiry status.
+ * @route   POST /api/raw-materials/stock-summary
+ * @access  Private (Admin/Inventory)
+ * @body    { "filter": "[day|week|month]" } // Optional filter
+ */
+exports.getRawMaterialStockSummary = async (req, res) => {
+    try {
+        const { filter } = req.body;
+        const matchQuery = {};
+
+        // --- NEW: Define expiry threshold ---
+        const EXPIRY_THRESHOLD_DAYS = 30;
+        const now = new Date();
+        const expiryLimitDate = new Date(new Date().setDate(now.getDate() + EXPIRY_THRESHOLD_DAYS));
+
+        // 1. Standard time filter logic
+        if (filter) {
+            let startDate;
+            switch (filter) {
+                // ... (day, week, month cases are unchanged)
+                case 'day':
+                    startDate = new Date(new Date().setHours(0, 0, 0, 0));
+                    break;
+                case 'week':
+                    const firstDayOfWeek = new Date().getDate() - new Date().getDay();
+                    startDate = new Date(new Date().setDate(firstDayOfWeek));
+                    startDate.setHours(0, 0, 0, 0);
+                    break;
+                case 'month':
+                    startDate = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
+                    break;
+                default:
+                    return res.status(400).json({ message: "Invalid filter value." });
+            }
+            if (startDate) {
+                matchQuery.createdAt = { $gte: startDate };
+            }
+        }
+
+        // 2. Build the aggregation pipeline
+        const pipeline = [
+            // Stage A: Initial match (unchanged)
+            {
+                $match: {
+                    ...matchQuery,
+                    quantity: { $gt: 0 }
+                }
+            },
+            // Stage B: MODIFIED to add expiry calculations
+            {
+                $group: {
+                    _id: null,
+                    stockOut: {
+                        $sum: { $cond: [{ $eq: ["$currentQuantity", 0] }, 1, 0] }
+                    },
+                    overThreshold: {
+                        $sum: { $cond: [ { $and: [ { $gt: ["$currentQuantity", 0] }, { $lt: [{ $divide: ["$currentQuantity", "$quantity"] }, 0.20] } ]}, 1, 0 ] }
+                    },
+                    aboveThreshold: {
+                        $sum: { $cond: [ { $gte: [{ $divide: ["$currentQuantity", "$quantity"] }, 0.20] }, 1, 0 ] }
+                    },
+                    // --- NEW: Count items nearing expiry ---
+                    nearExpiryCount: {
+                        $sum: {
+                            $cond: [{ $and: [
+                                { $ne: ["$expiryDate", null] }, // Must have an expiry date
+                                { $gte: ["$expiryDate", new Date()] }, // Must not be already expired
+                                { $lte: ["$expiryDate", expiryLimitDate] } // And must be within our 30-day threshold
+                            ]}, 1, 0]
+                        }
+                    },
+                    // --- NEW: Count total items that have an expiry date for the percentage calculation ---
+                    totalWithExpiryDate: {
+                        $sum: {
+                            $cond: [{ $ne: ["$expiryDate", null] }, 1, 0]
+                        }
+                    }
+                }
+            },
+            // Stage C: MODIFIED to calculate the final percentage
+            {
+                $project: {
+                    _id: 0,
+                    stockOut: 1,
+                    overThreshold: 1,
+                    aboveThreshold: 1,
+                    // --- NEW: Calculate the near expiry percentage ---
+                    nearExpiryPercentage: {
+                        $cond: {
+                            if: { $gt: ["$totalWithExpiryDate", 0] },
+                            then: { $multiply: [{ $divide: ["$nearExpiryCount", "$totalWithExpiryDate"] }, 100] },
+                            else: 0 // If no items have an expiry date, percentage is 0
+                        }
+                    }
+                }
+            }
+        ];
+
+        const result = await RawMaterial.aggregate(pipeline);
+
+        // 3. Prepare and send the final response
+        let summary;
+        if (result.length > 0) {
+            const rawSummary = result[0];
+            summary = {
+                ...rawSummary,
+                // Round the percentage for a cleaner response
+                nearExpiryPercentage: parseFloat(rawSummary.nearExpiryPercentage.toFixed(2))
+            };
+        } else {
+            // MODIFIED: Update the default object
+            summary = {
+                stockOut: 0,
+                overThreshold: 0,
+                aboveThreshold: 0,
+                nearExpiryPercentage: 0 // --- ADDED HERE ---
+            };
+        }
+
+        res.status(200).json({
+            success: true,
+            summary
+        });
+
+    } catch (error) {
+        console.error("Error fetching raw material stock summary:", error);
+        res.status(500).json({ success: false, message: "Internal server error" });
+    }
+};
+/**
+ * @desc    Allow a patient to add feedback for an appointment
+ * @route   POST /api/feedback
+ * @access  Private (Patient)
+ */
+exports.addFeedback = async (req, res) => {
+    try {
+        const { doctorId, appointmentId, ratings, comment } = req.body;
+        const patientId = req.user._id; // Assuming patient ID comes from auth middleware
+
+        // 1. Validate input
+        if (!doctorId || !appointmentId || !ratings) {
+            return res.status(400).json({ message: "Doctor, appointment, and ratings are required." });
+        }
+        const { consultation, medicineDelivery, communication } = ratings;
+        if (consultation === undefined || medicineDelivery === undefined || communication === undefined) {
+            return res.status(400).json({ message: "All rating categories are required." });
+        }
+
+        // 2. Check for duplicate feedback
+        const existingFeedback = await Feedback.findOne({ appointmentId, patientId });
+        if (existingFeedback) {
+            return res.status(409).json({ message: "Feedback has already been submitted for this appointment." });
+        }
+
+        // 3. Calculate the average score
+        const averageScore = (consultation + medicineDelivery + communication) / 3;
+
+        // 4. Create and save the new feedback document
+        const newFeedback = new Feedback({
+            patientId,
+            doctorId,
+            appointmentId,
+            ratings,
+            averageScore,
+            comment
+        });
+
+        const savedFeedback = await newFeedback.save();
+
+        res.status(201).json({
+            success: true,
+            message: "Thank you for your feedback!",
+            data: savedFeedback
+        });
+
+    } catch (error) {
+        console.error("Error adding feedback:", error);
+        res.status(500).json({ success: false, message: "Internal server error" });
+    }
+};
+/**
+ * @desc    Get an overall summary of all feedback within a time period.
+ * @route   POST /api/feedback/summary
+ * @access  Private (Admin/Doctor)
+ * @body    { "filter": "[day|week|month]" } // Optional filter
+ */
+exports.getFeedbackSummary = async (req, res) => {
+    try {
+        // MODIFIED: Read 'filter' from the request body
+        const { filter } = req.body;
+        const matchQuery = {};
+
+        // NEW: Standard time filter logic
+        if (filter) {
+            const now = new Date();
+            let startDate;
+            switch (filter) {
+                case 'day':
+                    startDate = new Date(new Date().setHours(0, 0, 0, 0));
+                    break;
+                case 'week':
+                    const firstDayOfWeek = now.getDate() - now.getDay();
+                    startDate = new Date(new Date().setDate(firstDayOfWeek));
+                    startDate.setHours(0, 0, 0, 0);
+                    break;
+                case 'month':
+                    startDate = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
+                    break;
+                default:
+                    return res.status(400).json({ message: "Invalid filter value." });
+            }
+            if (startDate) {
+                // Filter by when the feedback was created
+                matchQuery.createdAt = { $gte: startDate };
+            }
+        }
+
+        // The aggregation pipeline is the same, but now uses the date-filtered matchQuery
+        const pipeline = [
+            { $match: matchQuery },
+            {
+                $group: {
+                    _id: null,
+                    totalRatings: { $sum: 1 },
+                    overallAverageScore: { $avg: "$averageScore" },
+                    avgConsultation: { $avg: "$ratings.consultation" },
+                    avgMedicineDelivery: { $avg: "$ratings.medicineDelivery" },
+                    avgCommunication: { $avg: "$ratings.communication" }
+                }
+            },
+            {
+                $project: {
+                    _id: 0,
+                    totalRatings: 1,
+                    overallAverageScore: { $round: ["$overallAverageScore", 1] },
+                    avgConsultation: { $round: ["$avgConsultation", 1] },
+                    avgMedicineDelivery: { $round: ["$avgMedicineDelivery", 1] },
+                    avgCommunication: { $round: ["$avgCommunication", 1] }
+                }
+            }
+        ];
+
+        const result = await Feedback.aggregate(pipeline);
+
+        let summary;
+        if (result.length > 0) {
+            summary = result[0];
+        } else {
+            summary = {
+                totalRatings: 0,
+                overallAverageScore: 0,
+                avgConsultation: 0,
+                avgMedicineDelivery: 0,
+                avgCommunication: 0
+            };
+        }
+
+        res.status(200).json({ success: true, data: summary });
+
+    } catch (error) {
+        console.error("Error fetching feedback summary:", error);
+        res.status(500).json({ success: false, message: "Internal server error" });
+    }
+};
+/**
+ * @desc    Get a summary of doctor attendance and total doctor count.
+ * @route   GET /api/doctors/attendance-summary?date=YYYY-MM-DD
+ * @access  Private (Admin)
+ */
+exports.getDoctorAttendanceSummary = async (req, res) => {
+    try {
+        const { date } = req.query;
+        const targetDate = date ? new Date(date) : new Date();
+
+        const startOfDay = new Date(targetDate);
+        startOfDay.setUTCHours(0, 0, 0, 0);
+
+        const endOfDay = new Date(targetDate);
+        endOfDay.setUTCHours(23, 59, 59, 999);
+
+        if (isNaN(startOfDay.getTime())) {
+            return res.status(400).json({ message: "Invalid date format. Please use YYYY-MM-DD." });
+        }
+
+        const attendancePipeline = [
+            // This pipeline is unchanged
+            { $unwind: "$attendanceRecords" },
+            { $match: { "attendanceRecords.date": { $gte: startOfDay, $lte: endOfDay } } },
+            {
+                $group: {
+                    _id: null,
+                    presentCount: { $sum: { $cond: [{ $eq: ["$attendanceRecords.status", "Present"] }, 1, 0] } },
+                    absentCount: { $sum: { $cond: [{ $eq: ["$attendanceRecords.status", "Absent"] }, 1, 0] } },
+                    lateCount: { $sum: { $cond: [{ $eq: ["$attendanceRecords.status", "Late"] }, 1, 0] } }
+                }
+            },
+            {
+                $project: {
+                    _id: 0,
+                    present: "$presentCount",
+                    absent: "$absentCount",
+                    late: "$lateCount"
+                }
+            }
+        ];
+
+        // --- MODIFIED: Run both queries in parallel for efficiency ---
+        const [attendanceResult, totalDoctors] = await Promise.all([
+            Doctor.aggregate(attendancePipeline),
+            Doctor.countDocuments() // New query to get the total count of all doctors
+        ]);
+        
+        // Prepare the attendance summary
+        let summary;
+        if (attendanceResult.length > 0) {
+            summary = attendanceResult[0];
+        } else {
+            summary = {
+                present: 0,
+                absent: 0,
+                late: 0
+            };
+        }
+
+        // --- MODIFIED: Add totalDoctors to the final response ---
+        res.status(200).json({
+            success: true,
+            date: targetDate.toISOString().split('T')[0],
+            summary: summary,
+            totalDoctors: totalDoctors 
+        });
+
+    } catch (error) {
+        console.error("Error fetching doctor attendance summary:", error);
         res.status(500).json({ success: false, message: "Internal server error" });
     }
 };

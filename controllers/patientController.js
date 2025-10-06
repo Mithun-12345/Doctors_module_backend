@@ -1463,6 +1463,9 @@ exports.updateFollowUpStatus = async (req, res) => {
       case "Shipment":
         appointment.follow = "Patient Care";
         break;
+      case "Patient Care":
+        appointment.follow = "Inactive";
+        break;
       default:
         return res.status(400).json({ message: "Invalid follow-up status" });
     }

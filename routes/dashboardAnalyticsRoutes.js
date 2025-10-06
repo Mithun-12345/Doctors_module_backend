@@ -9,7 +9,12 @@ const {
   getMedicinePreparationStatus,
   getAppointmentSummaryForDay,
   getShipmentSummary,
-  getPatientAdherenceSummary
+  getPatientAdherenceSummary,
+  getRawMaterialStockSummary,
+  getMessageSummary,
+  addFeedback,
+  getDoctorAttendanceSummary,
+  getFeedbackSummary
 } = require("../controllers/dashboardAnalyticsController");
 const {
   upload,
@@ -28,9 +33,11 @@ router.patch('/preparation-status', getMedicinePreparationStatus);
 router.patch('/appointment-summary-by-date', getAppointmentSummaryForDay);
 router.patch('/adherence-summary', getPatientAdherenceSummary);
 router.patch('/shipment-summary',getShipmentSummary);
-
-
-
+router.patch('/stock-summary', getRawMaterialStockSummary);
+router.post('/summary', getMessageSummary);
+router.post('/rate', validateToken, addFeedback);
+router.get('/rate-summary', validateToken, getFeedbackSummary);
+router.get('/attendance-summary', getDoctorAttendanceSummary);
 
 
 

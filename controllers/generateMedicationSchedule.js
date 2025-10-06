@@ -100,6 +100,39 @@ exports.updateMedicationStatus = async (req, res) => {
     }
 
     const updatedReminder = await reminder.save();
+        // --- FEEDBACK TRIGGER LOGIC STARTS HERE ---
+        // This runs in the background and won't delay the API response
+        try {
+            const [patient, remainingDosesCount] = await Promise.all([
+                Patient.findById(patientId).select('follow'),
+                NotificationReminderSettings.countDocuments({
+                    patientId: patientId,
+                    status: null // Count only pending doses
+                })
+            ]);
+
+            // Check if the two conditions are met
+            if (patient && patient.follow === 'Patient Care' && remainingDosesCount === 1) {
+                console.log(`Triggering feedback for patient ${patientId}: Last dose approaching.`);
+
+                const lastAppointment = await Appointment.findOne({ patientId: patientId, status: 'completed' }).sort({ updatedAt: -1 });
+
+                if (lastAppointment) {
+                    const io = req.app.get('socketio'); // Get the Socket.IO instance
+                    
+                    // Emit the signal to the specific patient's chat window
+                    io.to(`user_${patientId}`).emit("requestFeedback", {
+                        message: "You're almost done with your course! We'd love to get your feedback on your experience.",
+                        appointmentId: lastAppointment._id,
+                        doctorId: lastAppointment.doctor
+                    });
+                }
+            }
+        } catch (feedbackError) {
+            // Log the error but don't stop the main function from succeeding
+            console.error("Error in feedback trigger logic:", feedbackError);
+        }
+        // --- FEEDBACK TRIGGER LOGIC ENDS HERE ---
 
     return res.status(200).json({
       message: `Medication status updated to ${status ? 'taken' : 'not taken'}`,

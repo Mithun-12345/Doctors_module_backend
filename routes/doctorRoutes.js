@@ -40,7 +40,8 @@ const {
   markShipmentAsLost,
   markAppointmentAsNoShow,
   allowPhoneCalls, 
-  incrementCallCount
+  incrementCallCount,
+  markDoctorAttendance
 } = require("../controllers/doctorController");
 const {
   upload,
@@ -69,7 +70,7 @@ router.patch('/:patientId/allow-calls',validateToken, allowPhoneCalls);
 
 // 3. Define the route to increment the call count
 router.patch('/:patientId/increment-call',validateToken, incrementCallCount);
-
+router.post('/:doctorId/attendance', validateToken, markDoctorAttendance);
 
 // @route   POST /api/doctor/addDoctor
 // @desc    Add a new doctor

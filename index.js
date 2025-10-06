@@ -90,7 +90,7 @@ const dashboardAnalyticsRoutes= require('./routes/dashboardAnalyticsRoutes.js')
 const validateToken = require("./middlewares/validateTokenHandler");
 
 // ✅ SERVICES
-const { startReminderCronJob,startMedicineReminderCronJob,startExactTimeReminderCronJob,startUserStatusCronJob} = require('./utils/notificationScheduler.js');
+const { startReminderCronJob,startMedicineReminderCronJob,startExactTimeReminderCronJob,startUserStatusCronJob,startTatAnalyticsCronJob} = require('./utils/notificationScheduler.js');
 const { analyzePatientMessage, triggerActionFromIntent, conversationalFallback } = require("./services/groqservice");
 
 // =================================================================================
@@ -551,7 +551,8 @@ server.listen(PORT, () => {
   startReminderCronJob();
   startMedicineReminderCronJob();
   startExactTimeReminderCronJob();
-  startUserStatusCronJob()
+  startUserStatusCronJob();
+  startTatAnalyticsCronJob()
 });
 
 // Graceful Shutdown Logic

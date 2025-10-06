@@ -2,6 +2,23 @@ const mongoose = require("mongoose");
 const crypto = require("crypto"); // --- NEW ADDITION ---
 const bcrypt = require("bcryptjs"); // --- NEW ADDITION ---
 
+// --- NEW: Define the schema for a single attendance entry ---
+const attendanceRecordSchema = new mongoose.Schema({
+    date: {
+        type: Date,
+        required: true
+    },
+    status: {
+        type: String,
+        enum: ['Present', 'Absent', 'Late'],
+        required: true
+    },
+    notes: {
+        type: String,
+        trim: true
+    }
+}, { _id: false });
+
 const doctorSchema = new mongoose.Schema(
   {
     // Personal Details
@@ -50,6 +67,7 @@ const doctorSchema = new mongoose.Schema(
     pfNumber: { type: String },
     esiNumber: { type: String },
     taxDeductionPreferences: { type: String },
+    attendanceRecords: [attendanceRecordSchema],
 
     // System Access
     usernameSystemAccess: { type: String, required: true, unique: true },

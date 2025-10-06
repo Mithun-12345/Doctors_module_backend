@@ -212,13 +212,23 @@ const createPrescription = async (req, res) => {
     });
     const savedPrescription = await prescription.save();
 
-    const patientAppointment = await Appointment.findById(appointmentID);
-    if (!patientAppointment) {
-      return res.status(404).json({ message: "Appointment not found" });
-    }
-    patientAppointment.prescriptionCreated = true;
-    patientAppointment.prescriptionID = savedPrescription._id;
-    await patientAppointment.save();
+// --- MODIFIED LOGIC IS HERE ---
+        const patientAppointment = await Appointment.findById(appointmentID);
+        if (!patientAppointment) {
+            return res.status(404).json({ message: "Appointment not found" });
+        }
+        patientAppointment.prescriptionCreated = true;
+        patientAppointment.prescriptionID = savedPrescription._id;
+        patientAppointment.follow = "Payment"; // Update appointment follow status
+        await patientAppointment.save();
+
+        // --- NEW LOGIC ADDED HERE ---
+        // Update the patient's follow and stage status
+        await Patient.findByIdAndUpdate(patientId, {
+            follow: "Payment",
+            stage: "Payment"
+        });
+        // -----------------------------
 
     if (parentPrescriptionId) {
       await Prescription.findByIdAndUpdate(parentPrescriptionId, {

@@ -1296,6 +1296,68 @@ exports.incrementCallCount = async (req, res) => {
         res.status(500).json({ success: false, message: "Internal server error" });
     }
 };
+/**
+ * @desc    Mark or update a doctor's attendance for a specific day.
+ * @route   POST /api/doctors/:doctorId/attendance
+ * @access  Private (Admin)
+ * @body    { "status": "Present" | "Absent" | "Late", "date": "YYYY-MM-DD", "notes": "Optional comment" }
+ */
+exports.markDoctorAttendance = async (req, res) => {
+    try {
+        const { doctorId } = req.params;
+        const { status, date, notes } = req.body;
+
+        // 1. Validate inputs
+        if (!mongoose.Types.ObjectId.isValid(doctorId)) {
+            return res.status(400).json({ message: "Invalid Doctor ID format." });
+        }
+        if (!status || !['Present', 'Absent', 'Late'].includes(status)) {
+            return res.status(400).json({ message: "A valid status ('Present', 'Absent', 'Late') is required." });
+        }
+
+        // 2. Find the doctor
+        const doctor = await Doctor.findById(doctorId);
+        if (!doctor) {
+            return res.status(404).json({ message: "Doctor not found." });
+        }
+
+        // 3. Prepare the date for the record (use provided date or today's date)
+        const recordDate = date ? new Date(date) : new Date();
+        recordDate.setUTCHours(0, 0, 0, 0); // Normalize to the start of the day
+
+        // 4. Check if a record for this date already exists
+        const existingRecordIndex = doctor.attendanceRecords.findIndex(record => {
+            const existingDate = new Date(record.date);
+            existingDate.setUTCHours(0, 0, 0, 0);
+            return existingDate.getTime() === recordDate.getTime();
+        });
+
+        if (existingRecordIndex > -1) {
+            // If record exists, update it
+            doctor.attendanceRecords[existingRecordIndex].status = status;
+            doctor.attendanceRecords[existingRecordIndex].notes = notes || doctor.attendanceRecords[existingRecordIndex].notes;
+        } else {
+            // If no record exists, add a new one
+            doctor.attendanceRecords.push({
+                date: recordDate,
+                status: status,
+                notes: notes
+            });
+        }
+
+        const updatedDoctor = await doctor.save();
+
+        res.status(200).json({
+            success: true,
+            message: `Attendance for ${doctor.name} on ${recordDate.toISOString().split('T')[0]} marked as ${status}.`,
+            data: updatedDoctor
+        });
+
+    } catch (error) {
+        console.error("Error marking doctor attendance:", error);
+        res.status(500).json({ success: false, message: "Internal server error" });
+    }
+};
 exports.getTodaysAppointments = async (req, res) => {
   try {
     // 1. Get doctorId from logged-in user and date from query
