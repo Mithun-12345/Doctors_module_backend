@@ -550,6 +550,11 @@ exports.loginUser = async (req, res) => {
     if (!isMatch) {
       return res.status(401).json({ message: "Invalid credentials." });
     }
+    // --- NEW: Check and set the first login timestamp for patients ---
+   if (role === 'Patient' && !user.firstLoginDone) {
+    user.firstLoginTime = new Date();
+    user.firstLoginDone = true;
+}
     user.lastLoginAt = new Date();
     await user.save();
     

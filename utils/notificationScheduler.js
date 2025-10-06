@@ -4,7 +4,7 @@ const Notification = require('../models/notificationHub');  // Adjust path
 const NotificationReminderSettings = require('../models/NotificationReminderSettings'); // Adjust path
 const { pushnotificationModel } = require("../models/pushNotificationModel"); // Adjust path
 const admin = require("../configs/firebase"); // Your initialized Firebase Admin SDK
-const { calculateOverallTatAnalytics } = require('../controllers/dashboardAnalyticsController'); // Adjust path
+const { calculateOverallTatAnalytics,getOverallClinicAnalytics } = require('../controllers/dashboardAnalyticsController'); // Adjust path
 
 
 // No changes to this function. It is correct.
@@ -322,11 +322,47 @@ const startTatAnalyticsCronJob = () => {
     });
     console.log('✅ TAT Analytics cron job scheduled to run daily at 2:00 AM.');
 };
+/**
+ * Schedules the getOverallClinicAnalytics function to run once daily.
+ */
+const startOverallAnalyticsCronJob = () => {
+    // This cron string means 'at 3:00 AM' every day.
+    const rule = '0 3 * * *'; 
+
+    cron.schedule(rule, async () => {
+        console.log('Running daily job: Calculating Overall Clinic Analytics...');
+        try {
+            // 2. Create mock request and response objects
+            // We use an empty body to get the all-time summary
+            const mockReq = {
+                body: {} 
+            };
+            
+            // This mock response will just log the output to your console
+            const mockRes = {
+                status: (code) => {
+                    console.log(`Analytics job finished with status: ${code}`);
+                    return { json: (data) => console.log('Analytics job response:', data) };
+                }
+            };
+            
+            // 3. Call your controller function with the mock objects
+            await getOverallClinicAnalytics(mockReq, mockRes);
+
+        } catch (error) {
+            console.error('❌ Error running daily Overall Clinic Analytics job:', error);
+        }
+    });
+
+    console.log('✅ Overall Clinic Analytics job scheduled to run at 3:00 AM.');
+};
+
 
 module.exports = { 
     startReminderCronJob,
     startMedicineReminderCronJob,
     startExactTimeReminderCronJob,
     startUserStatusCronJob,
-    startTatAnalyticsCronJob
+    startTatAnalyticsCronJob,
+    startOverallAnalyticsCronJob
 };

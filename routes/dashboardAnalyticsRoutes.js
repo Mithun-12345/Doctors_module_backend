@@ -14,7 +14,8 @@ const {
   getMessageSummary,
   addFeedback,
   getDoctorAttendanceSummary,
-  getFeedbackSummary
+  getFeedbackSummary,
+  getOverallClinicAnalytics  
 } = require("../controllers/dashboardAnalyticsController");
 const {
   upload,
@@ -38,7 +39,6 @@ router.post('/summary', getMessageSummary);
 router.post('/rate', validateToken, addFeedback);
 router.get('/rate-summary', validateToken, getFeedbackSummary);
 router.get('/attendance-summary', getDoctorAttendanceSummary);
-
-
+router.post('/overall-summary', getOverallClinicAnalytics);
 
 module.exports = router;

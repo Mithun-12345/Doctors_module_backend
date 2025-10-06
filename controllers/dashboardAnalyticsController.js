@@ -1527,6 +1527,123 @@ exports.getFeedbackSummary = async (req, res) => {
         res.status(500).json({ success: false, message: "Internal server error" });
     }
 };
+
+// Helper function (unchanged)
+const msToHoursMinutes = (ms) => {
+    if (!ms || ms <= 0) return "0h 0m";
+    const totalMinutes = Math.floor(ms / (1000 * 60));
+    const hours = Math.floor(totalMinutes / 60);
+    const minutes = totalMinutes % 60;
+    return `${hours}h ${minutes}m`;
+};
+
+/**
+ * @desc    Get a final, overall summary of key clinic analytics with time filters.
+ * @route   POST /api/analytics/overall-summary
+ * @access  Private (Admin)
+ * @body    { "filter": "[day|week|month]" } // Optional filter
+ */
+exports.getOverallClinicAnalytics = async (req, res) => {
+    try {
+        // --- NEW: Standard time filter logic ---
+        const { filter } = req.body;
+        const matchQuery = {};
+        if (filter) {
+            const now = new Date();
+            let startDate;
+            switch (filter) {
+                case 'day':
+                    startDate = new Date(new Date().setHours(0, 0, 0, 0));
+                    break;
+                case 'week':
+                    const firstDayOfWeek = now.getDate() - now.getDay();
+                    startDate = new Date(new Date().setDate(firstDayOfWeek));
+                    startDate.setHours(0, 0, 0, 0);
+                    break;
+                case 'month':
+                    startDate = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
+                    break;
+                default:
+                    return res.status(400).json({ message: "Invalid filter value." });
+            }
+            if (startDate) {
+                matchQuery.createdAt = { $gte: startDate };
+            }
+        }
+        // --- END OF NEW LOGIC ---
+
+        const [
+            loginStats,
+            prescriptionStats,
+            callStats,
+            feedbackStats
+        ] = await Promise.all([
+            // 1. Average time to first login (for patients registered in the period)
+            Patient.aggregate([
+                { $match: { ...matchQuery, firstLoginDone: true, firstLoginTime: { $ne: null } } },
+                { $project: { timeToLogin: { $subtract: ["$firstLoginTime", "$createdAt"] } } },
+                { $group: { _id: null, avgTimeToLogin: { $avg: "$timeToLogin" } } }
+            ]),
+
+            // 2. Prescription revision rate (for prescriptions created in the period)
+            Prescription.aggregate([
+                { $match: matchQuery }, // Apply filter here
+                { $group: {
+                    _id: null,
+                    totalPrescriptions: { $sum: 1 },
+                    prescriptionsWithRevisions: {
+                        $sum: { $cond: [{ $gt: [{ $size: { $ifNull: ["$subPrescriptionID", []] } }, 0] }, 1, 0] }
+                    }
+                }},
+                { $project: {
+                    _id: 0,
+                    revisionRate: {
+                        $cond: {
+                            if: { $gt: ["$totalPrescriptions", 0] },
+                            then: { $multiply: [{ $divide: ["$prescriptionsWithRevisions", "$totalPrescriptions"] }, 100] },
+                            else: 0
+                        }
+                    }
+                }}
+            ]),
+
+            // 3. Average calls per patient (for patients registered in the period)
+            Patient.aggregate([
+                { $match: matchQuery }, // Apply filter here
+                { $group: { _id: null, avgCallsReceived: { $avg: "$phoneReceived" } } }
+            ]),
+
+            // 4. Average communication score (for feedback created in the period)
+            Feedback.aggregate([
+                { $match: matchQuery }, // Apply filter here
+                { $group: { _id: null, avgCommunicationScore: { $avg: "$ratings.communication" } } }
+            ])
+        ]);
+
+        // Processing results (unchanged)
+        const avgTimeToLoginMs = loginStats[0]?.avgTimeToLogin || 0;
+        const prescriptionRevisionRate = prescriptionStats[0]?.revisionRate || 0;
+        const avgCallsPerPatient = callStats[0]?.avgCallsReceived || 0;
+        const avgCommunicationScore = feedbackStats[0]?.avgCommunicationScore || 0;
+
+        const summary = {
+            averageTimeToFirstLogin: msToHoursMinutes(avgTimeToLoginMs),
+            prescriptionRevisionRatePercentage: parseFloat(prescriptionRevisionRate.toFixed(2)),
+            averageCallsPerPatient: parseFloat(avgCallsPerPatient.toFixed(2)),
+            averageCommunicationScore: parseFloat(avgCommunicationScore.toFixed(1))
+        };
+
+        res.status(200).json({
+            success: true,
+            summary
+        });
+
+    } catch (error) {
+        console.error("Error fetching overall clinic analytics:", error);
+        res.status(500).json({ success: false, message: "Internal server error" });
+    }
+};
+
 /**
  * @desc    Get a summary of doctor attendance and total doctor count.
  * @route   GET /api/doctors/attendance-summary?date=YYYY-MM-DD
