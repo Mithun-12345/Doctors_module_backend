@@ -41,7 +41,8 @@ const {
   markAppointmentAsNoShow,
   allowPhoneCalls, 
   incrementCallCount,
-  markDoctorAttendance
+  markDoctorAttendance,
+  getDoctorAttendanceReport
 } = require("../controllers/doctorController");
 const {
   upload,
@@ -147,6 +148,7 @@ router.get("/chatPatientWithDoctorAndIsReadCount",validateToken,chatPatientWithD
 router.get("/appointments/total-count", validateToken, getTotalAppointmentsForDoctor);
 router.get("/appointments/today/count", validateToken, getTodaysAppointmentCount);
 router.patch("/:appointmentId/no-show", validateToken,  markAppointmentAsNoShow);
+router.get('/attendance-report', getDoctorAttendanceReport);
 
 
 

@@ -1213,48 +1213,127 @@ exports.markAppointmentAsNoShow = async (req, res) => {
         res.status(500).json({ success: false, message: "Internal server error" });
     }
 };
+
 /**
- * @desc    Mark a prescription's shipment as lost.
- * @route   PATCH /api/prescriptions/:prescriptionId/mark-lost
- * @access  Private (Admin/Logistics)
+ * @desc    Get a detailed all-time attendance report for all doctors.
+ * @route   GET /api/doctors/attendance-report
+ * @access  Private (Admin)
  */
-exports.markShipmentAsLost = async (req, res) => {
+exports.getDoctorAttendanceReport = async (req, res) => {
     try {
-        const { prescriptionId } = req.params;
+        // REMOVED: No longer need startDate or endDate from req.query
 
-        // 1. Validate the prescription ID format
-        if (!mongoose.Types.ObjectId.isValid(prescriptionId)) {
-            return res.status(400).json({ message: "Invalid Prescription ID format." });
-        }
-
-        // 2. Find the prescription and update the shipmentLost field in a single operation
-        const updatedPrescription = await Prescription.findByIdAndUpdate(
-            prescriptionId,
-            { 
-                shipmentLost: true,
-                updatedAt: new Date() // Also update the 'updatedAt' timestamp
+        // 2. Build the aggregation pipeline
+        const pipeline = [
+            // Stage 1: Deconstruct the attendanceRecords array
+            {
+                $unwind: "$attendanceRecords"
             },
-            { new: true } // This option ensures the updated document is returned
-        );
+            
+            // REMOVED: The $match stage for date filtering is now gone.
 
-        // 3. Check if a prescription was found and updated
-        if (!updatedPrescription) {
-            return res.status(404).json({ message: "Prescription not found." });
-        }
+            // Stage 2: Group back by doctor to calculate counts for each one
+            {
+                $group: {
+                    _id: "$_id", // Group by the doctor's ID
+                    name: { $first: "$name" },
+                    employeeID: { $first: "$employeeID" },
+                    department: { $first: "$department" },
+                    role: { $first: "$role" },
+                    // Sum up the counts for each status
+                    presentCount: {
+                        $sum: { $cond: [{ $eq: ["$attendanceRecords.status", "Present"] }, 1, 0] }
+                    },
+                    absentCount: {
+                        $sum: { $cond: [{ $eq: ["$attendanceRecords.status", "Absent"] }, 1, 0] }
+                    },
+                    lateCount: {
+                        $sum: { $cond: [{ $eq: ["$attendanceRecords.status", "Late"] }, 1, 0] }
+                    }
+                }
+            },
+            // Stage 3: Format the final output
+            {
+                $project: {
+                    _id: 0,
+                    doctorId: "$_id",
+                    doctorName: "$name",
+                    employeeID: 1,
+                    department: 1,
+                    role: 1,
+                    presentCount: 1,
+                    absentCount: 1,
+                    lateCount: 1
+                }
+            },
+            // Stage 4: (Optional) Sort the results by name
+            {
+                $sort: { doctorName: 1 }
+            }
+        ];
 
-        // 4. Send a successful response
+        // 3. Execute the aggregation and send the response
+        const report = await Doctor.aggregate(pipeline);
+
         res.status(200).json({
             success: true,
-            message: "Shipment successfully marked as lost.",
-            data: updatedPrescription,
+            count: report.length,
+            data: report,
         });
 
     } catch (error) {
-        console.error("Error marking shipment as lost:", error);
+        console.error("Error fetching doctor attendance report:", error);
         res.status(500).json({ success: false, message: "Internal server error" });
     }
 };
 /**
+ * @desc    Update the shipment lost status of a prescription.
+ * @route   PATCH /api/prescriptions/:prescriptionId/mark-lost
+ * @access  Private (Admin/Logistics)
+ * @body    { "shipmentLost": true | false }
+ */
+exports.markShipmentAsLost = async (req, res) => {
+    try {
+        const { prescriptionId } = req.params;
+        // --- MODIFIED: Get shipmentLost from the request body ---
+        const { shipmentLost } = req.body;
+
+        // 1. Validate inputs
+        if (!mongoose.Types.ObjectId.isValid(prescriptionId)) {
+            return res.status(400).json({ message: "Invalid Prescription ID format." });
+        }
+        // --- NEW: Validate the new payload field ---
+        if (typeof shipmentLost !== 'boolean') {
+            return res.status(400).json({ message: "A 'shipmentLost' boolean value is required in the body." });
+        }
+
+        // 2. Find the prescription and update it with the value from the payload
+        const updatedPrescription = await Prescription.findByIdAndUpdate(
+            prescriptionId,
+            { 
+                shipmentLost: shipmentLost, // Use the value from the body
+                updatedAt: new Date()
+            },
+            { new: true }
+        );
+
+        // 3. Check if the prescription was found
+        if (!updatedPrescription) {
+            return res.status(404).json({ message: "Prescription not found." });
+        }
+
+        // 4. Send a dynamic successful response
+        res.status(200).json({
+            success: true,
+            message: `Shipment status updated to lost: ${shipmentLost}.`,
+            data: updatedPrescription,
+        });
+
+    } catch (error) {
+        console.error("Error updating shipment lost status:", error);
+        res.status(500).json({ success: false, message: "Internal server error" });
+    }
+};/**
  * @desc    Allow phone calls for a specific patient.
  * @route   PATCH /api/patients/:patientId/allow-calls
  * @access  Private
