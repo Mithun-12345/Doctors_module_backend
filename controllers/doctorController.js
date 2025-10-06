@@ -1149,33 +1149,67 @@ exports.getDoctorPatientMedicationSummary = async (req, res) => {
 exports.markAppointmentAsNoShow = async (req, res) => {
     try {
         const { appointmentId } = req.params;
+        const { noShow } = req.body;
 
-        // 1. Validate the appointment ID
+        // 1. Validate inputs
         if (!mongoose.Types.ObjectId.isValid(appointmentId)) {
             return res.status(400).json({ message: "Invalid Appointment ID format." });
         }
+        if (typeof noShow !== 'boolean') {
+            return res.status(400).json({ message: "A 'noShow' boolean value is required in the body." });
+        }
 
-        // 2. Find the appointment and update it in one step
-        const updatedAppointment = await Appointment.findByIdAndUpdate(
-            appointmentId,
-            { noShow: true },
-            { new: true } // This option returns the updated document
-        );
+        let updatedAppointment;
+        let message;
 
-        // 3. Check if the appointment was found
+        if (noShow === true) {
+            // --- SCENARIO 1: APPOINTMENT WAS MISSED ---
+            // Just update noShow to true, as requested.
+            updatedAppointment = await Appointment.findByIdAndUpdate(
+                appointmentId,
+                { noShow: true, status: 'completed' }, // Also marking status as completed
+                { new: true }
+            );
+            message = "Appointment successfully marked as no-show.";
+
+        } else {
+            // --- SCENARIO 2: APPOINTMENT WAS COMPLETED SUCCESSFULLY ---
+            
+            // 1. Update the appointment's follow status
+            updatedAppointment = await Appointment.findByIdAndUpdate(
+                appointmentId,
+                { 
+                    follow: "Prescription",
+                    status: "completed",
+                    noShow: false // Explicitly set noShow to false
+                },
+                { new: true }
+            );
+
+            if (updatedAppointment) {
+                // 2. Update the patient's follow and stage status
+                await Patient.findByIdAndUpdate(updatedAppointment.patient, {
+                    follow: "Prescription",
+                    stage: "Prescription"
+                });
+            }
+            message = "Appointment successfully completed and patient moved to Prescription stage.";
+        }
+
+        // Check if the appointment was found
         if (!updatedAppointment) {
             return res.status(404).json({ message: "Appointment not found." });
         }
 
-        // 4. Send the successful response
+        // Send the final response
         res.status(200).json({
             success: true,
-            message: "Appointment marked as no-show.",
+            message: message,
             appointment: updatedAppointment,
         });
 
     } catch (error) {
-        console.error("Error marking appointment as no-show:", error);
+        console.error("Error concluding appointment:", error);
         res.status(500).json({ success: false, message: "Internal server error" });
     }
 };

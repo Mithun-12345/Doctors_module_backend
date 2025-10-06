@@ -850,36 +850,50 @@ const  getAllMedicinePreparationSummaries = async (req, res) => {
     res.status(500).json({ message: "Server error while fetching medicine preparations" });
   }
 };
+
 const updateMedicinePrepared = async (req, res) => {
-  try {
-    const { prescriptionId, medicinePrepared } = req.body;
+    try {
+        const { prescriptionId, medicinePrepared } = req.body;
 
-    if (!prescriptionId || typeof medicinePrepared !== "boolean") {
-      return res.status(400).json({
-        message: "prescriptionId and medicinePrepared(boolean) are required",
-      });
+        if (!prescriptionId || typeof medicinePrepared !== "boolean") {
+            return res.status(400).json({
+                message: "prescriptionId and medicinePrepared(boolean) are required",
+            });
+        }
+
+        // MODIFIED: 'follow' status is now updated at the same time
+        const appointment = await Appointment.findOneAndUpdate(
+            { prescriptionID: prescriptionId },
+            { 
+                medicinePrepared, 
+                follow: "Shipment" 
+            },
+            { new: true }
+        );
+
+        if (!appointment) {
+            return res.status(404).json({ message: "Appointment not found" });
+        }
+
+        // --- NEW LOGIC ADDED HERE ---
+        // Find the patient using the ID from the appointment and update their status
+        if (appointment.patient) {
+            await Patient.findByIdAndUpdate(appointment.patient, {
+                follow: "Shipment",
+                stage: "Shipment"
+            });
+        }
+        // -----------------------------
+
+        res.status(200).json({
+            message: "medicinePrepared status updated successfully and follow status set to Shipment",
+            appointment,
+        });
+    } catch (error) {
+        console.error("❌ Error updating medicinePrepared:", error);
+        res.status(500).json({ message: "Server error", error: error.message });
     }
-
-    const appointment = await Appointment.findOneAndUpdate(
-      { prescriptionID: prescriptionId }, // DB field name
-      { medicinePrepared },
-      { new: true }
-    );
-
-    if (!appointment) {
-      return res.status(404).json({ message: "Appointment not found" });
-    }
-
-    res.status(200).json({
-      message: "medicinePrepared status updated successfully",
-      appointment,
-    });
-  } catch (error) {
-    console.error("❌ Error updating medicinePrepared:", error);
-    res.status(500).json({ message: "Server error", error: error.message });
-  }
 };
-
 const logWastage = async (req, res) => {
   try {
     const { prescriptionId, medicineName } = req.body;
