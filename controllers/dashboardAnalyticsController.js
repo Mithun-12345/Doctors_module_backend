@@ -36,6 +36,7 @@ const DebitCreditNote = require('../models/debitCredit'); // Adjust the path as 
 const MedicinePreparationSummary = require('../models/MedicinePreparationSummary'); // Adjust path
 const Analytics = require('../models/dashboardAnalytics'); // The model we created earlier
 const Feedback = require('../models/appRatings');
+const RawMaterial = require('../models/RawMaterial'); // Adjust the path if needed
 
 
 /**

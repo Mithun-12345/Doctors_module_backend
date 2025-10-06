@@ -35,10 +35,10 @@ router.patch('/appointment-summary-by-date', getAppointmentSummaryForDay);
 router.patch('/adherence-summary', getPatientAdherenceSummary);
 router.patch('/shipment-summary',getShipmentSummary);
 router.patch('/stock-summary', getRawMaterialStockSummary);
-router.post('/summary', getMessageSummary);
+router.patch('/messenger-summary', getMessageSummary);
 router.post('/rate', validateToken, addFeedback);
-router.get('/rate-summary', validateToken, getFeedbackSummary);
+router.patch('/rate-summary',getFeedbackSummary);
 router.get('/attendance-summary', getDoctorAttendanceSummary);
-router.post('/overall-summary', getOverallClinicAnalytics);
+router.patch('/overall-summary', getOverallClinicAnalytics);
 
 module.exports = router;
