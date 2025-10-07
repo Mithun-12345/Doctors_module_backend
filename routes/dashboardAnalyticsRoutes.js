@@ -35,7 +35,7 @@ const router = express.Router();
 const validateToken = require("../middlewares/validateTokenHandler");
 
 // CREATE: Add one or more new questions
-router.post('/create-questions', validateToken, createFeedbackQuestions);
+router.patch('/create-questions', validateToken, createFeedbackQuestions);
 
 // READ: Get all questions (can filter by category)
 router.get('/display-questions', validateToken, getFeedbackQuestions);
