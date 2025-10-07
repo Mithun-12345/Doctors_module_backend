@@ -24,7 +24,8 @@ const {
   getFeedbackQuestions,
   updateFeedbackQuestion,
   deleteFeedbackQuestion,
-  submitFeedbackResponse
+  submitFeedbackResponse,
+  bulkUpdateFeedbackQuestions
 } = require("../controllers/dashboardAnalyticsController");
 const {
   upload,
@@ -43,6 +44,8 @@ router.get('/display-questions', validateToken, getFeedbackQuestions);
 // UPDATE: Update a specific question by its ID
 router.patch('/update-questions/:id', validateToken, updateFeedbackQuestion);
 router.post('/feedback-response', validateToken, submitFeedbackResponse);
+router.patch('/questions/bulk-update', validateToken, bulkUpdateFeedbackQuestions);
+
 
 
 // DELETE: Delete a specific question by its ID

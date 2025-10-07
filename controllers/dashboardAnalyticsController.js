@@ -2181,6 +2181,48 @@ exports.getVendorAnalytics = async (req, res) => {
         res.status(500).json({ success: false, message: "Internal server error" });
     }
 };
+exports.bulkUpdateFeedbackQuestions = async (req, res) => {
+    try {
+        const items = req.body;
+
+        if (!Array.isArray(items) || items.length === 0) {
+            return res.status(400).json({ message: "Request body must be a non-empty array." });
+        }
+
+        // Prepare the operations for bulkWrite
+        const operations = items.map(item => {
+            if (item._id) {
+                // This is an UPDATE operation
+                const { _id, ...updateData } = item;
+                return {
+                    updateOne: {
+                        filter: { _id: _id },
+                        update: { $set: updateData }
+                    }
+                };
+            } else {
+                // This is a CREATE operation
+                return {
+                    insertOne: {
+                        document: item
+                    }
+                };
+            }
+        });
+
+        const result = await FeedbackQuestion.bulkWrite(operations);
+
+        res.status(200).json({
+            success: true,
+            message: `Operation successful: ${result.nInserted} created, ${result.nModified} updated.`,
+            data: result
+        });
+
+    } catch (error) {
+        console.error("Error in bulk operation:", error);
+        res.status(500).json({ success: false, message: "Internal server error", error: error.message });
+    }
+};
 exports.getOrderFrequencyChart = async (req, res) => {
     try {
         const { filter } = req.body;
