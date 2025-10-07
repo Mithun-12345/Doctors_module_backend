@@ -8,7 +8,10 @@ const Payment = require("../models/Payment");
 const FamilyLink = require("../models/FamilyLink");
 const Appointment = require("../models/appointmentModel");
 const Referral = require("../models/referralModel");
+const { ClinicOperationHours, AppointmentSlotTypes } = require("../models/consultationMessengerSettings"); // Adjust path
 require("dotenv").config({ path: "./config/.env" });
+// Add this new line right below the one you just changed
+const { DoctorPrefinedAppointmentDetails } = require('../models/doctorPrefinedSettings'); // Or whatever you named the file
 const Doctor = require("../models/doctorModel");
 const moment = require("moment");
 const momentIST = require("moment-timezone");
@@ -1718,66 +1721,104 @@ exports.getDoctorAttendanceSummary = async (req, res) => {
         res.status(500).json({ success: false, message: "Internal server error" });
     }
 };
+// Import all necessary models at the top of your file
+
+
+// --- Helper functions from your other controller ---
+function convertTo24Hour(timeStr) {
+    if (!timeStr || !timeStr.includes(':')) return "00:00";
+    const time = timeStr.toUpperCase();
+    const [hoursMinutes, modifier] = time.split(' ');
+    let [hours, minutes] = hoursMinutes.split(':');
+    if (modifier === 'PM' && hours !== '12') hours = parseInt(hours, 10) + 12;
+    if (modifier === 'AM' && hours === '12') hours = '00';
+    return `${String(hours).padStart(2, '0')}:${minutes}`;
+}
+
+function getTimeSlots24(start, end, duration) {
+    const startTime24 = convertTo24Hour(start);
+    const endTime24 = convertTo24Hour(end);
+    const slots = [];
+    let currentTime = new Date(`1970-01-01T${startTime24}:00`);
+    const endTime = new Date(`1970-01-01T${endTime24}:00`);
+    if (endTime <= currentTime) endTime.setDate(endTime.getDate() + 1);
+    while (currentTime < endTime) {
+        slots.push(currentTime.toTimeString().substring(0, 5));
+        currentTime.setMinutes(currentTime.getMinutes() + duration);
+    }
+    return slots;
+}
+// --- End of Helper functions ---
+
+
 /**
- * @desc    Get appointment chart data for a specific day.
+ * @desc    Get complete appointment chart data for a specific day, including empty slots.
  * @route   GET /api/analytics/appointment-chart?date=YYYY-MM-DD
  * @access  Private (Admin)
  */
 exports.getAppointmentChartData = async (req, res) => {
     try {
-        // 1. Get date from query, or default to today's date
         const { date } = req.query;
         const targetDate = date ? new Date(date) : new Date();
+        const days = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+        const dayName = days[targetDate.getDay()];
 
-        // Create a date range for the entire requested day
+        // --- STEP 1: GENERATE ALL POSSIBLE TIME SLOTS FOR THE DAY ---
+        const [clinicDayInfo, allSlotTypes, doctorDetails] = await Promise.all([
+            ClinicOperationHours.findOne({ day: dayName }),
+            AppointmentSlotTypes.find({}),
+            DoctorPrefinedAppointmentDetails.findOne({})
+        ]);
+
+        if (!clinicDayInfo || !doctorDetails) {
+            return res.status(404).json({ message: "Clinic or doctor settings not found." });
+        }
+        
+        let allPossibleSlots = new Set();
+        const { consultationTime } = doctorDetails;
+
+        if (clinicDayInfo.status === false) { // Week Off
+            const weekoffType = allSlotTypes.find(st => st.slotType === "Weekoff");
+            if (weekoffType?.allowBooking) {
+                getTimeSlots24(weekoffType.startingTime, weekoffType.endingTime, consultationTime).forEach(slot => allPossibleSlots.add(slot));
+            }
+        } else { // Working Day
+            for (const slotType of allSlotTypes) {
+                if (slotType.slotType !== "Weekoff" && slotType.allowBooking) {
+                    getTimeSlots24(slotType.startingTime, slotType.endingTime, consultationTime).forEach(slot => allPossibleSlots.add(slot));
+                }
+            }
+        }
+        // Convert Set to a sorted array
+        const sortedSlots = Array.from(allPossibleSlots).sort();
+
+        // --- STEP 2: GET APPOINTMENT COUNTS FOR BOOKED SLOTS ---
         const startOfDay = new Date(targetDate);
         startOfDay.setUTCHours(0, 0, 0, 0);
-
         const endOfDay = new Date(targetDate);
         endOfDay.setUTCHours(23, 59, 59, 999);
-
-        if (isNaN(startOfDay.getTime())) {
-            return res.status(400).json({ message: "Invalid date format. Please use YYYY-MM-DD." });
-        }
-
-        // 2. Build the aggregation pipeline
-        const pipeline = [
-            // Stage 1: Match all appointments for the specified day
-            {
-                $match: {
-                    appointmentDate: {
-                        $gte: startOfDay,
-                        $lte: endOfDay
-                    }
-                }
-            },
-            // Stage 2: Group by time slot and count the two categories
+        
+        const aggregationPipeline = [
+            { $match: { appointmentDate: { $gte: startOfDay, $lte: endOfDay } } },
             {
                 $group: {
                     _id: "$timeSlot",
-                    bookedCount: {
-                        $sum: { $cond: [{ $eq: ["$follow", "Consultation"] }, 1, 0] }
-                    },
-                    completedCount: {
-                        $sum: { $cond: [{ $ne: ["$follow", "Consultation"] }, 1, 0] }
-                    }
+                    bookedCount: { $sum: { $cond: [{ $eq: ["$follow", "Consultation"] }, 1, 0] } },
+                    completedCount: { $sum: { $cond: [{ $ne: ["$follow", "Consultation"] }, 1, 0] } }
                 }
-            },
-            // Stage 3: Sort the results chronologically by time slot
-            {
-                $sort: { _id: 1 }
             }
         ];
+        const results = await Appointment.aggregate(aggregationPipeline);
+        const resultsMap = new Map(results.map(item => [item._id, item]));
 
-        const results = await Appointment.aggregate(pipeline);
-
-        // 3. Transform the results into x, y coordinate arrays
+        // --- STEP 3: MERGE THE DATA ---
         const bookedAppointments = [];
         const completedAppointments = [];
 
-        for (const item of results) {
-            bookedAppointments.push({ x: item._id, y: item.bookedCount });
-            completedAppointments.push({ x: item._id, y: item.completedCount });
+        for (const slot of sortedSlots) {
+            const counts = resultsMap.get(slot) || { bookedCount: 0, completedCount: 0 };
+            bookedAppointments.push({ x: slot, y: counts.bookedCount });
+            completedAppointments.push({ x: slot, y: counts.completedCount });
         }
 
         res.status(200).json({
