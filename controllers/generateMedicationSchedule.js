@@ -2,6 +2,49 @@ const moment = require("moment-timezone");
 const NotificationReminderSettings = require("../models/NotificationReminderSettings");
 const Patient = require("../models/patientModel");
 const mongoose = require('mongoose');
+const Prescription = require("../models/Prescription");
+const asyncHandler = require("express-async-handler");
+const axios = require("axios");
+const MedicalDetails = require("../models/patientDetails");
+const PatientDetails = require("../models/patientDetails");
+const ChronicPatient = require("../models/chronicModel");
+const Payment = require("../models/Payment");
+const FamilyLink = require("../models/FamilyLink");
+const Appointment = require("../models/appointmentModel");
+const Referral = require("../models/referralModel");
+const { ClinicOperationHours, AppointmentSlotTypes } = require("../models/consultationMessengerSettings"); // Adjust path
+require("dotenv").config({ path: "./config/.env" });
+// Add this new line right below the one you just changed
+const { DoctorPrefinedAppointmentDetails } = require('../models/doctorPrefinedSettings'); // Or whatever you named the file
+const Doctor = require("../models/doctorModel");
+const momentIST = require("moment-timezone");
+const twilio = require("twilio");
+const fs = require("fs");
+const crypto = require("crypto");
+const { google } = require("googleapis");
+const { createGoogleMeet } = require("./Gmeet");
+const cloudinary = require("cloudinary").v2;
+const Notification = require("../models/notificationHub");
+// patientController.js
+const UserGoogleTokens = require("../models/UserTokenSchema");
+const accountSid = process.env.TWILIO_ACCOUNT_SID;
+const authToken = process.env.TWILIO_AUTH_TOKEN;
+const client = new twilio(accountSid, authToken);
+const bcrypt = require("bcrypt");
+const PatientNotification = require("../models/PatientNotification");
+const admin = require("../configs/firebase");
+const {pushnotificationModel} = require("../models/pushNotificationModel");
+const Message = require('../models/messageModel'); // Or whatever the path to your file is
+const DebitCreditNote = require('../models/debitCredit'); // Adjust the path as needed
+const MedicinePreparationSummary = require('../models/MedicinePreparationSummary'); // Adjust path
+const Analytics = require('../models/dashboardAnalytics'); // The model we created earlier
+const Feedback = require('../models/appRatings');
+const RawMaterial = require('../models/RawMaterial'); // Adjust the path if needed
+const Order = require('../models/Order'); // Adjust path
+const Vendor = require('../models/Vendor'); // Make sure Vendor model is imported
+const FeedbackQuestion = require('../models/feedbackQuestions');
+const FeedbackResponse = require('../models/feedBackResponseModel');
+
 
 // ✅ GET: Today's Medication Schedule
 exports.getTodaysMedicationSchedule = async (req, res) => {
@@ -116,6 +159,8 @@ exports.updateMedicationStatus = async (req, res) => {
                             appointmentId: lastAppointment._id,
                             doctorId: lastAppointment.doctor
                         });
+                       console.log(`✅ Feedback signal ('requestFeedback') sent to patient: ${patientId}`);
+
                     }
                 }
             }
