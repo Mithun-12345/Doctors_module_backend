@@ -1751,8 +1751,10 @@ function getTimeSlots24(start, end, duration) {
 // --- End of Helper functions ---
 
 
+// ... (Your model imports and helper functions at the top remain the same)
+
 /**
- * @desc    Get complete appointment chart data for a specific day, including empty slots.
+ * @desc    Get complete appointment chart data, grouped into 2-hour intervals.
  * @route   GET /api/analytics/appointment-chart?date=YYYY-MM-DD
  * @access  Private (Admin)
  */
@@ -1760,39 +1762,8 @@ exports.getAppointmentChartData = async (req, res) => {
     try {
         const { date } = req.query;
         const targetDate = date ? new Date(date) : new Date();
-        const days = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
-        const dayName = days[targetDate.getDay()];
 
-        // --- STEP 1: GENERATE ALL POSSIBLE TIME SLOTS FOR THE DAY ---
-        const [clinicDayInfo, allSlotTypes, doctorDetails] = await Promise.all([
-            ClinicOperationHours.findOne({ day: dayName }),
-            AppointmentSlotTypes.find({}),
-            DoctorPrefinedAppointmentDetails.findOne({})
-        ]);
-
-        if (!clinicDayInfo || !doctorDetails) {
-            return res.status(404).json({ message: "Clinic or doctor settings not found." });
-        }
-        
-        let allPossibleSlots = new Set();
-        const { consultationTime } = doctorDetails;
-
-        if (clinicDayInfo.status === false) { // Week Off
-            const weekoffType = allSlotTypes.find(st => st.slotType === "Weekoff");
-            if (weekoffType?.allowBooking) {
-                getTimeSlots24(weekoffType.startingTime, weekoffType.endingTime, consultationTime).forEach(slot => allPossibleSlots.add(slot));
-            }
-        } else { // Working Day
-            for (const slotType of allSlotTypes) {
-                if (slotType.slotType !== "Weekoff" && slotType.allowBooking) {
-                    getTimeSlots24(slotType.startingTime, slotType.endingTime, consultationTime).forEach(slot => allPossibleSlots.add(slot));
-                }
-            }
-        }
-        // Convert Set to a sorted array
-        const sortedSlots = Array.from(allPossibleSlots).sort();
-
-        // --- STEP 2: GET APPOINTMENT COUNTS FOR BOOKED SLOTS ---
+        // --- STEP 1: GET APPOINTMENT COUNTS, GROUPED BY 2-HOUR BUCKETS ---
         const startOfDay = new Date(targetDate);
         startOfDay.setUTCHours(0, 0, 0, 0);
         const endOfDay = new Date(targetDate);
@@ -1802,23 +1773,63 @@ exports.getAppointmentChartData = async (req, res) => {
             { $match: { appointmentDate: { $gte: startOfDay, $lte: endOfDay } } },
             {
                 $group: {
-                    _id: "$timeSlot",
+                    _id: { // Group by a calculated 2-hour bucket
+                        $subtract: [
+                            { $toInt: { $substr: ["$timeSlot", 0, 2] } },
+                            { $mod: [{ $toInt: { $substr: ["$timeSlot", 0, 2] } }, 2] }
+                        ]
+                    },
                     bookedCount: { $sum: { $cond: [{ $eq: ["$follow", "Consultation"] }, 1, 0] } },
                     completedCount: { $sum: { $cond: [{ $ne: ["$follow", "Consultation"] }, 1, 0] } }
                 }
             }
         ];
-        const results = await Appointment.aggregate(aggregationPipeline);
-        const resultsMap = new Map(results.map(item => [item._id, item]));
+        const bookedSlotsResult = await Appointment.aggregate(aggregationPipeline);
+        const resultsMap = new Map(bookedSlotsResult.map(item => [item._id, item]));
+
+        // --- STEP 2: GENERATE ALL POSSIBLE 2-HOUR BUCKETS FROM SETTINGS ---
+        const days = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+        const dayName = days[targetDate.getDay()];
+        const [clinicDayInfo, allSlotTypes, doctorDetails] = await Promise.all([
+            ClinicOperationHours.findOne({ day: dayName }),
+            AppointmentSlotTypes.find({}),
+            DoctorPrefinedAppointmentDetails.findOne({})
+        ]);
+        
+        const masterBuckets = new Set();
+        if (clinicDayInfo && doctorDetails) {
+            const { consultationTime } = doctorDetails;
+            let configuredSlots = new Set();
+            if (clinicDayInfo.status === false) { // Week Off
+                const weekoffType = allSlotTypes.find(st => st.slotType === "Weekoff");
+                if (weekoffType?.allowBooking) {
+                    getTimeSlots24(weekoffType.startingTime, weekoffType.endingTime, consultationTime).forEach(slot => configuredSlots.add(slot));
+                }
+            } else { // Working Day
+                for (const slotType of allSlotTypes) {
+                    if (slotType.slotType !== "Weekoff" && slotType.allowBooking) {
+                        getTimeSlots24(slotType.startingTime, slotType.endingTime, consultationTime).forEach(slot => configuredSlots.add(slot));
+                    }
+                }
+            }
+            // Convert individual slots to 2-hour buckets
+            configuredSlots.forEach(slot => {
+                const hour = parseInt(slot.substring(0, 2), 10);
+                masterBuckets.add(hour - (hour % 2));
+            });
+        }
+        const sortedBuckets = Array.from(masterBuckets).sort((a, b) => a - b);
 
         // --- STEP 3: MERGE THE DATA ---
         const bookedAppointments = [];
         const completedAppointments = [];
 
-        for (const slot of sortedSlots) {
-            const counts = resultsMap.get(slot) || { bookedCount: 0, completedCount: 0 };
-            bookedAppointments.push({ x: slot, y: counts.bookedCount });
-            completedAppointments.push({ x: slot, y: counts.completedCount });
+        for (const bucketHour of sortedBuckets) {
+            const label = `${String(bucketHour).padStart(2, '0')}:00 - ${String(bucketHour + 2).padStart(2, '0')}:00`;
+            const counts = resultsMap.get(bucketHour) || { bookedCount: 0, completedCount: 0 };
+            
+            bookedAppointments.push({ x: label, y: counts.bookedCount });
+            completedAppointments.push({ x: label, y: counts.completedCount });
         }
 
         res.status(200).json({
