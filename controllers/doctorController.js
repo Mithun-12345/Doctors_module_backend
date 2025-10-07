@@ -973,6 +973,47 @@ exports.startPrescription = async (req, res) => {
         console.error("Reminder Insert Error:", insertErr.message);
       }
     }
+// --- NEW: LOGIC TO SCHEDULE FOLLOW-UP CALLS ---
+    try {
+        // Only schedule calls if the course is long enough
+        if (duration >= 3) {
+            const patientId = prescription.patientId;
+            
+            // Calculate three equally spaced days for the calls (e.g., at 25%, 50%, 75% of the course)
+            const callDays = new Set([
+                Math.round(duration * 0.25),
+                Math.round(duration * 0.50),
+                Math.round(duration * 0.75)
+            ]);
+
+            // Ensure we don't schedule a call on day 0
+            callDays.delete(0);
+
+            const followUpCallObjects = [];
+            for (const day of callDays) {
+                // Calculate the actual date for the call
+                const callDate = moment(startDate).add(day, "days").toDate();
+                followUpCallObjects.push({
+                    date: callDate,
+                    callMade: false // Default to false
+                });
+            }
+
+            if (followUpCallObjects.length > 0) {
+                // Push the new call schedule objects into the patient's record
+                await Patient.findByIdAndUpdate(patientId, {
+                    $push: {
+                        followUpCallsMade: { $each: followUpCallObjects }
+                    }
+                });
+                console.log(`Scheduled ${followUpCallObjects.length} follow-up calls for patient ${patientId}`);
+            }
+        }
+    } catch (callScheduleError) {
+        console.error("Error scheduling follow-up calls:", callScheduleError);
+        // This error will be logged but won't stop the main function from succeeding
+    }
+    // --- END OF NEW LOGIC ---
 
     res.status(200).json({
       message: "Prescription started. Reminders created where possible."

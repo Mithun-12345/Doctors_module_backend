@@ -15,7 +15,9 @@ const {
   addFeedback,
   getDoctorAttendanceSummary,
   getFeedbackSummary,
-  getOverallClinicAnalytics  
+  getOverallClinicAnalytics,
+  getAppointmentChartData,
+  getDebitCreditChartData
 } = require("../controllers/dashboardAnalyticsController");
 const {
   upload,
@@ -40,5 +42,6 @@ router.post('/rate', validateToken, addFeedback);
 router.patch('/rate-summary',getFeedbackSummary);
 router.get('/attendance-summary', getDoctorAttendanceSummary);
 router.patch('/overall-summary', getOverallClinicAnalytics);
-
+router.patch('/appointment-chart', getAppointmentChartData);
+router.patch('/dc-chart-data', getDebitCreditChartData);
 module.exports = router;

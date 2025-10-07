@@ -1,6 +1,17 @@
 const mongoose = require("mongoose");
 const crypto = require("crypto"); // --- NEW ADDITION ---
 const bcrypt = require("bcryptjs"); // --- NEW ADDITION ---
+// --- NEW: Define the schema for a single follow-up call entry ---
+const followUpCallSchema = new mongoose.Schema({
+    date: {
+        type: Date,
+        default: Date.now
+    },
+    callMade: {
+        type: Boolean,
+        default: false
+    }
+}, { _id: false });
 
 const patientSchema = new mongoose.Schema(
   {
@@ -27,6 +38,14 @@ const patientSchema = new mongoose.Schema(
     phoneAllowed:{
       type: Boolean,
       default:false 
+    },
+    followUpCallsMade: [followUpCallSchema],
+    firstLoginTime:{
+      type:Date
+    },
+    firstLoginDone:{
+      type:Boolean,
+      default:false
     },
     phoneReceived:{
         type:Number,

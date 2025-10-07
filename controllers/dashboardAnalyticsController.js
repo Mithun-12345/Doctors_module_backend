@@ -1718,3 +1718,158 @@ exports.getDoctorAttendanceSummary = async (req, res) => {
         res.status(500).json({ success: false, message: "Internal server error" });
     }
 };
+/**
+ * @desc    Get appointment chart data for a specific day.
+ * @route   GET /api/analytics/appointment-chart?date=YYYY-MM-DD
+ * @access  Private (Admin)
+ */
+exports.getAppointmentChartData = async (req, res) => {
+    try {
+        // 1. Get date from query, or default to today's date
+        const { date } = req.query;
+        const targetDate = date ? new Date(date) : new Date();
+
+        // Create a date range for the entire requested day
+        const startOfDay = new Date(targetDate);
+        startOfDay.setUTCHours(0, 0, 0, 0);
+
+        const endOfDay = new Date(targetDate);
+        endOfDay.setUTCHours(23, 59, 59, 999);
+
+        if (isNaN(startOfDay.getTime())) {
+            return res.status(400).json({ message: "Invalid date format. Please use YYYY-MM-DD." });
+        }
+
+        // 2. Build the aggregation pipeline
+        const pipeline = [
+            // Stage 1: Match all appointments for the specified day
+            {
+                $match: {
+                    appointmentDate: {
+                        $gte: startOfDay,
+                        $lte: endOfDay
+                    }
+                }
+            },
+            // Stage 2: Group by time slot and count the two categories
+            {
+                $group: {
+                    _id: "$timeSlot",
+                    bookedCount: {
+                        $sum: { $cond: [{ $eq: ["$follow", "Consultation"] }, 1, 0] }
+                    },
+                    completedCount: {
+                        $sum: { $cond: [{ $ne: ["$follow", "Consultation"] }, 1, 0] }
+                    }
+                }
+            },
+            // Stage 3: Sort the results chronologically by time slot
+            {
+                $sort: { _id: 1 }
+            }
+        ];
+
+        const results = await Appointment.aggregate(pipeline);
+
+        // 3. Transform the results into x, y coordinate arrays
+        const bookedAppointments = [];
+        const completedAppointments = [];
+
+        for (const item of results) {
+            bookedAppointments.push({ x: item._id, y: item.bookedCount });
+            completedAppointments.push({ x: item._id, y: item.completedCount });
+        }
+
+        res.status(200).json({
+            success: true,
+            date: targetDate.toISOString().split('T')[0],
+            data: {
+                bookedAppointments,
+                completedAppointments
+            }
+        });
+
+    } catch (error) {
+        console.error("Error fetching appointment chart data:", error);
+        res.status(500).json({ success: false, message: "Internal server error" });
+    }
+};
+/**
+ * @desc    Get chart data for settled payables and receivables grouped by category.
+ * @route   POST /api/notes/chart-data
+ * @access  Private (Admin)
+ * @body    { "filter": "[day|week|month]" } // Optional filter
+ */
+exports.getDebitCreditChartData = async (req, res) => {
+    try {
+        // --- MODIFIED: Standard time filter logic ---
+        const { filter } = req.body;
+        const matchQuery = {
+            paymentStatus: 'Settled' // This condition is always applied
+        };
+
+        if (filter) {
+            const now = new Date();
+            let startDate;
+            switch (filter) {
+                case 'day':
+                    startDate = new Date(new Date().setHours(0, 0, 0, 0));
+                    break;
+                case 'week':
+                    const firstDayOfWeek = now.getDate() - now.getDay();
+                    startDate = new Date(new Date().setDate(firstDayOfWeek));
+                    startDate.setHours(0, 0, 0, 0);
+                    break;
+                case 'month':
+                    startDate = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
+                    break;
+                default:
+                    return res.status(400).json({ message: "Invalid filter value." });
+            }
+            if (startDate) {
+                matchQuery.issuedDate = { $gte: startDate };
+            }
+        }
+        // --- END OF MODIFICATION ---
+
+        // 2. Build the aggregation pipeline using $facet
+        const pipeline = [
+            // Stage A: Initial match uses the dynamically built matchQuery
+            {
+                $match: matchQuery
+            },
+            // Stage B: $facet stage is unchanged
+            {
+                $facet: {
+                    "payablesByCategory": [
+                        { $match: { linkedType: 'Payable' } },
+                        { $group: { _id: "$category", totalAmount: { $sum: "$amount" } } },
+                        { $project: { _id: 0, x: "$_id", y: "$totalAmount" } },
+                        { $sort: { x: 1 } }
+                    ],
+                    "receivablesByCategory": [
+                        { $match: { linkedType: 'Receivable' } },
+                        { $group: { _id: "$category", totalAmount: { $sum: "$amount" } } },
+                        { $project: { _id: 0, x: "$_id", y: "$totalAmount" } },
+                        { $sort: { x: 1 } }
+                    ]
+                }
+            }
+        ];
+
+        // 3. Execute the pipeline
+        const result = await DebitCreditNote.aggregate(pipeline);
+
+        // 4. Prepare and send the response
+        const data = (result.length > 0) ? result[0] : {
+            payablesByCategory: [],
+            receivablesByCategory: []
+        };
+        
+        res.status(200).json({ success: true, data });
+
+    } catch (error) {
+        console.error("Error fetching debit/credit chart data:", error);
+        res.status(500).json({ success: false, message: "Internal server error" });
+    }
+};
