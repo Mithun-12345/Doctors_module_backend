@@ -40,8 +40,153 @@ const MedicinePreparationSummary = require('../models/MedicinePreparationSummary
 const Analytics = require('../models/dashboardAnalytics'); // The model we created earlier
 const Feedback = require('../models/appRatings');
 const RawMaterial = require('../models/RawMaterial'); // Adjust the path if needed
+const Order = require('../models/Order'); // Adjust path
+const Vendor = require('../models/Vendor'); // Make sure Vendor model is imported
+const FeedbackQuestion = require('../models/feedbackQuestions');
+const FeedbackResponse = require('../models/feedBackResponseModel');
 
+/**
+ * @desc    Submit a patient's feedback response.
+ * @route   POST /api/feedback/responses
+ * @access  Private (Patient)
+ */
+exports.submitFeedbackResponse = async (req, res) => {
+    try {
+        // 1. Get patientId from the authenticated user's token
+        const patientId = req.user.id; 
+        const { responses, comment } = req.body;
 
+        // 2. Validate the incoming data
+        if (!Array.isArray(responses) || responses.length === 0) {
+            return res.status(400).json({ message: "A non-empty 'responses' array is required." });
+        }
+
+        // 3. Calculate the average score from all the ratings in the array
+        const totalScore = responses.reduce((sum, res) => sum + res.rating, 0);
+        const averageScore = totalScore / responses.length;
+
+        // 4. Create and save the new feedback response document
+        const newResponse = await FeedbackResponse.create({
+            patientId,
+            responses,
+            averageScore,
+            comment
+        });
+
+        // 5. Send a successful response
+        res.status(201).json({
+            success: true,
+            message: "Thank you for your feedback!",
+            data: newResponse
+        });
+
+    } catch (error) {
+        console.error("Error submitting feedback:", error);
+        res.status(500).json({ success: false, message: "Internal server error" });
+    }
+};
+
+/**
+ * @desc    Create one or more new feedback questions.
+ * @route   POST /api/feedback/questions
+ * @access  Private (Admin)
+ */
+exports.createFeedbackQuestions = async (req, res) => {
+    try {
+        const questions = req.body;
+        if (!Array.isArray(questions) || questions.length === 0) {
+            return res.status(400).json({ message: "Request body must be a non-empty array of question objects." });
+        }
+        const newQuestions = await FeedbackQuestion.create(questions);
+        res.status(201).json({
+            success: true,
+            message: `${newQuestions.length} feedback question(s) created successfully.`,
+            data: newQuestions
+        });
+    } catch (error) {
+        if (error.code === 11000) {
+            return res.status(409).json({ message: "One or more of these questions already exist." });
+        }
+        console.error("Error creating feedback questions:", error);
+        res.status(500).json({ success: false, message: "Internal server error" });
+    }
+};
+
+/**
+ * @desc    Get all feedback questions, optionally filtered by category.
+ * @route   GET /api/feedback/questions
+ * @access  Private
+ */
+exports.getFeedbackQuestions = async (req, res) => {
+    try {
+        const { category } = req.query;
+        const filter = {};
+        if (category) {
+            filter.category = category;
+        }
+        const questions = await FeedbackQuestion.find(filter).sort({ category: 1, createdAt: 1 });
+        res.status(200).json({
+            success: true,
+            count: questions.length,
+            data: questions
+        });
+    } catch (error) {
+        console.error("Error fetching feedback questions:", error);
+        res.status(500).json({ success: false, message: "Internal server error" });
+    }
+};
+
+/**
+ * @desc    Update a feedback question.
+ * @route   PATCH /api/feedback/questions/:id
+ * @access  Private (Admin)
+ */
+exports.updateFeedbackQuestion = async (req, res) => {
+    try {
+        const { id } = req.params;
+        if (!mongoose.Types.ObjectId.isValid(id)) {
+            return res.status(400).json({ message: "Invalid ID format." });
+        }
+        const updatedQuestion = await FeedbackQuestion.findByIdAndUpdate(
+            id,
+            req.body,
+            { new: true, runValidators: true }
+        );
+        if (!updatedQuestion) {
+            return res.status(404).json({ message: "Question not found." });
+        }
+        res.status(200).json({
+            success: true,
+            message: "Question updated successfully.",
+            data: updatedQuestion
+        });
+    } catch (error) {
+        console.error("Error updating feedback question:", error);
+        res.status(500).json({ success: false, message: "Internal server error" });
+    }
+};
+
+/**
+ * @desc    Delete a feedback question.
+ * @route   DELETE /api/feedback/questions/:id
+ * @access  Private (Admin)
+ */
+exports.deleteFeedbackQuestion = async (req, res) => {
+    try {
+        const { id } = req.params;
+        if (!mongoose.Types.ObjectId.isValid(id)) {
+            return res.status(400).json({ message: "Invalid ID format." });
+        }
+        const deletedQuestion = await FeedbackQuestion.findByIdAndDelete(id);
+        if (!deletedQuestion) {
+            return res.status(404).json({ message: "Question not found." });
+        }
+        res.status(200).json({ success: true, message: "Question deleted successfully." });
+    } catch (error) {
+        console.error("Error deleting feedback question:", error);
+        res.status(500).json({ success: false, message: "Internal server error" });
+    }
+};
 /**
  * @desc    Get detailed analytics for patient entry sources.
  * @route   GET /api/patients/analytics/entry-counts
@@ -1451,78 +1596,83 @@ exports.addFeedback = async (req, res) => {
  * @desc    Get an overall summary of all feedback within a time period.
  * @route   POST /api/feedback/summary
  * @access  Private (Admin/Doctor)
- * @body    { "filter": "[day|week|month]" } // Optional filter
  */
 exports.getFeedbackSummary = async (req, res) => {
     try {
-        // MODIFIED: Read 'filter' from the request body
         const { filter } = req.body;
         const matchQuery = {};
 
-        // NEW: Standard time filter logic
         if (filter) {
+            // ... (your existing filter logic is unchanged)
             const now = new Date();
             let startDate;
             switch (filter) {
-                case 'day':
-                    startDate = new Date(new Date().setHours(0, 0, 0, 0));
-                    break;
+                case 'day': startDate = new Date(new Date().setHours(0, 0, 0, 0)); break;
                 case 'week':
                     const firstDayOfWeek = now.getDate() - now.getDay();
                     startDate = new Date(new Date().setDate(firstDayOfWeek));
                     startDate.setHours(0, 0, 0, 0);
                     break;
-                case 'month':
-                    startDate = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
-                    break;
-                default:
-                    return res.status(400).json({ message: "Invalid filter value." });
+                case 'month': startDate = new Date(now.getFullYear(), now.getMonth(), 1); break;
+                default: return res.status(400).json({ message: "Invalid filter value." });
             }
             if (startDate) {
-                // Filter by when the feedback was created
                 matchQuery.createdAt = { $gte: startDate };
             }
         }
 
-        // The aggregation pipeline is the same, but now uses the date-filtered matchQuery
+        // --- NEW, MORE POWERFUL AGGREGATION PIPELINE ---
         const pipeline = [
+            // Stage 1: Initial match by date (if filter is provided)
             { $match: matchQuery },
+
+            // Stage 2: Deconstruct the 'responses' array to process each answer individually
+            { $unwind: "$responses" },
+
+            // Stage 3: Group by category to get the average rating for each one
+            {
+                $group: {
+                    _id: "$responses.category",
+                    averageRating: { $avg: "$responses.rating" },
+                    totalRatingsInCategory: { $sum: 1 }
+                }
+            },
+
+            // Stage 4: Group everything together again to calculate the overall average
             {
                 $group: {
                     _id: null,
-                    totalRatings: { $sum: 1 },
-                    overallAverageScore: { $avg: "$averageScore" },
-                    avgConsultation: { $avg: "$ratings.consultation" },
-                    avgMedicineDelivery: { $avg: "$ratings.medicineDelivery" },
-                    avgCommunication: { $avg: "$ratings.communication" }
+                    overallAverageScore: { $avg: "$averageRating" },
+                    totalRatings: { $sum: "$totalRatingsInCategory" },
+                    // Collect the per-category stats into an array
+                    categories: {
+                        $push: {
+                            category: "$_id",
+                            averageRating: { $round: ["$averageRating", 1] },
+                        }
+                    }
                 }
             },
+            
+            // Stage 5: Format the final output
             {
                 $project: {
                     _id: 0,
                     totalRatings: 1,
                     overallAverageScore: { $round: ["$overallAverageScore", 1] },
-                    avgConsultation: { $round: ["$avgConsultation", 1] },
-                    avgMedicineDelivery: { $round: ["$avgMedicineDelivery", 1] },
-                    avgCommunication: { $round: ["$avgCommunication", 1] }
+                    categories: 1
                 }
             }
         ];
 
-        const result = await Feedback.aggregate(pipeline);
+        const result = await FeedbackResponse.aggregate(pipeline);
 
-        let summary;
-        if (result.length > 0) {
-            summary = result[0];
-        } else {
-            summary = {
-                totalRatings: 0,
-                overallAverageScore: 0,
-                avgConsultation: 0,
-                avgMedicineDelivery: 0,
-                avgCommunication: 0
-            };
-        }
+        // Handle case where no feedback is found
+        const summary = result[0] || {
+            totalRatings: 0,
+            overallAverageScore: 0,
+            categories: []
+        };
 
         res.status(200).json({ success: true, data: summary });
 
@@ -1749,26 +1899,31 @@ function getTimeSlots24(start, end, duration) {
     return slots;
 }
 // --- End of Helper functions ---
-
-
-// ... (Your model imports and helper functions at the top remain the same)
-
 /**
- * @desc    Get complete appointment chart data, grouped into 2-hour intervals.
+ * @desc    Get appointment chart data for a specific day, grouped into 2-hour buckets.
  * @route   GET /api/analytics/appointment-chart?date=YYYY-MM-DD
  * @access  Private (Admin)
  */
 exports.getAppointmentChartData = async (req, res) => {
     try {
+        // 1. Get date from query, or default to today's date
         const { date } = req.query;
         const targetDate = date ? new Date(date) : new Date();
 
-        // --- STEP 1: GET APPOINTMENT COUNTS, GROUPED BY 2-HOUR BUCKETS ---
         const startOfDay = new Date(targetDate);
         startOfDay.setUTCHours(0, 0, 0, 0);
         const endOfDay = new Date(targetDate);
         endOfDay.setUTCHours(23, 59, 59, 999);
-        
+
+        if (isNaN(startOfDay.getTime())) {
+            return res.status(400).json({ message: "Invalid date format. Please use YYYY-MM-DD." });
+        }
+
+        // --- STEP 1: DEFINE THE MASTER TIMELINE ---
+        // A fixed array of the starting hour for each 2-hour bucket
+        const masterBuckets = [0, 2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22];
+
+        // --- STEP 2: GET APPOINTMENT COUNTS FROM THE DATABASE ---
         const aggregationPipeline = [
             { $match: { appointmentDate: { $gte: startOfDay, $lte: endOfDay } } },
             {
@@ -1787,45 +1942,15 @@ exports.getAppointmentChartData = async (req, res) => {
         const bookedSlotsResult = await Appointment.aggregate(aggregationPipeline);
         const resultsMap = new Map(bookedSlotsResult.map(item => [item._id, item]));
 
-        // --- STEP 2: GENERATE ALL POSSIBLE 2-HOUR BUCKETS FROM SETTINGS ---
-        const days = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
-        const dayName = days[targetDate.getDay()];
-        const [clinicDayInfo, allSlotTypes, doctorDetails] = await Promise.all([
-            ClinicOperationHours.findOne({ day: dayName }),
-            AppointmentSlotTypes.find({}),
-            DoctorPrefinedAppointmentDetails.findOne({})
-        ]);
-        
-        const masterBuckets = new Set();
-        if (clinicDayInfo && doctorDetails) {
-            const { consultationTime } = doctorDetails;
-            let configuredSlots = new Set();
-            if (clinicDayInfo.status === false) { // Week Off
-                const weekoffType = allSlotTypes.find(st => st.slotType === "Weekoff");
-                if (weekoffType?.allowBooking) {
-                    getTimeSlots24(weekoffType.startingTime, weekoffType.endingTime, consultationTime).forEach(slot => configuredSlots.add(slot));
-                }
-            } else { // Working Day
-                for (const slotType of allSlotTypes) {
-                    if (slotType.slotType !== "Weekoff" && slotType.allowBooking) {
-                        getTimeSlots24(slotType.startingTime, slotType.endingTime, consultationTime).forEach(slot => configuredSlots.add(slot));
-                    }
-                }
-            }
-            // Convert individual slots to 2-hour buckets
-            configuredSlots.forEach(slot => {
-                const hour = parseInt(slot.substring(0, 2), 10);
-                masterBuckets.add(hour - (hour % 2));
-            });
-        }
-        const sortedBuckets = Array.from(masterBuckets).sort((a, b) => a - b);
-
         // --- STEP 3: MERGE THE DATA ---
         const bookedAppointments = [];
         const completedAppointments = [];
 
-        for (const bucketHour of sortedBuckets) {
+        for (const bucketHour of masterBuckets) {
+            // Create a clean label for the chart's x-axis
             const label = `${String(bucketHour).padStart(2, '0')}:00 - ${String(bucketHour + 2).padStart(2, '0')}:00`;
+            
+            // Get the counts from our database results, or default to 0
             const counts = resultsMap.get(bucketHour) || { bookedCount: 0, completedCount: 0 };
             
             bookedAppointments.push({ x: label, y: counts.bookedCount });
@@ -1854,15 +1979,99 @@ exports.getAppointmentChartData = async (req, res) => {
  */
 exports.getDebitCreditChartData = async (req, res) => {
     try {
-        // --- MODIFIED: Standard time filter logic ---
+        // --- NEW: Define the master list of categories from your UI ---
+        const PAYABLE_CATEGORIES = ["Vendor", "Staff", "Logistics", "Miscellaneous"];
+        const RECEIVABLE_CATEGORIES = ["Booking fee", "Consultation fee", "Medicine prep", "Shipment", "Miscellaneous"];
+
         const { filter } = req.body;
-        const matchQuery = {
-            paymentStatus: 'Settled' // This condition is always applied
-        };
+        const matchQuery = { paymentStatus: 'Settled' };
 
         if (filter) {
+            // ... (your existing filter logic is unchanged)
             const now = new Date();
             let startDate;
+            switch (filter) {
+                case 'day': startDate = new Date(new Date().setHours(0, 0, 0, 0)); break;
+                case 'week':
+                    const firstDayOfWeek = now.getDate() - now.getDay();
+                    startDate = new Date(new Date().setDate(firstDayOfWeek));
+                    startDate.setHours(0, 0, 0, 0);
+                    break;
+                case 'month': startDate = new Date(now.getFullYear(), now.getMonth(), 1); break;
+                default: return res.status(400).json({ message: "Invalid filter value." });
+            }
+            if (startDate) {
+                matchQuery.issuedDate = { $gte: startDate };
+            }
+        }
+
+        // --- The aggregation pipeline is UNCHANGED ---
+        const pipeline = [
+            { $match: matchQuery },
+            {
+                $facet: {
+                    "payablesByCategory": [
+                        { $match: { linkedType: 'Payable' } },
+                        { $group: { _id: "$category", totalAmount: { $sum: "$amount" } } },
+                        { $project: { _id: 0, x: "$_id", y: "$totalAmount" } }
+                    ],
+                    "receivablesByCategory": [
+                        { $match: { linkedType: 'Receivable' } },
+                        { $group: { _id: "$category", totalAmount: { $sum: "$amount" } } },
+                        { $project: { _id: 0, x: "$_id", y: "$totalAmount" } }
+                    ]
+                }
+            }
+        ];
+
+        const result = await DebitCreditNote.aggregate(pipeline);
+
+        // --- MODIFIED: Prepare the final response with all categories ---
+        const rawData = (result.length > 0) ? result[0] : { payablesByCategory: [], receivablesByCategory: [] };
+
+        // Create a Map for quick lookups
+        const payablesMap = new Map(rawData.payablesByCategory.map(item => [item.x, item.y]));
+        const receivablesMap = new Map(rawData.receivablesByCategory.map(item => [item.x, item.y]));
+
+        // Build the final arrays, ensuring all master categories are present
+        const finalPayables = PAYABLE_CATEGORIES.map(category => ({
+            x: category,
+            y: payablesMap.get(category) || 0 // Default to 0 if not found
+        }));
+
+        const finalReceivables = RECEIVABLE_CATEGORIES.map(category => ({
+            x: category,
+            y: receivablesMap.get(category) || 0 // Default to 0 if not found
+        }));
+
+        res.status(200).json({ 
+            success: true, 
+            data: {
+                payablesByCategory: finalPayables,
+                receivablesByCategory: finalReceivables
+            }
+        });
+
+    } catch (error) {
+        console.error("Error fetching debit/credit chart data:", error);
+        res.status(500).json({ success: false, message: "Internal server error" });
+    }
+};
+
+/**
+ * @desc    Get a complete summary of all vendors' reliability and price index.
+ * @route   POST /api/analytics/vendor-summary
+ * @access  Private (Admin)
+ * @body    { "filter": "[day|week|month]" } // Optional filter
+ */
+exports.getVendorAnalytics = async (req, res) => {
+    try {
+        const { filter } = req.body;
+        let startDate = null; // Default to null for all-time
+
+        // Standard time filter logic
+        if (filter) {
+            const now = new Date();
             switch (filter) {
                 case 'day':
                     startDate = new Date(new Date().setHours(0, 0, 0, 0));
@@ -1873,55 +2082,212 @@ exports.getDebitCreditChartData = async (req, res) => {
                     startDate.setHours(0, 0, 0, 0);
                     break;
                 case 'month':
-                    startDate = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
+                    startDate = new Date(now.getFullYear(), now.getMonth(), 1);
                     break;
-                default:
-                    return res.status(400).json({ message: "Invalid filter value." });
-            }
-            if (startDate) {
-                matchQuery.issuedDate = { $gte: startDate };
             }
         }
-        // --- END OF MODIFICATION ---
 
-        // 2. Build the aggregation pipeline using $facet
-        const pipeline = [
-            // Stage A: Initial match uses the dynamically built matchQuery
-            {
-                $match: matchQuery
-            },
-            // Stage B: $facet stage is unchanged
-            {
-                $facet: {
-                    "payablesByCategory": [
-                        { $match: { linkedType: 'Payable' } },
-                        { $group: { _id: "$category", totalAmount: { $sum: "$amount" } } },
-                        { $project: { _id: 0, x: "$_id", y: "$totalAmount" } },
-                        { $sort: { x: 1 } }
-                    ],
-                    "receivablesByCategory": [
-                        { $match: { linkedType: 'Receivable' } },
-                        { $group: { _id: "$category", totalAmount: { $sum: "$amount" } } },
-                        { $project: { _id: 0, x: "$_id", y: "$totalAmount" } },
-                        { $sort: { x: 1 } }
-                    ]
-                }
-            }
-        ];
+        const matchQuery = { status: 'delivered' };
+        if (startDate) {
+            matchQuery.orderDate = { $gte: startDate };
+        }
 
-        // 3. Execute the pipeline
-        const result = await DebitCreditNote.aggregate(pipeline);
-
-        // 4. Prepare and send the response
-        const data = (result.length > 0) ? result[0] : {
-            payablesByCategory: [],
-            receivablesByCategory: []
-        };
+        const [vendorResults, overallStats] = await Promise.all([
+            // Query 1: Get data for ALL vendors, looking up their orders
+            Vendor.aggregate([
+                // Stage 1: Lookup orders for each vendor
+                {
+                    $lookup: {
+                        from: "orders",
+                        localField: "_id",
+                        foreignField: "vendorId",
+                        as: "orders"
+                    }
+                },
+                // Stage 2: Calculate metrics based on the orders array
+                {
+                    $project: {
+                        name: 1, // Keep the vendor name
+                        // Filter orders to only include delivered ones in the date range
+                        filteredOrders: {
+                            $filter: {
+                                input: "$orders",
+                                as: "order",
+                                cond: { $and: [
+                                    { $eq: ["$$order.status", "delivered"] },
+                                    startDate ? { $gte: ["$$order.orderDate", startDate] } : true
+                                ]}
+                            }
+                        }
+                    }
+                },
+                // Stage 3: Project the final calculated scores
+                {
+                    $project: {
+                        _id: 0,
+                        vendorId: "$_id",
+                        vendorName: "$name",
+                        priceIndex: { $ifNull: [{ $avg: "$filteredOrders.totalAmount" }, 0] },
+                        reliabilityScore: {
+                            $let: {
+                                vars: {
+                                    onTime: {
+                                        $filter: {
+                                            input: "$filteredOrders",
+                                            as: "order",
+                                            cond: { $lte: ["$$order.deliveryDate", "$$order.expectedDeliveryDate"] }
+                                        }
+                                    }
+                                },
+                                in: {
+                                    $cond: {
+                                        if: { $gt: [{ $size: "$filteredOrders" }, 0] },
+                                        then: { $multiply: [{ $divide: [{ $size: "$$onTime" }, { $size: "$filteredOrders" }] }, 100] },
+                                        else: 0
+                                    }
+                                }
+                            }
+                        }
+                    }
+                },
+                { $sort: { vendorName: 1 } }
+            ]),
+            // Query 2: Get the overall average (unchanged)
+            Order.aggregate([
+                { $match: matchQuery },
+                { $group: { _id: null, overallAverage: { $avg: "$totalAmount" } } }
+            ])
+        ]);
         
-        res.status(200).json({ success: true, data });
+        // Final processing and percentage calculation (unchanged)
+        const overallAverageValue = overallStats[0]?.overallAverage || 0;
+        const formattedAnalytics = vendorResults.map(item => {
+            let priceIndexPercentage = 0; // Default to 0 if they have no orders
+            if (overallAverageValue > 0 && item.priceIndex > 0) {
+                priceIndexPercentage = (item.priceIndex / overallAverageValue) * 100;
+            }
+            return {
+                ...item,
+                reliabilityScore: parseFloat(item.reliabilityScore.toFixed(2)),
+                priceIndex: parseFloat(item.priceIndex.toFixed(2)),
+                priceIndexPercentage: parseFloat(priceIndexPercentage.toFixed(2))
+            };
+        });
+
+        res.status(200).json({ success: true, data: formattedAnalytics });
 
     } catch (error) {
-        console.error("Error fetching debit/credit chart data:", error);
+        console.error("Error fetching vendor analytics:", error);
+        res.status(500).json({ success: false, message: "Internal server error" });
+    }
+};
+exports.getOrderFrequencyChart = async (req, res) => {
+    try {
+        const { filter } = req.body;
+        let startDate = null;
+        let endDate = new Date();
+        
+        let groupBy, masterKeys, getLabel;
+
+        const now = new Date();
+
+        if (filter === 'day') {
+            startDate = new Date(now.setHours(0, 0, 0, 0));
+            endDate.setHours(23, 59, 59, 999);
+            
+            groupBy = { // Group by 2-hour bucket
+                $subtract: [
+                    { $hour: { date: "$orderDate", timezone: "Asia/Kolkata" } },
+                    { $mod: [{ $hour: { date: "$orderDate", timezone: "Asia/Kolkata" } }, 2] }
+                ]
+            };
+            masterKeys = [0, 2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22];
+            getLabel = (key) => `${String(key).padStart(2, '0')}:00 - ${String(key + 2).padStart(2, '0')}:00`;
+
+        } else if (filter === 'week') {
+            const firstDayOfWeek = now.getDate() - now.getDay();
+            startDate = new Date(new Date().setDate(firstDayOfWeek));
+            startDate.setHours(0, 0, 0, 0);
+            
+            groupBy = { $dayOfWeek: { date: "$orderDate", timezone: "Asia/Kolkata" } }; // 1=Sun, 2=Mon...
+            masterKeys = [1, 2, 3, 4, 5, 6, 7];
+            const dayNames = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+            getLabel = (key) => dayNames[key - 1];
+
+        } else if (filter === 'month') {
+            startDate = new Date(now.getFullYear(), now.getMonth(), 1);
+            
+            groupBy = { $dayOfMonth: { date: "$orderDate", timezone: "Asia/Kolkata" } };
+            const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+            masterKeys = Array.from({ length: daysInMonth }, (_, i) => i + 1); // [1, 2, 3, ... 31]
+            getLabel = (key) => `Day ${key}`;
+        }
+        
+        // Default to 'day' if no valid filter is provided
+        if (!groupBy) {
+            startDate = new Date(now.setHours(0, 0, 0, 0));
+            endDate.setHours(23, 59, 59, 999);
+            groupBy = { $subtract: [ { $hour: { date: "$orderDate", timezone: "Asia/Kolkata" } }, { $mod: [{ $hour: { date: "$orderDate", timezone: "Asia/Kolkata" } }, 2] }]};
+            masterKeys = [0, 2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22];
+            getLabel = (key) => `${String(key).padStart(2, '0')}:00 - ${String(key + 2).padStart(2, '0')}:00`;
+        }
+
+        const matchQuery = startDate ? { orderDate: { $gte: startDate, $lte: endDate } } : {};
+        
+        const aggregationPipeline = [
+            { $match: matchQuery },
+            { $group: { _id: groupBy, orderCount: { $sum: 1 } } }
+        ];
+        
+        const results = await Order.aggregate(aggregationPipeline);
+        const resultsMap = new Map(results.map(item => [item._id, item.orderCount]));
+        
+        const chartData = masterKeys.map(key => ({
+            x: getLabel(key),
+            y: resultsMap.get(key) || 0
+        }));
+
+        res.status(200).json({
+            success: true,
+            filter: filter || 'day',
+            data: chartData
+        });
+
+    } catch (error) {
+        console.error("Error fetching order frequency chart:", error);
+        res.status(500).json({ success: false, message: "Internal server error" });
+    }
+};
+
+/**
+ * @desc    Create a new feedback question.
+ * @route   POST /api/feedback/questions
+ * @access  Private (Admin)
+ */
+exports.createFeedbackQuestion = async (req, res) => {
+    try {
+        // 1. The body is now expected to be an array of questions
+        const questions = req.body;
+
+        // 2. New validation to check if the payload is a non-empty array
+        if (!Array.isArray(questions) || questions.length === 0) {
+            return res.status(400).json({ message: "Request body must be an array of question objects." });
+        }
+
+        // 3. Mongoose's .create() can handle an array directly
+        const newQuestions = await Feedback.create(questions);
+
+        res.status(201).json({
+            success: true,
+            message: `${newQuestions.length} feedback question(s) created successfully.`,
+            data: newQuestions
+        });
+
+    } catch (error) {
+        if (error.code === 11000) {
+            return res.status(409).json({ message: "One or more of these questions already exist." });
+        }
+        console.error("Error creating feedback questions:", error);
         res.status(500).json({ success: false, message: "Internal server error" });
     }
 };

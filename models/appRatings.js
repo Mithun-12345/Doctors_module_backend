@@ -20,30 +20,30 @@ const feedbackSchema = new mongoose.Schema({
     ratings: {
         consultation: {
             type: Number,
-            required: true,
+            required: false,
             min: 1,
             max: 5
         },
         medicineDelivery: {
             type: Number,
-            required: true,
+            required: false,
             min: 1,
             max: 5
         },
         communication: {
             type: Number,
-            required: true,
+            required: false,
             min: 1,
             max: 5
         }
     },
     averageScore: {
         type: Number,
-        required: true
+        required: false
     },
     comment: {
         type: String,
-        trim: true
+        trim: false
     }
 }, {
     timestamps: true // Adds createdAt and updatedAt fields

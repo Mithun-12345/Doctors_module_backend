@@ -17,7 +17,14 @@ const {
   getFeedbackSummary,
   getOverallClinicAnalytics,
   getAppointmentChartData,
-  getDebitCreditChartData
+  getDebitCreditChartData,
+  getVendorAnalytics,
+  getOrderFrequencyChart,
+  createFeedbackQuestions,
+  getFeedbackQuestions,
+  updateFeedbackQuestion,
+  deleteFeedbackQuestion,
+  submitFeedbackResponse
 } = require("../controllers/dashboardAnalyticsController");
 const {
   upload,
@@ -27,6 +34,19 @@ const router = express.Router();
 
 const validateToken = require("../middlewares/validateTokenHandler");
 
+// CREATE: Add one or more new questions
+router.post('/create-questions', validateToken, createFeedbackQuestions);
+
+// READ: Get all questions (can filter by category)
+router.get('/display-questions', validateToken, getFeedbackQuestions);
+
+// UPDATE: Update a specific question by its ID
+router.patch('/update-questions/:id', validateToken, updateFeedbackQuestion);
+router.post('/feedback-response', validateToken, submitFeedbackResponse);
+
+
+// DELETE: Delete a specific question by its ID
+router.delete('/delete-questions/:id', validateToken, deleteFeedbackQuestion);
 router.patch('/entry-counts', getPatientEntryCounts);
 router.patch('/status-counts', getPatientStatusCounts);
 router.get('/pending-payments', getPendingPaymentsSummary);
@@ -44,4 +64,6 @@ router.get('/attendance-summary', getDoctorAttendanceSummary);
 router.patch('/overall-summary', getOverallClinicAnalytics);
 router.patch('/appointment-chart', getAppointmentChartData);
 router.patch('/dc-chart-data', getDebitCreditChartData);
+router.patch('/vendor-summary', getVendorAnalytics);
+router.patch('/order-frequency-chart', getOrderFrequencyChart);
 module.exports = router;
