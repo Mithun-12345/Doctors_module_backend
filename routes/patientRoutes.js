@@ -191,9 +191,7 @@ router.post("/storenotifications/:patientId",validateToken, savePatientNotificat
 router.patch("/offset/:patientId", updateReminderOffset);   
 router.get('/prescriptions/grouped/:patientId', getPrescriptionsGroupedByPrescriptionId); 
 router.get(
-  "/medication-summary/:patientId",validateToken,
-  getPatientMedicationSummary
-);
+  "/medication-summary/:patientId",validateToken,  getPatientMedicationSummary);
 router.get('/prescriptions/week-view/:patientId', validateToken,getPrescriptionsGroupedByWeekAndDay);
 router.get('/getAppointedDocs',validateToken,familyMemberController.getAppointedDocs),
 router.get('/patientById/:id', familyMemberController.getPatientById);

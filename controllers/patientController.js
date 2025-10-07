@@ -2197,7 +2197,6 @@ exports.getPatientMedicationSummary = async (req, res) => {
   }
 };
 
-
 exports.getFamily = async (req, res) => {
   try {
     // Find the patient document using the authenticated user's ID

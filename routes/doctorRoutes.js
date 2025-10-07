@@ -42,7 +42,9 @@ const {
   allowPhoneCalls, 
   incrementCallCount,
   markDoctorAttendance,
-  getDoctorAttendanceReport
+  getDoctorAttendanceReport,
+  getFollowUpCallList,
+   updateFollowUpCallStatus
 } = require("../controllers/doctorController");
 const {
   upload,
@@ -63,6 +65,8 @@ router.get("/show-all-payments-doctor/:doctorId", getPaymentsByDoctor);
 router.get("/zoom/authorize", zoomAuth);
 router.get("/zoom/callback", zoomCallback);
 router.get("/show-every-payment", getAllDoctorPaymentsTotal);
+router.get('/follow-up-calls', getFollowUpCallList);
+router.patch('/update-follow-up-call-status/:patientId', updateFollowUpCallStatus);
 router.post("/todays-appointments",validateToken,getTodaysAppointments);
 // ... other patient routes like GET, POST, etc.
 

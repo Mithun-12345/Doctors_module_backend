@@ -1026,6 +1026,90 @@ exports.startPrescription = async (req, res) => {
     });
   }
 };
+
+/**
+ * @desc    Update the status of a specific follow-up call for a patient.
+ * @route   PATCH /api/patients/:patientId/follow-up-status
+ * @access  Private (Admin/Doctor)
+ * @body    { "date": "YYYY-MM-DD", "callMade": true | false }
+ */
+exports.updateFollowUpCallStatus = async (req, res) => {
+    try {
+        const { patientId } = req.params;
+        const { date, callMade } = req.body;
+
+        // 1. Validate all inputs
+        if (!mongoose.Types.ObjectId.isValid(patientId)) {
+            return res.status(400).json({ message: "Invalid Patient ID format." });
+        }
+        if (!date || typeof callMade !== 'boolean') {
+            return res.status(400).json({ message: "A 'date' (YYYY-MM-DD) and a 'callMade' boolean are required." });
+        }
+
+        // 2. Find the patient
+        const patient = await Patient.findById(patientId);
+        if (!patient) {
+            return res.status(404).json({ message: "Patient not found." });
+        }
+
+        // 3. Find the specific call record in the array
+        let callRecordFound = false;
+        const targetDate = new Date(date);
+        targetDate.setUTCHours(0, 0, 0, 0);
+
+        patient.followUpCallsMade.forEach(call => {
+            const callDate = new Date(call.date);
+            callDate.setUTCHours(0, 0, 0, 0);
+            if (callDate.getTime() === targetDate.getTime()) {
+                call.callMade = callMade;
+                callRecordFound = true;
+            }
+        });
+
+        // 4. Check if a record for that date was found
+        if (!callRecordFound) {
+            return res.status(404).json({ message: `No follow-up call scheduled for this patient on ${date}.` });
+        }
+
+        // 5. Save the updated patient document
+        const updatedPatient = await patient.save();
+
+        res.status(200).json({
+            success: true,
+            message: `Follow-up call status for ${date} updated successfully.`,
+            data: updatedPatient,
+        });
+
+    } catch (error) {
+        console.error("Error updating follow-up call status:", error);
+        res.status(500).json({ success: false, message: "Internal server error" });
+    }
+};
+/**
+ * @desc    Get a list of all patients with scheduled follow-up calls.
+ * @route   GET /api/patients/follow-up-calls
+ * @access  Private (Admin/Doctor)
+ */
+exports.getFollowUpCallList = async (req, res) => {
+    try {
+        // Find patients where the 'followUpCallsMade' array exists and is not empty.
+        // We also select only the fields we need for a clean response.
+        const patientsWithCalls = await Patient.find(
+            { "followUpCallsMade.0": { $exists: true } }, // Efficiently finds non-empty arrays
+            { name: 1, followUpCallsMade: 1 } // Selects only name and the calls array
+        ).sort({ name: 1 });
+
+        res.status(200).json({
+            success: true,
+            count: patientsWithCalls.length,
+            data: patientsWithCalls,
+        });
+
+    } catch (error) {
+        console.error("Error fetching follow-up call list:", error);
+        res.status(500).json({ success: false, message: "Internal server error" });
+    }
+};
 exports.getDeliveryStatusByPatient = async (req, res) => {
   try {
     const { patientId } = req.params;
@@ -1336,37 +1420,68 @@ exports.getDoctorAttendanceReport = async (req, res) => {
 exports.markShipmentAsLost = async (req, res) => {
     try {
         const { prescriptionId } = req.params;
-        // --- MODIFIED: Get shipmentLost from the request body ---
         const { shipmentLost } = req.body;
 
         // 1. Validate inputs
         if (!mongoose.Types.ObjectId.isValid(prescriptionId)) {
             return res.status(400).json({ message: "Invalid Prescription ID format." });
         }
-        // --- NEW: Validate the new payload field ---
         if (typeof shipmentLost !== 'boolean') {
             return res.status(400).json({ message: "A 'shipmentLost' boolean value is required in the body." });
         }
 
-        // 2. Find the prescription and update it with the value from the payload
-        const updatedPrescription = await Prescription.findByIdAndUpdate(
-            prescriptionId,
-            { 
-                shipmentLost: shipmentLost, // Use the value from the body
-                updatedAt: new Date()
-            },
-            { new: true }
-        );
+        let updatedPrescription;
+        let message;
+
+        if (shipmentLost === true) {
+            // --- SCENARIO 1: Shipment is marked as LOST ---
+            // Reset the process back to preparation stage
+            
+            // 1. Update the prescription
+            updatedPrescription = await Prescription.findByIdAndUpdate(
+                prescriptionId,
+                { 
+                    shipmentLost: true,
+                    isProductShipped: false, // Reset shipped status
+                    updatedAt: new Date()
+                },
+                { new: true }
+            );
+
+            if (updatedPrescription) {
+                // 2. Update the associated appointment
+                await Appointment.findByIdAndUpdate(
+                    updatedPrescription.appointmentID,
+                    {
+                        follow: "Medicine Preparation",
+                        medicinePrepared: false // Reset prepared status
+                    }
+                );
+            }
+            message = "Shipment marked as lost. Process has been reset to 'Medicine Preparation'.";
+
+        } else {
+            // --- SCENARIO 2: Reverting a "lost" status back to NOT LOST ---
+            updatedPrescription = await Prescription.findByIdAndUpdate(
+                prescriptionId,
+                { 
+                    shipmentLost: false,
+                    updatedAt: new Date()
+                },
+                { new: true }
+            );
+            message = "Shipment status has been reverted to not lost.";
+        }
 
         // 3. Check if the prescription was found
         if (!updatedPrescription) {
             return res.status(404).json({ message: "Prescription not found." });
         }
 
-        // 4. Send a dynamic successful response
+        // 4. Send a successful response
         res.status(200).json({
             success: true,
-            message: `Shipment status updated to lost: ${shipmentLost}.`,
+            message: message,
             data: updatedPrescription,
         });
 
