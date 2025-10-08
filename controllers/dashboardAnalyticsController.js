@@ -459,6 +459,74 @@ exports.getPendingPaymentsSummary = async (req, res) => {
         res.status(500).json({ success: false, message: "Server error." });
     }
 };
+/**
+ * @desc    Get a detailed list of all pending payments.
+ * @route   GET /api/analytics/pending-payments-list
+ * @access  Private (Admin)
+ */
+exports.getListPendingPayments = async (req, res) => {
+    try {
+        // Run two separate aggregation queries in parallel
+        const [unpaidAppointments, unpaidPrescriptions] = await Promise.all([
+            // Query 1: Find all unpaid appointments
+            Appointment.aggregate([
+                { $match: { isPaid: false } },
+                { $lookup: { from: 'patients', localField: 'patient', foreignField: '_id', as: 'patientInfo' } },
+                { $unwind: '$patientInfo' },
+                {
+                    $project: {
+                        _id: 0,
+                        patientId: '$patient',
+                        patientName: '$patientInfo.name',
+                        amount: '$payment',
+                        paidFor: 'Consultation',
+                        status: 'Pending',
+                        referenceId: '$_id', // The appointment ID
+                        date: '$createdAt'
+                    }
+                }
+            ]),
+            // Query 2: Find all unpaid prescriptions
+            Prescription.aggregate([
+                { $match: { isPayementDone: false } },
+                { $lookup: { from: 'patients', localField: 'patientId', foreignField: '_id', as: 'patientInfo' } },
+                { $unwind: '$patientInfo' },
+                {
+                    $project: {
+                        _id: 0,
+                        patientId: '$patientId',
+                        patientName: '$patientInfo.name',
+                        amount: { $add: [
+                            { $ifNull: ["$medicineCharges", 0] },
+                            { $ifNull: ["$shippingCharges", 0] },
+                            { $ifNull: ["$additionalCharges", 0] }
+                        ]},
+                        paidFor: 'Medicine',
+                        status: 'Pending',
+                        referenceId: '$_id', // The prescription ID
+                        date: '$createdAt'
+                    }
+                }
+            ])
+        ]);
+
+        // Combine the results from both queries into a single list
+        const allPendingPayments = [...unpaidAppointments, ...unpaidPrescriptions];
+
+        // Sort the final list by date, most recent first
+        allPendingPayments.sort((a, b) => new Date(b.date) - new Date(a.date));
+
+        res.status(200).json({
+            success: true,
+            count: allPendingPayments.length,
+            data: allPendingPayments
+        });
+
+    } catch (error) {
+        console.error("Error fetching pending payments list:", error);
+        res.status(500).json({ success: false, message: "Internal server error." });
+    }
+};
 
 /**
  * @desc    Get a summary of total amounts for receivables and payables.

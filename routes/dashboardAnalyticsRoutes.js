@@ -25,7 +25,8 @@ const {
   updateFeedbackQuestion,
   deleteFeedbackQuestion,
   submitFeedbackResponse,
-  bulkUpdateFeedbackQuestions
+  bulkUpdateFeedbackQuestions,
+   getListPendingPayments
 } = require("../controllers/dashboardAnalyticsController");
 const {
   upload,
@@ -37,6 +38,8 @@ const validateToken = require("../middlewares/validateTokenHandler");
 
 // CREATE: Add one or more new questions
 router.patch('/create-questions', validateToken, createFeedbackQuestions);
+router.get('/pending-payments-list', getListPendingPayments);
+
 
 // READ: Get all questions (can filter by category)
 router.get('/display-questions', validateToken, getFeedbackQuestions);
