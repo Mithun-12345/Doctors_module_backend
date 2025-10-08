@@ -113,6 +113,7 @@ const io = new Server(server, {
   pingTimeout: 60000,
   pingInterval: 25000,
 });
+app.set('socketio', io);
 
 // =================================================================================
 //                             CORE MIDDLEWARE SETUP

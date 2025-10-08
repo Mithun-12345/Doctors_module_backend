@@ -93,82 +93,96 @@ exports.getTodaysMedicationSchedule = async (req, res) => {
       .json({ message: "Internal server error", error: err.message });
   }
 };
-// ... (your model imports at the top are unchanged)
-
 exports.updateMedicationStatus = async (req, res) => {
     try {
-        // ... (the first part of your function is unchanged)
+        console.log("🩺 updateMedicationStatus called");
         const { patientId } = req.params;
         const { medicineName, doseTime, date, status } = req.body;
+        console.log("📥 Request data:", { patientId, medicineName, doseTime, date, status });
 
         if (!patientId || !medicineName || !doseTime || !date || typeof status !== 'boolean') {
+            console.warn("⚠️ Missing required fields or invalid status");
             return res.status(400).json({ message: 'Missing required fields (including date) or invalid status' });
         }
+
+        console.log("🔍 Searching for reminder...");
         const reminder = await NotificationReminderSettings.findOne({
             patientId, medicineName, doseTime, date: new Date(date)
         });
+
         if (!reminder) {
+            console.warn(`❌ No reminder found for ${patientId} - ${medicineName} - ${doseTime} - ${date}`);
             return res.status(404).json({ message: 'No matching medication reminder found for that specific date' });
         }
-        
+
+        console.log("✅ Reminder found:", reminder._id);
+
         reminder.status = status;
         reminder.acknowledged = true;
-        if (status === true) { /* ... quantity logic ... */ }
+        console.log(`💊 Setting status to ${status}, acknowledged = true`);
 
+        if (status === true) {
+            console.log("📊 Running quantity calculation logic (if any)...");
+            // ... quantity calculation logic ...
+        }
+
+        console.log("💾 Saving updated reminder...");
         const updatedReminder = await reminder.save();
+        console.log("✅ Reminder saved:", updatedReminder._id);
 
-        // --- BACKGROUND LOGIC STARTS HERE ---
+        // --- BACKGROUND LOGIC ---
+        console.log("🧠 Running background logic...");
         try {
             const [patient, remainingDosesCount] = await Promise.all([
                 Patient.findById(patientId).select('follow'),
                 NotificationReminderSettings.countDocuments({ patientId: patientId, status: null })
             ]);
+            console.log("📊 Background data:", { patientFollow: patient?.follow, remainingDosesCount });
 
-            // --- THIS BLOCK WAS REMOVED ---
-            // The old logic for remainingDosesCount === 1 is now gone.
-            // -----------------------------
-
-            // Inactivate Status Trigger (when 0 doses are left)
             if (remainingDosesCount === 0) {
-                console.log(`Patient ${patientId} has completed their course.`);
-                
-                // --- 1. UPDATE STATUS TO INACTIVE (Unchanged) ---
-                const prescription = await Prescription.findById(reminder.prescriptionId).select('appointmentID');
-                const patientUpdate = Patient.findByIdAndUpdate(patientId, {
-                    follow: "Inactive",
-                    stage: "Inactive"
-                });
-                let appointmentUpdate = Promise.resolve();
-                if (prescription && prescription.appointmentID) {
-                    appointmentUpdate = Appointment.findByIdAndUpdate(prescription.appointmentID, {
-                        follow: "Inactive"
-                    });
-                }
-                await Promise.all([patientUpdate, appointmentUpdate]);
+                console.log("🎉 All doses completed for patient:", patientId);
 
-                // --- 2. SEND FEEDBACK REQUEST (Moved here) ---
+                // --- 1. SEND FEEDBACK REQUEST ---
                 if (patient && patient.follow === 'Patient Care') {
-                    console.log(`Triggering feedback for patient ${patientId}: Course completed.`);
-                    const lastAppointment = await Appointment.findOne({ patientId: patientId, status: 'completed' }).sort({ updatedAt: -1 });
+                    console.log("📨 Patient is under 'Patient Care' - preparing feedback trigger...");
+
+                    // --- THIS IS THE CORRECTED QUERY ---
+                    const lastAppointment = await Appointment.findOne({ patient: patientId }).sort({ updatedAt: -1 });
+                    console.log("🗓️ Last appointment:", lastAppointment?._id || "None");
 
                     if (lastAppointment) {
                         const io = req.app.get('socketio');
                         io.to(`user_${patientId}`).emit("requestFeedback", {
-                            // Message updated for course completion
                             message: "You've completed your course! We'd love to get your feedback on your experience.",
                             appointmentId: lastAppointment._id,
                             doctorId: lastAppointment.doctor
                         });
-                       console.log(`✅ Feedback signal ('requestFeedback') sent to patient: ${patientId}`);
-
+                        console.log(`✅ Feedback signal ('requestFeedback') sent to patient: ${patientId}`);
+                    } else {
+                        console.log("⚠️ No last appointment found, skipping feedback emit");
                     }
                 }
+
+                // --- 2. UPDATE STATUS TO INACTIVE ---
+                console.log("🧩 Updating prescription, patient, and appointment statuses to 'Inactive'...");
+                const prescription = await Prescription.findById(reminder.prescriptionId).select('appointmentID');
+                console.log("💊 Found prescription:", prescription?._id || "None", "→ appointmentID:", prescription?.appointmentID || "None");
+
+                const patientUpdate = Patient.findByIdAndUpdate(patientId, { follow: "Inactive", stage: "Inactive" });
+                let appointmentUpdate = prescription?.appointmentID
+                    ? Appointment.findByIdAndUpdate(prescription.appointmentID, { follow: "Inactive" })
+                    : Promise.resolve();
+
+                await Promise.all([patientUpdate, appointmentUpdate]);
+                console.log("✅ Patient and appointment updated to 'Inactive'");
+            } else {
+                console.log("⏳ Remaining doses still pending:", remainingDosesCount);
             }
         } catch (backgroundLogicError) {
-            console.error("Error in background trigger logic:", backgroundLogicError);
+            console.error("❗ Error in background trigger logic:", backgroundLogicError);
         }
-        // --- BACKGROUND LOGIC ENDS HERE ---
 
+        console.log("✅ Successfully updated medication status");
         return res.status(200).json({
             message: `Medication status updated to ${status ? 'taken' : 'not taken'}`,
             updated: updatedReminder
@@ -179,6 +193,7 @@ exports.updateMedicationStatus = async (req, res) => {
         return res.status(500).json({ message: 'Internal server error', error: err.message });
     }
 };
+
 exports.getMedicationForDailyIntake = async (req, res) => {
   try {
     const { patientId } = req.params;
