@@ -1399,19 +1399,19 @@ const updateShipmentStatus = async (req, res) => {
 };
 const getFollowUpAppointmentsPrescriptions = async (req, res) => {
   try {
-    // 1. Find all appointments with the specific follow-up status
-    const appointments = await Appointment.find({ 
-        follow: 'Medicine Preparation' 
+    // 1. Find appointments with either 'Medicine Preparation' or 'Shipment' status
+    const appointments = await Appointment.find({
+      follow: { $in: ['Medicine Preparation', 'Shipment'] }
     }).select('prescriptionID medicinePrepared');
 
     if (!appointments.length) {
-      return res.status(404).json({ message: "No appointments with 'Follow up-MP' status found." });
+      return res.status(404).json({ message: "No appointments with 'Medicine Preparation' or 'Shipment' status found." });
     }
 
     // 2. Extract all prescription IDs from the found appointments
     const prescriptionIds = appointments
       .map(app => app.prescriptionID)
-      .filter(id => id); 
+      .filter(id => id);
 
     // 3. Fetch all relevant preparation summaries in a single query
     const summaries = await MedicinePreparationSummary.find({
@@ -1427,16 +1427,13 @@ const getFollowUpAppointmentsPrescriptions = async (req, res) => {
 
     // 5. Build the final response by combining the data
     const results = appointments.map(appointment => {
-      // ✅ --- THIS IS THE CORRECTED LOGIC ---
       const presId = appointment.prescriptionID;
-      // Check if presId exists before using it
       const shipmentStatus = presId ? summaryMap.get(presId.toString()) : false;
 
       return {
         appointmentId: appointment._id,
         prescriptionId: presId,
         medicinePrepared: appointment.medicinePrepared,
-        // Use the safely retrieved status
         shipmentStatus: shipmentStatus || false,
       };
     });
