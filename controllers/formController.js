@@ -44,6 +44,12 @@ exports.predict = async (req, res) => {
 // const asyncHandler = require("express-async-handler");
 
 exports.createPatient = asyncHandler(async (req, res) => {
+  // --- Start of Debug Statements ---
+  console.log("--- Create Patient Request Start ---");
+  console.log("Timestamp:", new Date().toISOString());
+  console.log("Request Body:", req.body);
+  // --- End of Debug Statements ---
+
   console.log("Create patient endpoint reached");
 
   const {
@@ -54,11 +60,15 @@ exports.createPatient = asyncHandler(async (req, res) => {
 
   // --- Validation (Unchanged) ---
   if (!email || !phone || !name) {
+    // --- Debug Statement for Validation Failure ---
+    console.error("Validation failed: Missing required fields (name, email, or phone).");
     return res.status(400).json({ success: false, message: "Name, email, and phone are required." });
   }
 
   const existingPatient = await Patient.findOne({ $or: [{ phone }, { email }] });
   if (existingPatient) {
+    // --- Debug Statement for Existing Patient ---
+    console.warn("Attempted to create a duplicate patient. Phone:", phone, "Email:", email);
     return res.status(400).json({
       success: false,
       message: "A patient with this phone number or email already exists.",
@@ -75,9 +85,13 @@ exports.createPatient = asyncHandler(async (req, res) => {
 
   // --- Generate and store the password set token ---
   const setPasswordToken = newPatient.createPasswordSetToken();
+  // --- Debug Statement for Token Generation ---
+  console.log("Generated password set token for new patient:", setPasswordToken ? "Success" : "Failed");
 
   // Save the patient record along with the new token fields
   await newPatient.save({ validateBeforeSave: false });
+  // --- Debug Statement for Patient Save ---
+  console.log("New patient record saved successfully. Patient ID:", newPatient._id);
 
 
   // --- Create Medical Details Record (Unchanged) ---
@@ -98,12 +112,20 @@ exports.createPatient = asyncHandler(async (req, res) => {
   });
 
   await medicalDetails.save();
+  // --- Debug Statement for Medical Details Save ---
+  console.log("Medical details for patient saved successfully. Medical Details ID:", medicalDetails._id);
 
   // --- Send Welcome Email with Set Password Link ---
   try {
-    // Make sure you have FRONTEND_URL in your .env file (e.g., FRONTEND_URL=http://localhost:3000)
     const setPasswordUrl = `https://consult-homeopathy.vercel.app/set-password/${setPasswordToken}`;
+    // --- Debug Statement for Email Sending ---
+    console.log("Attempting to send set password email to:", newPatient.email);
+    console.log("Using URL:", setPasswordUrl);
+    
     await sendSetPasswordEmail(newPatient.email, setPasswordUrl);
+
+    // --- Debug Statement for Email Success ---
+    console.log("Email sent successfully to:", newPatient.email);
 
     // --- Success Response (Updated message) ---
     res.status(201).json({
@@ -112,6 +134,12 @@ exports.createPatient = asyncHandler(async (req, res) => {
       patientId: newPatient._id,
     });
   } catch (error) {
+    // --- Start of CRITICAL Debug Statements for Email Failure ---
+    console.error("!!! CRITICAL: EMAIL SENDING FAILED !!!");
+    console.error("Error occurred while sending email to:", newPatient.email);
+    console.error("Full Error Object:", error); // This is the most important log
+    // --- End of CRITICAL Debug Statements for Email Failure ---
+
     console.error("Error creating patient or sending email:", error);
     // This provides a more specific error if the email fails after the user is created
     res.status(500).json({
