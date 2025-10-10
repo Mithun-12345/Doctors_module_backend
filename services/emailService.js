@@ -1,11 +1,15 @@
+require('dotenv').config();
 const Brevo = require('@getbrevo/brevo');
 
-// Initialize the Brevo API client once
-const defaultClient = Brevo.ApiClient.instance;
-const apiKey = defaultClient.authentications['api-key'];
-apiKey.apiKey = process.env.BREVO_API_KEY; // Uses your existing BREVO_API_KEY
-
+// Initialize the API instance
 const apiInstance = new Brevo.TransactionalEmailsApi();
+
+// ✅ Correct way to set API key for newer versions
+apiInstance.setApiKey(
+  Brevo.TransactionalEmailsApiApiKeys.apiKey,
+  process.env.BREVO_API_KEY
+);
+
 
 /**
  * Sends a welcome email with a link for the user to set their password.
@@ -17,8 +21,8 @@ const sendSetPasswordEmail = async (userEmail, setPasswordUrl) => {
     const sendSmtpEmail = new Brevo.SendSmtpEmail();
 
     sendSmtpEmail.to = [{ email: userEmail }];
-    sendSmtpEmail.sender = { 
-      name: "Consult Homeopathy Clinic", 
+    sendSmtpEmail.sender = {
+      name: "Consult Homeopathy Clinic",
       email: process.env.EMAIL_USER // Uses your existing EMAIL_USER as the "from" address
     };
     sendSmtpEmail.subject = "Begin Your Healing Journey with Consult Homeopathy Clinic";
@@ -43,6 +47,7 @@ const sendSetPasswordEmail = async (userEmail, setPasswordUrl) => {
       </div>
     `;
 
+    // Use the configured apiInstance to send the email
     await apiInstance.sendTransacEmail(sendSmtpEmail);
     console.log("Set password email sent successfully to:", userEmail);
   } catch (error) {
@@ -56,8 +61,8 @@ const sendPasswordResetEmail = async (userEmail, resetUrl) => {
     const sendSmtpEmail = new Brevo.SendSmtpEmail();
 
     sendSmtpEmail.to = [{ email: userEmail }];
-    sendSmtpEmail.sender = { 
-      name: "Consult Homeopathy Clinic", 
+    sendSmtpEmail.sender = {
+      name: "Consult Homeopathy Clinic",
       email: process.env.EMAIL_USER // Uses your existing EMAIL_USER as the "from" address
     };
     sendSmtpEmail.subject = "Password Reset Request for Your Account";
@@ -73,6 +78,7 @@ const sendPasswordResetEmail = async (userEmail, resetUrl) => {
       </div>
     `;
 
+    // Use the configured apiInstance to send the email
     await apiInstance.sendTransacEmail(sendSmtpEmail);
     console.log("Password reset email sent successfully to:", userEmail);
   } catch (error) {
