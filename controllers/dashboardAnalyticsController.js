@@ -527,7 +527,73 @@ exports.getListPendingPayments = async (req, res) => {
         res.status(500).json({ success: false, message: "Internal server error." });
     }
 };
+/**
+ * @desc    Get a logged-in doctor's upcoming appointments.
+ * @route   GET /api/doctors/upcoming-appointments
+ * @access  Private (Doctor)
+ */
+exports.getDoctorUpcomingAppointments = async (req, res) => {
+    try {
+        // 1. Get the doctor's ID from the authenticated user's token
+        const doctorId = req.user.id; 
 
+        // 2. Build an aggregation pipeline to fetch and format the data
+        const pipeline = [
+            // Stage 1: Match only confirmed appointments for this doctor from today onwards
+            {
+                $match: {
+                    doctor: new mongoose.Types.ObjectId(doctorId),
+                    status: 'confirmed',
+                    appointmentDate: { $gte: new Date(new Date().setHours(0, 0, 0, 0)) }
+                }
+            },
+            // Stage 2: Sort the appointments chronologically
+            {
+                $sort: {
+                    appointmentDate: 1,
+                    timeSlot: 1
+                }
+            },
+            // Stage 3: Join with the 'patients' collection to get the patient's name
+            {
+                $lookup: {
+                    from: 'patients',
+                    localField: 'patient',
+                    foreignField: '_id',
+                    as: 'patientInfo'
+                }
+            },
+            {
+                $unwind: { path: '$patientInfo', preserveNullAndEmptyArrays: true }
+            },
+            // Stage 4: Project only the fields you requested
+            {
+                $project: {
+                    _id: 1, // The appointment ID
+                    patientId: '$patientInfo._id',
+                    patientName: '$patientInfo.name',
+                    meetLink: 1,
+                    diseaseName: 1, // Using diseaseName as 'symptom'
+                    appointmentDate: 1,
+                    timeSlot: 1
+                }
+            }
+        ];
+
+        // 3. Execute the pipeline
+        const upcomingAppointments = await Appointment.aggregate(pipeline);
+
+        res.status(200).json({
+            success: true,
+            count: upcomingAppointments.length,
+            data: upcomingAppointments
+        });
+
+    } catch (error) {
+        console.error("Error fetching upcoming appointments:", error);
+        res.status(500).json({ success: false, message: "Internal server error" });
+    }
+};
 /**
  * @desc    Get a summary of total amounts for receivables and payables.
  * @route   GET /api/financials/debit-credit-summary
