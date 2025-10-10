@@ -373,7 +373,7 @@ const getPrescriptionById = async (req, res) => {
     const prescription = await Prescription.findById(prescriptionId)
       .populate("patientId", "name age phone email")
       .populate("doctorId", "name email")
-      .populate("appointmentId", "consultingType consultingFor appointmentDate")
+      .populate("appointmentID", "consultingType consultingFor appointmentDate")
       .populate("subPrescriptionID");
 
     if (!prescription) {
