@@ -616,6 +616,87 @@ exports.loginUser = async (req, res) => {
     res.status(500).json({ message: "Server error during login." });
   }
 };
+// --- NEW: Helper function to convert milliseconds to "Xh Ym" format ---
+const msToHoursMinutes = (ms) => {
+    if (!ms || ms <= 0) {
+        return "0h 0m";
+    }
+    const totalMinutes = Math.floor(ms / (1000 * 60));
+    const hours = Math.floor(totalMinutes / 60);
+    const minutes = totalMinutes % 60;
+    return `${hours}h ${minutes}m`;
+};
+
+/**
+ * @desc    Get a final, overall summary of key clinic analytics.
+ * @route   GET /api/analytics/overall-summary
+ * @access  Private (Admin)
+ */
+exports.getOverallClinicAnalytics = async (req, res) => {
+    try {
+        const [
+            loginStats,
+            prescriptionStats,
+            callStats,
+            feedbackStats
+        ] = await Promise.all([
+            // 1. Calculate average time from registration to first login
+            Patient.aggregate([
+                { $match: { firstLoginDone: true, firstLoginTime: { $ne: null } } },
+                { $project: { timeToLogin: { $subtract: ["$firstLoginTime", "$createdAt"] } } },
+                { $group: { _id: null, avgTimeToLogin: { $avg: "$timeToLogin" } } }
+            ]),
+            // The other 3 aggregations remain exactly the same
+            Prescription.aggregate([
+                { $group: {
+                    _id: null,
+                    totalPrescriptions: { $sum: 1 },
+                    prescriptionsWithRevisions: {
+                        $sum: { $cond: [{ $gt: [{ $size: { $ifNull: ["$subPrescriptionID", []] } }, 0] }, 1, 0] }
+                    }
+                }},
+                { $project: {
+                    _id: 0,
+                    revisionRate: {
+                        $cond: {
+                            if: { $gt: ["$totalPrescriptions", 0] },
+                            then: { $multiply: [{ $divide: ["$prescriptionsWithRevisions", "$totalPrescriptions"] }, 100] },
+                            else: 0
+                        }
+                    }
+                }}
+            ]),
+            Patient.aggregate([
+                { $group: { _id: null, avgCallsReceived: { $avg: "$phoneReceived" } } }
+            ]),
+            Feedback.aggregate([
+                { $group: { _id: null, avgCommunicationScore: { $avg: "$ratings.communication" } } }
+            ])
+        ]);
+
+        const avgTimeToLoginMs = loginStats[0]?.avgTimeToLogin || 0;
+        const prescriptionRevisionRate = prescriptionStats[0]?.revisionRate || 0;
+        const avgCallsPerPatient = callStats[0]?.avgCallsReceived || 0;
+        const avgCommunicationScore = feedbackStats[0]?.avgCommunicationScore || 0;
+
+        // --- MODIFIED: Assemble the final summary object with the new format ---
+        const summary = {
+            averageTimeToFirstLogin: msToHoursMinutes(avgTimeToLoginMs), // Using the new helper
+            prescriptionRevisionRatePercentage: parseFloat(prescriptionRevisionRate.toFixed(2)),
+            averageCallsPerPatient: parseFloat(avgCallsPerPatient.toFixed(2)),
+            averageCommunicationScore: parseFloat(avgCommunicationScore.toFixed(1))
+        };
+
+        res.status(200).json({
+            success: true,
+            summary
+        });
+
+    } catch (error) {
+        console.error("Error fetching overall clinic analytics:", error);
+        res.status(500).json({ success: false, message: "Internal server error" });
+    }
+};
 // In otpController.js
 exports.forgotPassword = asyncHandler(async (req, res) => {
   // 1. Get only the identifier from the request body
@@ -644,7 +725,7 @@ exports.forgotPassword = asyncHandler(async (req, res) => {
       const resetToken = user.createPasswordSetToken();
       await user.save({ validateBeforeSave: false });
 
-      const resetUrl = `http://localhost:5173/set-password/${resetToken}`;
+      const resetUrl = `https://consult-homeopathy.vercel.app/set-password/${resetToken}`;
       
       // 4. Use the correct email field from the found user object
       const emailToSend = user.email || user.personalEmail;

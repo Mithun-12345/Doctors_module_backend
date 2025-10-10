@@ -102,7 +102,7 @@ exports.createPatient = asyncHandler(async (req, res) => {
   // --- Send Welcome Email with Set Password Link ---
   try {
     // Make sure you have FRONTEND_URL in your .env file (e.g., FRONTEND_URL=http://localhost:3000)
-    const setPasswordUrl = `http://localhost:5173/set-password/${setPasswordToken}`;
+    const setPasswordUrl = `https://consult-homeopathy.vercel.app/set-password/${setPasswordToken}`;
     await sendSetPasswordEmail(newPatient.email, setPasswordUrl);
 
     // --- Success Response (Updated message) ---
