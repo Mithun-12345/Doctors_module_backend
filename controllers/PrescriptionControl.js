@@ -327,29 +327,31 @@ const getPatientPrescriptions = async (req, res) => {
     // Get prescriptions with populated data
     const prescriptions = await Prescription.find({ patientId })
       .populate("doctorId", "name email")
-      .populate("appointmentId", "consultingType consultingFor appointmentDate")
+      .populate("appointmentID", "consultingType consultingFor appointmentDate")
       .sort({ createdAt: -1 });
 
-    // Format prescriptions for response
-    const formattedPrescriptions = prescriptions.map((prescription) => ({
-      _id: prescription._id,
-      consultingType:
+// Format prescriptions for response
+const formattedPrescriptions = prescriptions.map((prescription) => ({
+    _id: prescription._id,
+    consultingType:
         prescription.consultingType ||
-        prescription.appointmentId?.consultingType ||
+        // Corrected line below
+        prescription.appointmentID?.consultingType ||
         "N/A",
-      consultingFor:
+    consultingFor:
         prescription.consultingFor ||
-        prescription.appointmentId?.consultingFor ||
+        // Corrected line below
+        prescription.appointmentID?.consultingFor ||
         "N/A",
-      medicineCourse: prescription.medicineCourse,
-      action: prescription.action,
-      createdAt: prescription.createdAt,
-      doctorName: prescription.doctorId?.name || "Unknown",
-      prescriptionType: prescription.prescriptionType,
-      medicineCharges: prescription.medicineCharges,
-      isPaymentDone: prescription.isPaymentDone,
-      subPrescriptionCount: prescription.subPrescriptionID?.length || 0,
-    }));
+    medicineCourse: prescription.medicineCourse,
+    action: prescription.action,
+    createdAt: prescription.createdAt,
+    doctorName: prescription.doctorId?.name || "Unknown",
+    prescriptionType: prescription.prescriptionType,
+    medicineCharges: prescription.medicineCharges,
+    isPaymentDone: prescription.isPaymentDone,
+    subPrescriptionCount: prescription.subPrescriptionID?.length || 0,
+}));
 
     res.status(200).json({
       success: true,
