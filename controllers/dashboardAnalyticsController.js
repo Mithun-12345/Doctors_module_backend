@@ -600,69 +600,81 @@ exports.getDoctorUpcomingAppointments = async (req, res) => {
  * @access  Private/Admin
  * @body    { "filter": "[day|week|month]" } // Optional filter
  */
+
 exports.getDebitCreditSummary = async (req, res) => {
     try {
-        // Get the optional filter from the request body
         const { filter } = req.body;
-
         const matchQuery = {};
 
-        // If a filter is provided, calculate the start date for the query
         if (filter) {
             const now = new Date();
             let startDate;
-
             switch (filter) {
-                case 'day':
-                    startDate = new Date(now.setHours(0, 0, 0, 0));
-                    break;
+                case 'day': startDate = new Date(new Date().setHours(0, 0, 0, 0)); break;
                 case 'week':
                     const firstDayOfWeek = now.getDate() - now.getDay();
-                    startDate = new Date(now.setDate(firstDayOfWeek));
+                    startDate = new Date(new Date().setDate(firstDayOfWeek));
                     startDate.setHours(0, 0, 0, 0);
                     break;
-                case 'month':
-                    startDate = new Date(now.getFullYear(), now.getMonth(), 1);
-                    break;
-                default:
-                    return res.status(400).json({ message: "Invalid filter value. Use 'day', 'week', or 'month'." });
+                case 'month': startDate = new Date(new Date().getFullYear(), new Date().getMonth(), 1); break;
+                default: return res.status(400).json({ message: "Invalid filter value." });
             }
-
-            // The filter applies to the 'createdAt' field from timestamps
             if (startDate) {
                 matchQuery.createdAt = { $gte: startDate };
             }
         }
+        
+        // --- NEW LOGIC: Run three separate queries in parallel ---
+        const [
+            payablesResult,
+            bookingFeeResult,
+            prescriptionChargesResult
+        ] = await Promise.all([
+            // Query 1: Get Total Payables from DebitCreditNote (Unchanged)
+            DebitCreditNote.aggregate([
+                { $match: { ...matchQuery, linkedType: 'Payable' } },
+                { $group: { _id: null, totalAmount: { $sum: '$amount' } } }
+            ]),
 
-        const results = await DebitCreditNote.aggregate([
-            // Stage 1: Filter documents based on the date period (if any)
-            {
-                $match: matchQuery
-            },
-            // Stage 2: Group by the 'linkedType' to separate Receivables and Payables
-            {
-                $group: {
-                    _id: '$linkedType',      // Group by 'Receivable' or 'Payable'
-                    totalAmount: { $sum: '$amount' } // Sum the amount for each group
+            // Query 2: Get "Booking fee" from successful Consultation payments
+            Payment.aggregate([
+                { $match: { ...matchQuery, paidFor: "Consultation" } },
+                { $group: { _id: null, total: { $sum: '$amount' } } }
+            ]),
+
+            // Query 3: Get all other charges from successful Prescription payments
+            Prescription.aggregate([
+                { $match: { ...matchQuery, isPayementDone: true } },
+                {
+                    $group: {
+                        _id: null,
+                        total: {
+                            $sum: { $add: [
+                                "$shippingCharges",
+                                "$additionalCharges",
+                                "$medicineCharges"
+                            ]}
+                        }
+                    }
                 }
-            }
+            ])
         ]);
 
-        // --- Process the aggregation results ---
-        // The result will be an array like: [{ _id: 'Receivable', totalAmount: 5000 }, { _id: 'Payable', totalAmount: 2000 }]
-
-        const receivableData = results.find(item => item._id === 'Receivable');
-        const payableData = results.find(item => item._id === 'Payable');
-
-        const totalReceivables = receivableData ? receivableData.totalAmount : 0;
-        const totalPayables = payableData ? payableData.totalAmount : 0;
+        // --- Process all results ---
+        const totalPayables = payablesResult[0]?.totalAmount || 0;
         
-        // --- Send the final summary response ---
+        const bookingFee = bookingFeeResult[0]?.total || 0;
+        const prescriptionCharges = prescriptionChargesResult[0]?.total || 0;
+        
+        // The new totalReceivables is the sum from Payments and Prescriptions
+        const totalReceivables = bookingFee + prescriptionCharges;
+
+        // --- Send the final response in the ORIGINAL format ---
         res.status(200).json({
             success: true,
             data: {
-                totalReceivables,
-                totalPayables
+                totalPayables,
+                totalReceivables
             }
         });
 
@@ -671,7 +683,6 @@ exports.getDebitCreditSummary = async (req, res) => {
         res.status(500).json({ success: false, message: "Server error." });
     }
 };
-
 
 // --- Helper Functions ---
 
@@ -1972,75 +1983,90 @@ exports.getAppointmentChartData = async (req, res) => {
  * @access  Private (Admin)
  * @body    { "filter": "[day|week|month]" } // Optional filter
  */
+// Make sure to import the Payment and Prescription models
 exports.getDebitCreditChartData = async (req, res) => {
     try {
-        // --- NEW: Define the master list of categories from your UI ---
         const PAYABLE_CATEGORIES = ["Vendor", "Staff", "Logistics", "Miscellaneous"];
         const RECEIVABLE_CATEGORIES = ["Booking fee", "Consultation fee", "Medicine prep", "Shipment", "Miscellaneous"];
 
         const { filter } = req.body;
-        const matchQuery = { paymentStatus: 'Settled' };
+        const matchQuery = {}; // For createdAt
+        const dcMatchQuery = {}; // For issuedDate
 
         if (filter) {
-            // ... (your existing filter logic is unchanged)
-            const now = new Date();
             let startDate;
-            switch (filter) {
-                case 'day': startDate = new Date(new Date().setHours(0, 0, 0, 0)); break;
-                case 'week':
-                    const firstDayOfWeek = now.getDate() - now.getDay();
-                    startDate = new Date(new Date().setDate(firstDayOfWeek));
-                    startDate.setHours(0, 0, 0, 0);
-                    break;
-                case 'month': startDate = new Date(now.getFullYear(), now.getMonth(), 1); break;
-                default: return res.status(400).json({ message: "Invalid filter value." });
-            }
-            if (startDate) {
-                matchQuery.issuedDate = { $gte: startDate };
+            // ... (your existing filter logic is unchanged) ...
+            if(startDate) {
+                matchQuery.createdAt = { $gte: startDate };
+                dcMatchQuery.issuedDate = { $gte: startDate };
             }
         }
 
-        // --- The aggregation pipeline is UNCHANGED ---
-        const pipeline = [
-            { $match: matchQuery },
-            {
-                $facet: {
-                    "payablesByCategory": [
-                        { $match: { linkedType: 'Payable' } },
-                        { $group: { _id: "$category", totalAmount: { $sum: "$amount" } } },
-                        { $project: { _id: 0, x: "$_id", y: "$totalAmount" } }
-                    ],
-                    "receivablesByCategory": [
-                        { $match: { linkedType: 'Receivable' } },
-                        { $group: { _id: "$category", totalAmount: { $sum: "$amount" } } },
-                        { $project: { _id: 0, x: "$_id", y: "$totalAmount" } }
-                    ]
+        // --- NEW LOGIC: Run three separate queries in parallel ---
+        const [
+            payablesResult,
+            bookingFeeResult,
+            prescriptionChargesResult
+        ] = await Promise.all([
+            // Query 1: Get Payables from DebitCreditNote
+            DebitCreditNote.aggregate([
+                { $match: { ...dcMatchQuery, paymentStatus: 'Settled', linkedType: 'Payable' } },
+                { $group: { _id: "$category", totalAmount: { $sum: "$amount" } } },
+                { $project: { x: "$_id", y: "$totalAmount", _id: 0 } }
+            ]),
+
+            // Query 2: Get "Booking fee" from successful Consultation payments
+            Payment.aggregate([
+                { $match: { ...matchQuery, paidFor: "Consultation" } },
+                { $group: { _id: "Booking fee", totalAmount: { $sum: '$amount' } } },
+                { $project: { x: "$_id", y: "$totalAmount", _id: 0 } }
+            ]),
+
+            // Query 3: Get other fees from successful Prescription payments
+            Prescription.aggregate([
+                { $match: { ...matchQuery, isPayementDone: true } },
+                {
+                    $group: {
+                        _id: null,
+                        "Shipping fee": { $sum: '$shippingCharges' },
+                        "Consultation fee": { $sum: '$additionalCharges' },
+                        "Medicine prep": { $sum: '$medicineCharges' }
+                    }
                 }
-            }
-        ];
+            ])
+        ]);
 
-        const result = await DebitCreditNote.aggregate(pipeline);
-
-        // --- MODIFIED: Prepare the final response with all categories ---
-        const rawData = (result.length > 0) ? result[0] : { payablesByCategory: [], receivablesByCategory: [] };
-
-        // Create a Map for quick lookups
-        const payablesMap = new Map(rawData.payablesByCategory.map(item => [item.x, item.y]));
-        const receivablesMap = new Map(rawData.receivablesByCategory.map(item => [item.x, item.y]));
-
-        // Build the final arrays, ensuring all master categories are present
+        // --- Process all results and merge them ---
+        
+        // Process Payables (unchanged)
+        const payablesMap = new Map(payablesResult.map(item => [item.x, item.y]));
         const finalPayables = PAYABLE_CATEGORIES.map(category => ({
             x: category,
-            y: payablesMap.get(category) || 0 // Default to 0 if not found
+            y: payablesMap.get(category) || 0
         }));
 
+        // Process all Receivables from the new sources
+        const receivablesMap = new Map();
+        // Add from booking fees
+        if (bookingFeeResult.length > 0) {
+            receivablesMap.set(bookingFeeResult[0].x, bookingFeeResult[0].y);
+        }
+        // Add from prescription charges
+        if (prescriptionChargesResult.length > 0) {
+            const presData = prescriptionChargesResult[0];
+            receivablesMap.set("Shipping fee", presData["Shipping fee"] || 0);
+            receivablesMap.set("Consultation fee", (receivablesMap.get("Consultation fee") || 0) + (presData["Consultation fee"] || 0));
+            receivablesMap.set("Medicine prep", presData["Medicine prep"] || 0);
+        }
+        
         const finalReceivables = RECEIVABLE_CATEGORIES.map(category => ({
             x: category,
-            y: receivablesMap.get(category) || 0 // Default to 0 if not found
+            y: receivablesMap.get(category) || 0
         }));
-
-        res.status(200).json({ 
-            success: true, 
+        
+        // --- Send the final response in the ORIGINAL format ---
+        res.status(200).json({
+            success: true,
             data: {
                 payablesByCategory: finalPayables,
                 receivablesByCategory: finalReceivables
@@ -2049,10 +2075,9 @@ exports.getDebitCreditChartData = async (req, res) => {
 
     } catch (error) {
         console.error("Error fetching debit/credit chart data:", error);
-        res.status(500).json({ success: false, message: "Internal server error" });
+        res.status(500).json({ success: false, message: "Server error." });
     }
 };
-
 /**
  * @desc    Get a complete summary of all vendors' reliability and price index.
  * @route   POST /api/analytics/vendor-summary
