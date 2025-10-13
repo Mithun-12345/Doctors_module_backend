@@ -6,17 +6,14 @@ const cloudinary = require('cloudinary').v2;
 const streamifier = require('streamifier');
 const AmendmentHistory = require('../models/AmendmentHistory');
 
-// Utility: Generate barcode buffer
-const generateBarcodeBuffer = async (text) => {
+// Utility: Generate QR code buffer
+const generateQrCodeBuffer = async (text) => {
   return new Promise((resolve, reject) => {
     bwipjs.toBuffer(
       {
-        bcid: 'code128',
+        bcid: 'qrcode', // Changed from 'code128' to 'qrcode'
         text: text,
         scale: 3,
-        height: 10,
-        includetext: true,
-        textxalign: 'center',
       },
       (err, png) => {
         if (err) reject(err);
@@ -31,7 +28,7 @@ const uploadToCloudinary = (buffer) => {
   return new Promise((resolve, reject) => {
     const uploadStream = cloudinary.uploader.upload_stream(
       {
-        folder: 'barcodes',
+        folder: 'qrcodes', // Changed folder for organization
         resource_type: 'image',
       },
       (error, result) => {
@@ -54,14 +51,13 @@ const generateShortId = () => {
   return id;
 };
 
-// Utility: Generate unique barcode (check collisions recursively)
-const generateUniqueBarcode = async () => {
+// Utility: Generate unique ID for QR code (check collisions recursively)
+const generateUniqueId = async () => {
   const shortId = generateShortId();
-  const barcode = `RM-${shortId}`;
+  const barcode = `RM-${shortId}`; // Keeping this format as the underlying ID
   const exists = await RawMaterial.findOne({ barcode });
-  return exists ? generateUniqueBarcode() : barcode;
+  return exists ? generateUniqueId() : barcode;
 };
-
 // Get all raw materials
 exports.getAllRawMaterials = async (req, res) => {
   try {
@@ -111,12 +107,14 @@ exports.createRawMaterial = async (req, res) => {
 
     let productImageUrl = '';
     if (req.file && req.file.path) {
-      // ... (image upload logic remains the same)
+      // Assuming you have Cloudinary configured for product images as well
+      const result = await cloudinary.uploader.upload(req.file.path, { folder: 'products' });
+      productImageUrl = result.secure_url;
     }
 
-    const barcode = await generateUniqueBarcode();
-    const barcodeBuffer = await generateBarcodeBuffer(barcode);
-    const barcodeImageUrl = await uploadToCloudinary(barcodeBuffer);
+    const uniqueIdForQr = await generateUniqueId();
+    const qrCodeBuffer = await generateQrCodeBuffer(uniqueIdForQr);
+    const qrCodeImageUrl = await uploadToCloudinary(qrCodeBuffer);
 
     let bottleWeight = 0;
     // This check already correctly handles an empty totalWeight
@@ -124,7 +122,6 @@ exports.createRawMaterial = async (req, res) => {
       bottleWeight = Number(totalWeight) - Number(quantity);
     }
 
-    // ✅ --- FIX: Build the object and add optional fields conditionally ---
     const rawMaterialData = {
       name,
       type,
@@ -135,9 +132,9 @@ exports.createRawMaterial = async (req, res) => {
       currentQuantity: Number(currentQuantity),
       thresholdQuantity: Number(thresholdQuantity),
       costPerUnit: Number(costPerUnit) / Number(quantity),
-      barcode,
+      barcode: uniqueIdForQr, // Storing the unique ID in the 'barcode' field
       isAlcohol,
-      barcodeImageUrl,
+      barcodeImageUrl: qrCodeImageUrl, // Storing the QR code image URL
       bottleWeight,
       vendorName,
       vendorPhone,
@@ -154,7 +151,6 @@ exports.createRawMaterial = async (req, res) => {
     if (expiryDate) {
       rawMaterialData.expiryDate = new Date(expiryDate);
     }
-    // ✅ ----------------------------------------------------------------
 
     const newRawMaterial = new RawMaterial(rawMaterialData);
     const savedRawMaterial = await newRawMaterial.save();
@@ -165,7 +161,6 @@ exports.createRawMaterial = async (req, res) => {
     res.status(400).json({ message: 'Error creating raw material', error: error.message });
   }
 };
-
 exports.updateRawMaterial = async (req, res) => {
   try {
     const updatePayload = {
