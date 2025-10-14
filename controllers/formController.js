@@ -4,6 +4,7 @@ const bcrypt = require("bcryptjs");
 const nodemailer = require("nodemailer");
 const { sendSetPasswordEmail } = require('../services/emailService');
 const asyncHandler = require("express-async-handler");
+const Doctor=require("../models/doctorModel")
 
 // predictionController.js                                                                                                                                                                                                                                                                                                                                                                             const express = require('express');
 const axios = require("axios");
@@ -66,15 +67,15 @@ exports.createPatient = asyncHandler(async (req, res) => {
   }
 
   const existingPatient = await Patient.findOne({ $or: [{ phone }, { email }] });
-  if (existingPatient) {
-    // --- Debug Statement for Existing Patient ---
-    console.warn("Attempted to create a duplicate patient. Phone:", phone, "Email:", email);
+  const existingDoctor = await Doctor.findOne({ $or: [{ phone }, { email }] });
+
+  if (existingPatient || existingDoctor) {
+    console.warn("Attempted to create a duplicate user. Phone:", phone, "Email:", email);
     return res.status(400).json({
       success: false,
-      message: "A patient with this phone number or email already exists.",
+      message: "A user with this phone number or email already exists.",
     });
   }
-
   // --- Create Patient Record (Password logic is REMOVED) ---
   const newPatient = new Patient({
     name, age, phone, whatsappNumber, email, gender,
