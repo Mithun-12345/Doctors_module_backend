@@ -56,7 +56,7 @@ const {
   getNotInterestedPatientCountsTotal,
   getDashboardStatistics,
   getAllAppointmentCountsByStagePerfect,
-  
+  updatePatientAddress,
 } = require("../controllers/patientController");
 const {
   upload,
@@ -110,6 +110,8 @@ router.get(
 );
 router.get("/:patientId/payments",getAllPaymentsByPatient);
 router.get("/referrals-dashboard", validateToken, getPatientReferrals);
+router.patch('/:id/address', updatePatientAddress);
+
 
 
 router.get("/show-all-payments/:patientId", getPaymentsByPatient);

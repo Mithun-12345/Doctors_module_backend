@@ -4308,4 +4308,32 @@ exports.getAllAppointmentCountsByStagePerfect = async (req, res) => {
     res.status(500).json({ message: "Internal server error" });
   }
 };
+exports.updatePatientAddress = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { address } = req.body;
+
+    if (!address) {
+      return res.status(400).json({ message: 'Address field is required.' });
+    }
+
+    const patient = await Patient.findByIdAndUpdate(
+      id,
+      { $set: { address: address } },
+      { new: true, runValidators: true } // 'new: true' returns the updated document
+    );
+
+    if (!patient) {
+      return res.status(404).json({ message: 'Patient not found.' });
+    }
+
+    res.status(200).json({
+      message: 'Address updated successfully.',
+      address: patient.address,
+    });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: 'Server error while updating address.' });
+  }
+};
 
