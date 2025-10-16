@@ -3697,7 +3697,7 @@ exports.getPatientById = async (req, res) => {
     // 2. Find all appointments for that patient
     // (Note: I've removed '-_id' so we can use the ID to find payments)
     const appointments = await Appointment.find({ patient: patientId }).select(
-      "diseaseName consultingFor appointmentDate timeSlot"
+      "diseaseName consultingFor appointmentDate timeSlot prescriptionID"
     );
 
     // 3. Get the IDs from the appointment documents
