@@ -60,6 +60,14 @@ const patientSchema = new mongoose.Schema(
       type : Boolean,
       default : true
     },
+    loginAttempts: {
+        type: Number,
+        required: true,
+        default: 0
+    },
+    lockUntil: {
+        type: Number // Stores a timestamp (e.g., from Date.now())
+    },
     address: {
       type: String,
       required: false,

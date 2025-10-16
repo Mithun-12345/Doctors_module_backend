@@ -524,6 +524,10 @@ exports.setPassword = asyncHandler(async (req, res) => {
     name: user.name,
   });
 });
+// --- Configuration for login attempts ---
+const MAX_LOGIN_ATTEMPTS = 5;
+const LOCK_TIME_MINUTES = 15;
+
 exports.loginUser = async (req, res) => {
   try {
     const { identifier, password } = req.body;
@@ -546,19 +550,48 @@ exports.loginUser = async (req, res) => {
       return res.status(401).json({ message: "Invalid credentials." });
     }
 
-    const isMatch = await bcrypt.compare(password, user.password);
-    if (!isMatch) {
-      return res.status(401).json({ message: "Invalid credentials." });
+    // --- 1. CHECK IF ACCOUNT IS CURRENTLY LOCKED ---
+    if (user.lockUntil && user.lockUntil > Date.now()) {
+        const remainingTime = Math.ceil((user.lockUntil - Date.now()) / 60000);
+        return res.status(429).json({ // 429: Too Many Requests
+            message: `Too many failed attempts. Your account is locked. Please try again in ${remainingTime} minutes.`
+        });
     }
-    // --- NEW: Check and set the first login timestamp for patients ---
-   if (role === 'Patient' && !user.firstLoginDone) {
-    user.firstLoginTime = new Date();
-    user.firstLoginDone = true;
-}
+
+    const isMatch = await bcrypt.compare(password, user.password);
+
+    if (!isMatch) {
+      // --- 2. HANDLE FAILED LOGIN ATTEMPT ---
+      user.loginAttempts = (user.loginAttempts || 0) + 1;
+      
+      if (user.loginAttempts >= MAX_LOGIN_ATTEMPTS) {
+          user.lockUntil = Date.now() + LOCK_TIME_MINUTES * 60 * 1000;
+          await user.save();
+          return res.status(429).json({
+              message: `Invalid credentials. Your account is now locked for ${LOCK_TIME_MINUTES} minutes.`
+          });
+      } else {
+          await user.save();
+          const attemptsLeft = MAX_LOGIN_ATTEMPTS - user.loginAttempts;
+          return res.status(401).json({ message: `Invalid credentials. You have ${attemptsLeft} attempts left.` });
+      }
+    }
+
+    // --- 3. HANDLE SUCCESSFUL LOGIN: RESET ATTEMPTS AND LOCK ---
+    user.loginAttempts = 0;
+    user.lockUntil = null; // Or undefined
     user.lastLoginAt = new Date();
+
+    // --- Check and set the first login timestamp for patients ---
+    if (role === 'Patient' && !user.firstLoginDone) {
+      user.firstLoginTime = new Date();
+      user.firstLoginDone = true;
+    }
+    
+    // --- Save all changes for the successful login at once ---
     await user.save();
     
-    // --- LOGIC RESTRUCTURED FROM HERE ---
+    // --- LOGIC RESTRUCTURED FROM HERE (Your existing logic) ---
 
     // 1. Always create tokens and save the refresh token after a successful password match.
     const payload = {
@@ -616,6 +649,7 @@ exports.loginUser = async (req, res) => {
     res.status(500).json({ message: "Server error during login." });
   }
 };
+
 // --- NEW: Helper function to convert milliseconds to "Xh Ym" format ---
 const msToHoursMinutes = (ms) => {
     if (!ms || ms <= 0) {
