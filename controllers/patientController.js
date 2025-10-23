@@ -3943,10 +3943,52 @@ exports.getCompletedPaymentsCount = async (req, res) => {
 // const Appointment = require('../models/Appointment'); //
 // const mongoose = require('mongoose');
 
+// --- NEW HELPER FUNCTIONS ---
+
+/**
+ * Converts "hh:mm A" (e.g., "01:00 PM") to total minutes from midnight.
+ * "01:00 PM" -> 780
+ * "10:00 AM" -> 600
+ */
+function parse12HourToMinutes(timeString) {
+  try {
+    const [time, modifier] = timeString.split(' ');
+    let [hours, minutes] = time.split(':').map(Number);
+    if (hours === 12) {
+      hours = 0; // 12 AM (0) or 12 PM (12)
+    }
+    if (modifier === 'PM') {
+      hours += 12;
+    }
+    return hours * 60 + minutes;
+  } catch (e) {
+    console.error("Failed to parse 12-hour time:", timeString);
+    return null;
+  }
+}
+
+/**
+ * Converts "HH:mm" (e.g., "19:40") to total minutes from midnight.
+ * "19:40" -> 1180
+ * "10:00" -> 600
+ */
+function parse24HourToMinutes(timeString) {
+  try {
+    const [hours, minutes] = timeString.split(':').map(Number);
+    return hours * 60 + minutes;
+  } catch (e) {
+    console.error("Failed to parse 24-hour time:", timeString);
+    return null;
+  }
+}
+
+// --- END HELPER FUNCTIONS ---
+
+
 exports.rescheduleAppointment = async (req, res) => {
   try {
     const { appointmentId } = req.params;
-    const { appointmentDate, timeSlot } = req.body;
+    const { appointmentDate, timeSlot } = req.body; // 'timeSlot' is "HH:mm" (e.g., "19:40")
 
     // 1. Validate inputs
     if (!mongoose.Types.ObjectId.isValid(appointmentId)) {
@@ -3965,26 +4007,60 @@ exports.rescheduleAppointment = async (req, res) => {
         return res.status(400).json({ message: "Only confirmed appointments can be rescheduled." });
     }
 
-    // 3. <-- NEW LOGIC: Get price details for old and new slots
-    // 3. <-- NEW LOGIC: Get price details for old and new slots
-    const oldSlotDetails = await AppointmentSlotTypes.findOne({ slotType: appointment.slotType }); // <-- Use the correct field
-    const newSlotDetails = await AppointmentSlotTypes.findOne({ slotType: timeSlot }); // 'timeSlot' is from req.body
+    // 3. --- LOGIC COMPLETELY REVISED ---
+
+    // Get all available slot type configurations
+    const allSlotTypes = await AppointmentSlotTypes.find({});
+    if (!allSlotTypes || allSlotTypes.length === 0) {
+        return res.status(500).json({ message: "No appointment slot types are configured in settings." });
+    }
+
+    // Convert old and new appointment times to minutes
+    const oldTimeInMinutes = parse24HourToMinutes(appointment.timeSlot); // e.g., "10:00" -> 600
+    const newTimeInMinutes = parse24HourToMinutes(timeSlot);             // e.g., "19:40" -> 1180
+
+    if (newTimeInMinutes === null) {
+      return res.status(400).json({ message: "Invalid timeSlot format in payload."});
+    }
+
+    // Find which slot configurations match the old and new times
+    let oldSlotDetails = null;
+    let newSlotDetails = null;
+
+    for (const slot of allSlotTypes) {
+      const startMinutes = parse12HourToMinutes(slot.startingTime);
+      const endMinutes = parse12HourToMinutes(slot.endingTime);
+
+      // Check if the old time falls within this slot's range
+      if (oldTimeInMinutes >= startMinutes && oldTimeInMinutes < endMinutes) {
+        oldSlotDetails = slot;
+      }
+      
+      // Check if the new time falls within this slot's range
+      if (newTimeInMinutes >= startMinutes && newTimeInMinutes < endMinutes) {
+        newSlotDetails = slot;
+      }
+    }
 
     // Validation for slot types
     if (!oldSlotDetails) {
+        // This was your original error
         return res.status(404).json({ message: "Configuration error: Original appointment slot type details not found." });
     }
     if (!newSlotDetails) {
-        return res.status(404).json({ message: "Configuration error: New appointment slot type details not found." });
+        // This was your new error. It should be fixed now.
+        // It means the time "19:40" did not fall into any defined range.
+        return res.status(404).json({ message: "Configuration error: New appointment time does not fit any available slot type." });
     }
 
-    // <-- NEW LOGIC: Calculate the price difference
+    // --- END REVISED LOGIC ---
+
+    // 4. Calculate the price difference
     const oldPrice = oldSlotDetails.price || 0;
     const newPrice = newSlotDetails.price || 0;
     const rescheduleCharge = newPrice - oldPrice;
-    // This will be positive if new slot is more expensive, negative if it's cheaper.
-
-    // 4. (CRITICAL) Check if the NEW slot is available
+    
+    // 5. (CRITICAL) Check if the NEW slot is available
     const startOfDay = new Date(appointmentDate);
     startOfDay.setHours(0, 0, 0, 0);
     const endOfDay = new Date(appointmentDate);
@@ -3992,19 +4068,19 @@ exports.rescheduleAppointment = async (req, res) => {
 
     const conflictingAppointment = await Appointment.findOne({
       appointmentDate: { $gte: startOfDay, $lte: endOfDay },
-      timeSlot: timeSlot,
-      _id: { $ne: appointmentId } // Exclude the current appointment from the check
+      timeSlot: timeSlot, // Checks for "19:40"
+      _id: { $ne: appointmentId } 
     });
 
     if (conflictingAppointment) {
       return res.status(409).json({ message: "This time slot is already booked. Please choose another." });
     }
 
-    // 5. Update and save the appointment
+    // 6. Update and save the appointment
     appointment.appointmentDate = new Date(appointmentDate);
-    appointment.timeSlot = timeSlot;
+    appointment.timeSlot = timeSlot; // Saves "19:40"
     appointment.reschedule = true;
-    appointment.rescheduleCharges = rescheduleCharge; // <-- NEW LOGIC: Save the calculated charge
+    appointment.rescheduleCharges = rescheduleCharge; 
     
     const updatedAppointment = await appointment.save();
 

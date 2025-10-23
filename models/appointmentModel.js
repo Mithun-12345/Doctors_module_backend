@@ -111,7 +111,6 @@ const appointmentSchema = new mongoose.Schema(
     },
     rescheduleCharges:{
       type: Number,
-      default:0
     },
     prescriptionID: {
       type: mongoose.Schema.Types.ObjectId,
