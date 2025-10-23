@@ -3966,7 +3966,8 @@ exports.rescheduleAppointment = async (req, res) => {
     }
 
     // 3. <-- NEW LOGIC: Get price details for old and new slots
-    const oldSlotDetails = await AppointmentSlotTypes.findOne({ slotType: appointment.timeSlot });
+    // 3. <-- NEW LOGIC: Get price details for old and new slots
+    const oldSlotDetails = await AppointmentSlotTypes.findOne({ slotType: appointment.slotType }); // <-- Use the correct field
     const newSlotDetails = await AppointmentSlotTypes.findOne({ slotType: timeSlot }); // 'timeSlot' is from req.body
 
     // Validation for slot types
