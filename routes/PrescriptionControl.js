@@ -12,7 +12,8 @@ const {
   getDoctorPrescriptions,
   getPrescriptionStats,
   postMedicine,
-  updateCloseComment
+  updateCloseComment,
+  getRescheduleCharges
 } = require('../controllers/PrescriptionControl');
 const authMiddleware = require('../middlewares/validateTokenHandler');
 
@@ -29,6 +30,10 @@ router.patch('/prescription/:prescriptionId/close', closePrescription);
 // Doctor's prescriptions
 router.get('/doctor/prescriptions', getDoctorPrescriptions);
 router.get('/doctor/stats', getPrescriptionStats);
+router.get(
+  '/:appointmentId/reschedule-charges',  // Protect the route
+  getRescheduleCharges
+);
 
 // Reference data routes
 router.get('/medicines', getMedicines);

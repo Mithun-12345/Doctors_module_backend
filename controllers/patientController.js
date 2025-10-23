@@ -3938,6 +3938,11 @@ exports.getCompletedPaymentsCount = async (req, res) => {
     res.status(500).json({ success: false, message: "Internal server error" });
   }
 };
+// Make sure you import this model at the top of your file
+// const { AppointmentSlotTypes } = require('../models/yourSettingsModelFile');
+// const Appointment = require('../models/Appointment'); //
+// const mongoose = require('mongoose');
+
 exports.rescheduleAppointment = async (req, res) => {
   try {
     const { appointmentId } = req.params;
@@ -3960,7 +3965,25 @@ exports.rescheduleAppointment = async (req, res) => {
         return res.status(400).json({ message: "Only confirmed appointments can be rescheduled." });
     }
 
-    // 3. (CRITICAL) Check if the NEW slot is available
+    // 3. <-- NEW LOGIC: Get price details for old and new slots
+    const oldSlotDetails = await AppointmentSlotTypes.findOne({ slotType: appointment.timeSlot });
+    const newSlotDetails = await AppointmentSlotTypes.findOne({ slotType: timeSlot }); // 'timeSlot' is from req.body
+
+    // Validation for slot types
+    if (!oldSlotDetails) {
+        return res.status(404).json({ message: "Configuration error: Original appointment slot type details not found." });
+    }
+    if (!newSlotDetails) {
+        return res.status(404).json({ message: "Configuration error: New appointment slot type details not found." });
+    }
+
+    // <-- NEW LOGIC: Calculate the price difference
+    const oldPrice = oldSlotDetails.price || 0;
+    const newPrice = newSlotDetails.price || 0;
+    const rescheduleCharge = newPrice - oldPrice;
+    // This will be positive if new slot is more expensive, negative if it's cheaper.
+
+    // 4. (CRITICAL) Check if the NEW slot is available
     const startOfDay = new Date(appointmentDate);
     startOfDay.setHours(0, 0, 0, 0);
     const endOfDay = new Date(appointmentDate);
@@ -3976,10 +3999,12 @@ exports.rescheduleAppointment = async (req, res) => {
       return res.status(409).json({ message: "This time slot is already booked. Please choose another." });
     }
 
-    // 4. Update and save the appointment
+    // 5. Update and save the appointment
     appointment.appointmentDate = new Date(appointmentDate);
     appointment.timeSlot = timeSlot;
     appointment.reschedule = true;
+    appointment.rescheduleCharges = rescheduleCharge; // <-- NEW LOGIC: Save the calculated charge
+    
     const updatedAppointment = await appointment.save();
 
     res.status(200).json({

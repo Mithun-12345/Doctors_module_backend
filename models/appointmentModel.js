@@ -99,7 +99,7 @@ const appointmentSchema = new mongoose.Schema(
     },
     noShow:{
       type:Boolean,
-      default:false
+      default:null
     },
     reschedule:{
       type:Boolean,
@@ -108,6 +108,10 @@ const appointmentSchema = new mongoose.Schema(
     medicinePrepared:{
       type:Boolean,
       default: false,
+    },
+    rescheduleCharges:{
+      type: Number,
+      default:0
     },
     prescriptionID: {
       type: mongoose.Schema.Types.ObjectId,

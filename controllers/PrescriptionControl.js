@@ -1,3 +1,4 @@
+const mongoose = require('mongoose');
 const Prescription = require("../models/Prescription");
 const Patient = require("../models/patientModel");
 const Doctor = require("../models/doctorModel");
@@ -68,7 +69,7 @@ const createPrescription = async (req, res) => {
       }
     }
 
- // Create prescription object (existing logic)
+    // Create prescription object (existing logic)
     const prescription = new Prescription({
       patientId,
       doctorId,
@@ -212,23 +213,33 @@ const createPrescription = async (req, res) => {
     });
     const savedPrescription = await prescription.save();
 
-// --- MODIFIED LOGIC IS HERE ---
-        const patientAppointment = await Appointment.findById(appointmentID);
-        if (!patientAppointment) {
-            return res.status(404).json({ message: "Appointment not found" });
-        }
-        patientAppointment.prescriptionCreated = true;
-        patientAppointment.prescriptionID = savedPrescription._id;
-        patientAppointment.follow = "Payment"; // Update appointment follow status
-        await patientAppointment.save();
+    // --- NEW LOGIC: Calculate total charges early ---
+    const totalCharges =
+      (medicineCharges || 0) +
+      (shippingCharges || 0) +
+      (additionalCharges || 0);
 
-        // --- NEW LOGIC ADDED HERE ---
-        // Update the patient's follow and stage status
-        await Patient.findByIdAndUpdate(patientId, {
-            follow: "Payment",
-            stage: "Payment"
-        });
-        // -----------------------------
+    // --- NEW LOGIC: Conditionally set next status ---
+    const nextFollowStatus =
+      totalCharges === 0 ? "Medicine Preparation" : "Payment";
+
+    // --- MODIFIED LOGIC IS HERE ---
+    const patientAppointment = await Appointment.findById(appointmentID);
+    if (!patientAppointment) {
+      return res.status(404).json({ message: "Appointment not found" });
+    }
+    patientAppointment.prescriptionCreated = true;
+    patientAppointment.prescriptionID = savedPrescription._id;
+    patientAppointment.follow = nextFollowStatus; // <-- FIX 1: Use the variable
+    await patientAppointment.save();
+
+    // --- NEW LOGIC ADDED HERE ---
+    // Update the patient's follow and stage status
+    await Patient.findByIdAndUpdate(patientId, {
+      follow: nextFollowStatus, // <-- FIX 2: Use the variable
+      stage: nextFollowStatus,  // <-- FIX 2: Use the variable
+    });
+    // -----------------------------
 
     if (parentPrescriptionId) {
       await Prescription.findByIdAndUpdate(parentPrescriptionId, {
@@ -236,36 +247,41 @@ const createPrescription = async (req, res) => {
       });
     }
 
-    // --- EXISTING NOTIFICATION LOGIC ---
-    const totalCharges =
-      (medicineCharges || 0) +
-      (shippingCharges || 0) +
-      (additionalCharges || 0);
+    // --- FIX 3: Removed the redundant const totalCharges declaration ---
 
-    await Notification.create({
-      recipient: patientId,
-      message: `Your prescription is ready. The total amount to be paid is ₹${totalCharges}. Please complete the payment to proceed.`,
-      type: "PRESCRIPTION_PAYMENT_DUE",
-      link: `/pay/prescription/${savedPrescription._id}`,
-    });
+    // --- FIX 4: Wrap payment notifications in this condition ---
+    if (totalCharges > 0) {
+      // --- EXISTING NOTIFICATION LOGIC ---
+      await Notification.create({
+        recipient: patientId,
+        message: `Your prescription is ready. The total amount to be paid is ₹${totalCharges}. Please complete the payment to proceed.`,
+        type: "PRESCRIPTION_PAYMENT_DUE",
+        link: `/pay/prescription/${savedPrescription._id}`,
+      });
 
-    // --- PUSH NOTIFICATION FOR PAYMENT DUE ADDED HERE ---
-    try {
+      // --- PUSH NOTIFICATION FOR PAYMENT DUE ADDED HERE ---
+      try {
         const pushInfo = await pushnotificationModel.findOne({ patientId });
         if (pushInfo && pushInfo.token) {
-            await admin.messaging().send({
-                notification: {
-                    title: "Prescription Ready for Payment",
-                    body: `Your prescription is ready. The total amount to be paid is ₹${totalCharges}. Please complete the payment to proceed.`
-                },
-                token: pushInfo.token
-            });
-            console.log(`Push notification for 'Payment Due' sent to patient: ${patientId}`);
+          await admin.messaging().send({
+            notification: {
+              title: "Prescription Ready for Payment",
+              body: `Your prescription is ready. The total amount to be paid is ₹${totalCharges}. Please complete the payment to proceed.`,
+            },
+            token: pushInfo.token,
+          });
+          console.log(
+            `Push notification for 'Payment Due' sent to patient: ${patientId}`
+          );
         }
-    } catch (pushError) {
-        console.error(`Failed to send 'Payment Due' push notification:`, pushError);
-    }
-    
+      } catch (pushError) {
+        console.error(
+          `Failed to send 'Payment Due' push notification:`,
+          pushError
+        );
+      }
+    } // --- FIX 4: End of conditional block ---
+
     // --- CONDITIONAL NOTIFICATION LOGIC ---
     if (sendSpecialNote === true && specialNote) {
       await Notification.create({
@@ -279,17 +295,22 @@ const createPrescription = async (req, res) => {
       try {
         const pushInfo = await pushnotificationModel.findOne({ patientId });
         if (pushInfo && pushInfo.token) {
-            await admin.messaging().send({
-                notification: {
-                    title: "A Special Note from Your Doctor",
-                    body: specialNote
-                },
-                token: pushInfo.token
-            });
-            console.log(`Push notification for 'Special Note' sent to patient: ${patientId}`);
+          await admin.messaging().send({
+            notification: {
+              title: "A Special Note from Your Doctor",
+              body: specialNote,
+            },
+            token: pushInfo.token,
+          });
+          console.log(
+            `Push notification for 'Special Note' sent to patient: ${patientId}`
+          );
         }
       } catch (pushError) {
-        console.error(`Failed to send 'Special Note' push notification:`, pushError);
+        console.error(
+          `Failed to send 'Special Note' push notification:`,
+          pushError
+        );
       }
     }
 
@@ -299,7 +320,6 @@ const createPrescription = async (req, res) => {
       message: "Prescription created successfully",
       data: savedPrescription,
     });
-
   } catch (error) {
     console.error("Error creating prescription:", error);
     res.status(500).json({
@@ -307,6 +327,42 @@ const createPrescription = async (req, res) => {
       message: "Internal server error",
       error: error.message,
     });
+  }
+};
+// Make sure you have these imported at the top
+/**
+ * @desc    Get reschedule charges for a specific appointment
+ * @route   GET /api/appointments/:appointmentId/reschedule-charges
+ * @access  Private
+ */
+const getRescheduleCharges = async (req, res) => {
+  try {
+    const { appointmentId } = req.params;
+
+    // 1. Validate the Appointment ID
+    if (!mongoose.Types.ObjectId.isValid(appointmentId)) {
+      return res.status(400).json({ success: false, message: "Invalid Appointment ID format." });
+    }
+
+    // 2. Find the appointment and select ONLY the rescheduleCharges field
+    const appointment = await Appointment.findById(appointmentId).select('rescheduleCharges');
+
+    // 3. Handle if not found
+    if (!appointment) {
+      return res.status(404).json({ success: false, message: "Appointment not found." });
+    }
+
+    // 4. Return the data
+    // The field will be 0 by default if it was never set, which is correct.
+    res.status(200).json({
+      success: true,
+      appointmentId: appointment._id,
+      rescheduleCharges: appointment.rescheduleCharges,
+    });
+
+  } catch (error) {
+    console.error("Error fetching reschedule charges:", error);
+    res.status(500).json({ success: false, message: "Internal server error" });
   }
 };
 
@@ -708,4 +764,5 @@ module.exports = {
   getPrescriptionStats,
   postMedicine,
   updateCloseComment,
+  getRescheduleCharges
 };
