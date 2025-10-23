@@ -3998,18 +3998,7 @@ exports.getCompletedPaymentsCount = async (req, res) => {
     res.status(500).json({ success: false, message: "Internal server error" });
   }
 };
-// Make sure you import this model at the top of your file
-// const { AppointmentSlotTypes } = require('../models/yourSettingsModelFile');
-// const Appointment = require('../models/Appointment'); //
-// const mongoose = require('mongoose');
-
-// --- NEW HELPER FUNCTIONS ---
-
-/**
- * Converts "hh:mm A" (e.g., "01:00 PM") to total minutes from midnight.
- * "01:00 PM" -> 780
- * "10:00 AM" -> 600
- */
+// --- (Your helper functions parse12HourToMinutes & parse24HourToMinutes go here) ---
 function parse12HourToMinutes(timeString) {
   try {
     const [time, modifier] = timeString.split(' ');
@@ -4027,11 +4016,6 @@ function parse12HourToMinutes(timeString) {
   }
 }
 
-/**
- * Converts "HH:mm" (e.g., "19:40") to total minutes from midnight.
- * "19:40" -> 1180
- * "10:00" -> 600
- */
 function parse24HourToMinutes(timeString) {
   try {
     const [hours, minutes] = timeString.split(':').map(Number);
@@ -4041,58 +4025,13 @@ function parse24HourToMinutes(timeString) {
     return null;
   }
 }
-
-// Make sure you import this model at the top of your file
-// const { AppointmentSlotTypes } = require('../models/yourSettingsModelFile');
-// const Appointment = require('../models/Appointment'); //
-// const mongoose = require('mongoose');
-
-// --- NEW HELPER FUNCTIONS ---
-
-/**
- * Converts "hh:mm A" (e.g., "01:00 PM") to total minutes from midnight.
- * "01:00 PM" -> 780
- * "10:00 AM" -> 600
- */
-function parse12HourToMinutes(timeString) {
-  try {
-    const [time, modifier] = timeString.split(' ');
-    let [hours, minutes] = time.split(':').map(Number);
-    if (hours === 12) {
-      hours = 0; // 12 AM (0) or 12 PM (12)
-    }
-    if (modifier === 'PM') {
-      hours += 12;
-    }
-    return hours * 60 + minutes;
-  } catch (e) {
-    console.error("Failed to parse 12-hour time:", timeString);
-    return null;
-  }
-}
-
-/**
- * Converts "HH:mm" (e.g., "19:40") to total minutes from midnight.
- * "19:40" -> 1180
- * "10:00" -> 600
- */
-function parse24HourToMinutes(timeString) {
-  try {
-    const [hours, minutes] = timeString.split(':').map(Number);
-    return hours * 60 + minutes;
-  } catch (e) {
-    console.error("Failed to parse 24-hour time:", timeString);
-    return null;
-  }
-}
-
 // --- END HELPER FUNCTIONS ---
 
 
 exports.rescheduleAppointment = async (req, res) => {
   try {
     const { appointmentId } = req.params;
-    const { appointmentDate, timeSlot } = req.body; // 'timeSlot' is "HH:mm" (e.g., "19:40")
+    const { appointmentDate, timeSlot } = req.body; // 'timeSlot' is "HH:mm"
 
     // 1. Validate inputs
     if (!mongoose.Types.ObjectId.isValid(appointmentId)) {
@@ -4111,60 +4050,49 @@ exports.rescheduleAppointment = async (req, res) => {
       return res.status(400).json({ message: "Only confirmed appointments can be rescheduled." });
     }
 
-    // 3. --- LOGIC COMPLETELY REVISED ---
+    // 3. --- LOGIC REVISED (More Efficient) ---
 
-    // Get all available slot type configurations
+    // A. Get OLD slot details (Efficiently)
+    const oldSlotDetails = await AppointmentSlotTypes.findOne({ 
+      slotType: appointment.appointmentSlotType 
+    });
+
+    // B. Get NEW slot details (Still need to find the new slot by time range)
     const allSlotTypes = await AppointmentSlotTypes.find({});
-    if (!allSlotTypes || allSlotTypes.length === 0) {
-      return res.status(500).json({ message: "No appointment slot types are configured in settings." });
-    }
-
-    // Convert old and new appointment times to minutes
-    const oldTimeInMinutes = parse24HourToMinutes(appointment.timeSlot); // e.g., "10:00" -> 600
-    const newTimeInMinutes = parse24HourToMinutes(timeSlot);             // e.g., "19:40" -> 1180
+    const newTimeInMinutes = parse24HourToMinutes(timeSlot);
 
     if (newTimeInMinutes === null) {
       return res.status(400).json({ message: "Invalid timeSlot format in payload." });
     }
 
-    // Find which slot configurations match the old and new times
-    let oldSlotDetails = null;
     let newSlotDetails = null;
-
     for (const slot of allSlotTypes) {
       const startMinutes = parse12HourToMinutes(slot.startingTime);
       const endMinutes = parse12HourToMinutes(slot.endingTime);
 
-      // Check if the old time falls within this slot's range
-      if (oldTimeInMinutes >= startMinutes && oldTimeInMinutes < endMinutes) {
-        oldSlotDetails = slot;
-      }
-
-      // Check if the new time falls within this slot's range
       if (newTimeInMinutes >= startMinutes && newTimeInMinutes < endMinutes) {
         newSlotDetails = slot;
+        break; // Found it
       }
     }
 
-    // Validation for slot types
+    // C. Validation
     if (!oldSlotDetails) {
-      return res.status(404).json({ message: "Configuration error: Original appointment slot type details not found." });
+      return res.status(404).json({ message: "Configuration error: Original appointment slot type details not found. (DB data mismatch)" });
     }
     if (!newSlotDetails) {
       return res.status(404).json({ message: "Configuration error: New appointment time does not fit any available slot type." });
     }
+    // --- END REVISED LOGIC ---
 
-    // --- FIXED PRICE DIFFERENCE LOGIC (NO NEGATIVES) ---
+    // 4. Calculate the price difference (FIXED: Allows negatives)
     const oldPrice = oldSlotDetails.price || 0;
     const newPrice = newSlotDetails.price || 0;
-
-    let rescheduleCharge = 0;
-    if (newPrice > oldPrice) {
-      rescheduleCharge = newPrice - oldPrice;
-    }
-    rescheduleCharge = Math.max(0, Math.round(rescheduleCharge));
-    // --- END FIXED PRICE LOGIC ---
-
+    
+    // This is the original, correct logic that allows negative numbers
+    const rescheduleCharge = newPrice - oldPrice;
+    // --- END PRICE LOGIC ---
+    
     // 5. (CRITICAL) Check if the NEW slot is available
     const startOfDay = new Date(appointmentDate);
     startOfDay.setHours(0, 0, 0, 0);
@@ -4173,7 +4101,7 @@ exports.rescheduleAppointment = async (req, res) => {
 
     const conflictingAppointment = await Appointment.findOne({
       appointmentDate: { $gte: startOfDay, $lte: endOfDay },
-      timeSlot: timeSlot, // Checks for "19:40"
+      timeSlot: timeSlot, 
       _id: { $ne: appointmentId }
     });
 
@@ -4183,9 +4111,10 @@ exports.rescheduleAppointment = async (req, res) => {
 
     // 6. Update and save the appointment
     appointment.appointmentDate = new Date(appointmentDate);
-    appointment.timeSlot = timeSlot; // Saves "19:40"
+    appointment.timeSlot = timeSlot; 
+    appointment.appointmentSlotType = newSlotDetails.slotType; // <-- CRITICAL UPDATE
     appointment.reschedule = true;
-    appointment.rescheduleCharges = rescheduleCharge;
+    appointment.rescheduleCharges = rescheduleCharge; // <-- Will now save positive or negative
 
     const updatedAppointment = await appointment.save();
 
@@ -4200,7 +4129,6 @@ exports.rescheduleAppointment = async (req, res) => {
     res.status(500).json({ success: false, message: "Internal server error" });
   }
 };
-
 exports.getNotInterestedAppointmentCounts =async (req, res) => {
   try {
     const { classification } = req.body;
