@@ -641,5 +641,65 @@ exports.updateComment = async (req, res) => {
     res.status(500).json({ success: false, message: e.message });
   }
 };
+// Delete a comment or reply
+exports.deleteComment = async (req, res) => {
+  try {
+    const commentId = req.params.id;
+
+    // 1. Find the user
+    const phone = req.user.phone;
+    let user =
+      (await Doctor.findOne({ phone })) || (await Patient.findOne({ phone }));
+    if (!user) {
+      return res
+        .status(404)
+        .json({ success: false, message: "User not found" });
+    }
+
+    // 2. Find the comment to be deleted
+    const comment = await Comment.findById(commentId);
+    if (!comment) {
+      return res
+        .status(404)
+        .json({ success: false, message: "Comment not found" });
+    }
+
+    // 3. Check authorization
+    if (comment.user.toString() !== user._id.toString()) {
+      return res
+        .status(403)
+        .json({ success: false, message: "Unauthorized to delete this comment" });
+    }
+
+    // 4. Delete all nested replies first
+    if (comment.replies && comment.replies.length > 0) {
+      await Comment.deleteMany({ _id: { $in: comment.replies } });
+    }
+
+    // 5. Remove reference from parent
+    if (comment.parentComment) {
+      // It's a reply, remove from parent comment's 'replies' array
+      await Comment.findByIdAndUpdate(comment.parentComment, {
+        $pull: { replies: commentId },
+      });
+    } else {
+      // It's a top-level comment, remove from post's 'comments' array
+      await Post.findOneAndUpdate(
+        { comments: commentId },
+        { $pull: { comments: commentId } }
+      );
+    }
+
+    // 6. Delete the comment itself
+    await Comment.findByIdAndDelete(commentId);
+
+    res
+      .status(200)
+      .json({ success: true, message: "Comment deleted successfully" });
+  } catch (error) {
+    console.error("Error deleting comment:", error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+};
 
 //Handle multiple images upload with size/limit restriction - If video, only one video should be uploaded for a post

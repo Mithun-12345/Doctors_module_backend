@@ -10,6 +10,7 @@ const {
   replyToComment,
   likeComment,
   updateComment,
+  deleteComment
 } = require("../controllers/postController");
 const { upload, handleMulterError } = require('../middlewares/uploadMiddleware');
 const validateToken = require("../middlewares/validateTokenHandler");
@@ -39,5 +40,7 @@ router.delete("/:id", validateToken, deletePost);
 router.get("/homePosts", validateToken, getPaginatedPosts);
 router.post("/:id/likeComment", validateToken, likeComment);
 router.put("/:id/updateComment", validateToken, updateComment);
+router.delete("/:id/deleteComment", validateToken, deleteComment);
+
 
 module.exports = router;
