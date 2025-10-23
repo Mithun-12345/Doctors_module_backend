@@ -971,16 +971,13 @@ exports.patientAppointmentDates = asyncHandler(async (req,res) =>{
 
 });
 
-// --- 2. ADD THESE HELPER FUNCTIONS ---
-/**
- * Converts "hh:mm A" (e.g., "01:00 PM") to total minutes from midnight.
- */
+// --- (Helper functions: parse12HourToMinutes and parse24HourToMinutes) ---
 function parse12HourToMinutes(timeString) {
   try {
     const [time, modifier] = timeString.split(' ');
     let [hours, minutes] = time.split(':').map(Number);
     if (hours === 12) {
-      hours = 0; // 12 AM (0) or 12 PM (12)
+      hours = 0; 
     }
     if (modifier === 'PM') {
       hours += 12;
@@ -992,9 +989,6 @@ function parse12HourToMinutes(timeString) {
   }
 }
 
-/**
- * Converts "HH:mm" (e.g., "19:40") to total minutes from midnight.
- */
 function parse24HourToMinutes(timeString) {
   try {
     const [hours, minutes] = timeString.split(':').map(Number);
@@ -1024,9 +1018,7 @@ exports.bookAppointment = asyncHandler(async (req, res) => {
     if (!user) {
       return res.status(400).json({ success: false, message: "Patient not found" });
     }
-        // --- NEW LOGIC ADDED HERE ---
-    // Check if the patient has completed their first cycle.
-    // If so, update their status to "Existing" for this and future appointments.
+    
     if (user.firstCycleCompleted === true) {
       user.newExisting = "Existing";
       await user.save();
@@ -1048,6 +1040,7 @@ exports.bookAppointment = asyncHandler(async (req, res) => {
       "14:00", "15:00", "16:00", "17:00",
     ];
 
+    // ... (All your existing date validation and chronic patient logic) ...
     const currentDate = new Date();
     const appointmentDateObj = new Date(appointmentDate);
     const oneMonthLater = new Date();
@@ -1090,32 +1083,31 @@ exports.bookAppointment = asyncHandler(async (req, res) => {
         return res.status(400).json({ success: false, message: "Time slot is not available" });
       }
     }
+    // ... (End of validation logic) ...
     
+
     // =================================================================
-    // --- 3. NEW LOGIC TO FIND PRICE ---
+    // --- (LOGIC TO FIND PRICE - UNTOUCHED) ---
     // =================================================================
     const allSlotTypes = await AppointmentSlotTypes.find({});
     if (!allSlotTypes || allSlotTypes.length === 0) {
         return res.status(500).json({ message: "No appointment slot types are configured in settings." });
     }
 
-    // Convert new appointment time to minutes (timeSlot is from req.body)
     const newTimeInMinutes = parse24HourToMinutes(timeSlot); 
 
     if (newTimeInMinutes === null) {
       return res.status(400).json({ message: "Invalid timeSlot format in payload."});
     }
 
-    // Find which slot configuration matches the new time
     let newSlotDetails = null;
     for (const slot of allSlotTypes) {
       const startMinutes = parse12HourToMinutes(slot.startingTime);
       const endMinutes = parse12HourToMinutes(slot.endingTime);
 
-      // Check if the new time falls within this slot's range
       if (newTimeInMinutes >= startMinutes && newTimeInMinutes < endMinutes) {
         newSlotDetails = slot;
-        break; // Found it
+        break; 
       }
     }
 
@@ -1123,10 +1115,9 @@ exports.bookAppointment = asyncHandler(async (req, res) => {
         return res.status(404).json({ message: "Configuration error: The selected appointment time does not fit any available slot type." });
     }
     
-    // This is the price we will use
     const appointmentPrice = newSlotDetails.price || 0;
     // =================================================================
-    // --- END NEW LOGIC ---
+    // --- END PRICE LOGIC ---
     // =================================================================
 
 
@@ -1137,17 +1128,18 @@ exports.bookAppointment = asyncHandler(async (req, res) => {
       patientEmail: user.email,
       patientName: user.name,
       consultingFor: consultingFor,
-      classification: consultingReason, // consultingReason maps to classification
-      diseaseName: symptom,          // symptom maps to diseaseName
+      classification: consultingReason, 
+      diseaseName: symptom,          
       doctor: doctor._id,
       doctorName: doctor.name,
       follow:"Consultation",
       appointmentDate,
       timeSlot,
+      appointmentSlotType: newSlotDetails.slotType, // <-- THIS IS THE NEW LINE
       isChronic,
       status: "reserved",
       isPaid: false,
-      payment: appointmentPrice, // <-- 3. THE FIX (was 500)
+      payment: appointmentPrice, 
       reservedAt: new Date(),
       expiresAt: new Date(Date.now() + 7 * 60 * 1000),
     });
@@ -1173,10 +1165,7 @@ exports.bookAppointment = asyncHandler(async (req, res) => {
     // --- (EXISTING PUSH NOTIFICATION LOGIC - UNTOUCHED) ---
     // =================================================================
     try {
-      // 1. Find the patient's FCM token
       const pushInfo = await pushnotificationModel.findOne({ patientId: user._id });
-
-      // 2. If the patient has a token, send them a push notification
       if (pushInfo && pushInfo.token) {
         const message = {
           notification: {
@@ -1185,7 +1174,6 @@ exports.bookAppointment = asyncHandler(async (req, res) => {
           },
           token: pushInfo.token,
         };
-
         await admin.messaging().send(message);
         console.log(`Push notification sent successfully to patient: ${user._id}`);
       }
