@@ -971,6 +971,41 @@ exports.patientAppointmentDates = asyncHandler(async (req,res) =>{
 
 });
 
+// --- 2. ADD THESE HELPER FUNCTIONS ---
+/**
+ * Converts "hh:mm A" (e.g., "01:00 PM") to total minutes from midnight.
+ */
+function parse12HourToMinutes(timeString) {
+  try {
+    const [time, modifier] = timeString.split(' ');
+    let [hours, minutes] = time.split(':').map(Number);
+    if (hours === 12) {
+      hours = 0; // 12 AM (0) or 12 PM (12)
+    }
+    if (modifier === 'PM') {
+      hours += 12;
+    }
+    return hours * 60 + minutes;
+  } catch (e) {
+    console.error("Failed to parse 12-hour time:", timeString);
+    return null;
+  }
+}
+
+/**
+ * Converts "HH:mm" (e.g., "19:40") to total minutes from midnight.
+ */
+function parse24HourToMinutes(timeString) {
+  try {
+    const [hours, minutes] = timeString.split(':').map(Number);
+    return hours * 60 + minutes;
+  } catch (e) {
+    console.error("Failed to parse 24-hour time:", timeString);
+    return null;
+  }
+}
+// --- END HELPER FUNCTIONS ---
+
 
 exports.bookAppointment = asyncHandler(async (req, res) => {
   const phone = req.user.phone;
@@ -1055,6 +1090,45 @@ exports.bookAppointment = asyncHandler(async (req, res) => {
         return res.status(400).json({ success: false, message: "Time slot is not available" });
       }
     }
+    
+    // =================================================================
+    // --- 3. NEW LOGIC TO FIND PRICE ---
+    // =================================================================
+    const allSlotTypes = await AppointmentSlotTypes.find({});
+    if (!allSlotTypes || allSlotTypes.length === 0) {
+        return res.status(500).json({ message: "No appointment slot types are configured in settings." });
+    }
+
+    // Convert new appointment time to minutes (timeSlot is from req.body)
+    const newTimeInMinutes = parse24HourToMinutes(timeSlot); 
+
+    if (newTimeInMinutes === null) {
+      return res.status(400).json({ message: "Invalid timeSlot format in payload."});
+    }
+
+    // Find which slot configuration matches the new time
+    let newSlotDetails = null;
+    for (const slot of allSlotTypes) {
+      const startMinutes = parse12HourToMinutes(slot.startingTime);
+      const endMinutes = parse12HourToMinutes(slot.endingTime);
+
+      // Check if the new time falls within this slot's range
+      if (newTimeInMinutes >= startMinutes && newTimeInMinutes < endMinutes) {
+        newSlotDetails = slot;
+        break; // Found it
+      }
+    }
+
+    if (!newSlotDetails) {
+        return res.status(404).json({ message: "Configuration error: The selected appointment time does not fit any available slot type." });
+    }
+    
+    // This is the price we will use
+    const appointmentPrice = newSlotDetails.price || 0;
+    // =================================================================
+    // --- END NEW LOGIC ---
+    // =================================================================
+
 
     // ... (rest of your referral logic) ...
     
@@ -1064,7 +1138,7 @@ exports.bookAppointment = asyncHandler(async (req, res) => {
       patientName: user.name,
       consultingFor: consultingFor,
       classification: consultingReason, // consultingReason maps to classification
-      diseaseName: symptom,           // symptom maps to diseaseName
+      diseaseName: symptom,          // symptom maps to diseaseName
       doctor: doctor._id,
       doctorName: doctor.name,
       follow:"Consultation",
@@ -1073,7 +1147,7 @@ exports.bookAppointment = asyncHandler(async (req, res) => {
       isChronic,
       status: "reserved",
       isPaid: false,
-      payment: 500,
+      payment: appointmentPrice, // <-- 3. THE FIX (was 500)
       reservedAt: new Date(),
       expiresAt: new Date(Date.now() + 7 * 60 * 1000),
     });
@@ -1096,10 +1170,10 @@ exports.bookAppointment = asyncHandler(async (req, res) => {
     });
 
     // =================================================================
-    // --- NEW PUSH NOTIFICATION LOGIC ADDED HERE ---
+    // --- (EXISTING PUSH NOTIFICATION LOGIC - UNTOUCHED) ---
     // =================================================================
     try {
-      // 1. Find the patient's FCM token from your push notification collection
+      // 1. Find the patient's FCM token
       const pushInfo = await pushnotificationModel.findOne({ patientId: user._id });
 
       // 2. If the patient has a token, send them a push notification
@@ -1113,15 +1187,13 @@ exports.bookAppointment = asyncHandler(async (req, res) => {
         };
 
         await admin.messaging().send(message);
-        // This is the message acknowledgement you requested (it will appear in your server console)
         console.log(`Push notification sent successfully to patient: ${user._id}`);
       }
     } catch (pushError) {
-      // We log the error but do not stop the main function, so the user still gets a success response.
       console.error(`Failed to send push notification to patient ${user._id}:`, pushError);
     }
     // =================================================================
-    // --- END OF NEW PUSH NOTIFICATION LOGIC ---
+    // --- END OF PUSH NOTIFICATION LOGIC ---
     // =================================================================
 
     // This final response remains UNCHANGED.
@@ -3982,6 +4054,50 @@ function parse24HourToMinutes(timeString) {
   }
 }
 
+// Make sure you import this model at the top of your file
+// const { AppointmentSlotTypes } = require('../models/yourSettingsModelFile');
+// const Appointment = require('../models/Appointment'); //
+// const mongoose = require('mongoose');
+
+// --- NEW HELPER FUNCTIONS ---
+
+/**
+ * Converts "hh:mm A" (e.g., "01:00 PM") to total minutes from midnight.
+ * "01:00 PM" -> 780
+ * "10:00 AM" -> 600
+ */
+function parse12HourToMinutes(timeString) {
+  try {
+    const [time, modifier] = timeString.split(' ');
+    let [hours, minutes] = time.split(':').map(Number);
+    if (hours === 12) {
+      hours = 0; // 12 AM (0) or 12 PM (12)
+    }
+    if (modifier === 'PM') {
+      hours += 12;
+    }
+    return hours * 60 + minutes;
+  } catch (e) {
+    console.error("Failed to parse 12-hour time:", timeString);
+    return null;
+  }
+}
+
+/**
+ * Converts "HH:mm" (e.g., "19:40") to total minutes from midnight.
+ * "19:40" -> 1180
+ * "10:00" -> 600
+ */
+function parse24HourToMinutes(timeString) {
+  try {
+    const [hours, minutes] = timeString.split(':').map(Number);
+    return hours * 60 + minutes;
+  } catch (e) {
+    console.error("Failed to parse 24-hour time:", timeString);
+    return null;
+  }
+}
+
 // --- END HELPER FUNCTIONS ---
 
 
@@ -4004,7 +4120,7 @@ exports.rescheduleAppointment = async (req, res) => {
       return res.status(404).json({ message: "Appointment not found." });
     }
     if (appointment.status !== 'confirmed') {
-        return res.status(400).json({ message: "Only confirmed appointments can be rescheduled." });
+      return res.status(400).json({ message: "Only confirmed appointments can be rescheduled." });
     }
 
     // 3. --- LOGIC COMPLETELY REVISED ---
@@ -4012,7 +4128,7 @@ exports.rescheduleAppointment = async (req, res) => {
     // Get all available slot type configurations
     const allSlotTypes = await AppointmentSlotTypes.find({});
     if (!allSlotTypes || allSlotTypes.length === 0) {
-        return res.status(500).json({ message: "No appointment slot types are configured in settings." });
+      return res.status(500).json({ message: "No appointment slot types are configured in settings." });
     }
 
     // Convert old and new appointment times to minutes
@@ -4020,7 +4136,7 @@ exports.rescheduleAppointment = async (req, res) => {
     const newTimeInMinutes = parse24HourToMinutes(timeSlot);             // e.g., "19:40" -> 1180
 
     if (newTimeInMinutes === null) {
-      return res.status(400).json({ message: "Invalid timeSlot format in payload."});
+      return res.status(400).json({ message: "Invalid timeSlot format in payload." });
     }
 
     // Find which slot configurations match the old and new times
@@ -4035,7 +4151,7 @@ exports.rescheduleAppointment = async (req, res) => {
       if (oldTimeInMinutes >= startMinutes && oldTimeInMinutes < endMinutes) {
         oldSlotDetails = slot;
       }
-      
+
       // Check if the new time falls within this slot's range
       if (newTimeInMinutes >= startMinutes && newTimeInMinutes < endMinutes) {
         newSlotDetails = slot;
@@ -4044,22 +4160,23 @@ exports.rescheduleAppointment = async (req, res) => {
 
     // Validation for slot types
     if (!oldSlotDetails) {
-        // This was your original error
-        return res.status(404).json({ message: "Configuration error: Original appointment slot type details not found." });
+      return res.status(404).json({ message: "Configuration error: Original appointment slot type details not found." });
     }
     if (!newSlotDetails) {
-        // This was your new error. It should be fixed now.
-        // It means the time "19:40" did not fall into any defined range.
-        return res.status(404).json({ message: "Configuration error: New appointment time does not fit any available slot type." });
+      return res.status(404).json({ message: "Configuration error: New appointment time does not fit any available slot type." });
     }
 
-    // --- END REVISED LOGIC ---
-
-    // 4. Calculate the price difference
+    // --- FIXED PRICE DIFFERENCE LOGIC (NO NEGATIVES) ---
     const oldPrice = oldSlotDetails.price || 0;
     const newPrice = newSlotDetails.price || 0;
-    const rescheduleCharge = newPrice - oldPrice;
-    
+
+    let rescheduleCharge = 0;
+    if (newPrice > oldPrice) {
+      rescheduleCharge = newPrice - oldPrice;
+    }
+    rescheduleCharge = Math.max(0, Math.round(rescheduleCharge));
+    // --- END FIXED PRICE LOGIC ---
+
     // 5. (CRITICAL) Check if the NEW slot is available
     const startOfDay = new Date(appointmentDate);
     startOfDay.setHours(0, 0, 0, 0);
@@ -4069,7 +4186,7 @@ exports.rescheduleAppointment = async (req, res) => {
     const conflictingAppointment = await Appointment.findOne({
       appointmentDate: { $gte: startOfDay, $lte: endOfDay },
       timeSlot: timeSlot, // Checks for "19:40"
-      _id: { $ne: appointmentId } 
+      _id: { $ne: appointmentId }
     });
 
     if (conflictingAppointment) {
@@ -4080,8 +4197,8 @@ exports.rescheduleAppointment = async (req, res) => {
     appointment.appointmentDate = new Date(appointmentDate);
     appointment.timeSlot = timeSlot; // Saves "19:40"
     appointment.reschedule = true;
-    appointment.rescheduleCharges = rescheduleCharge; 
-    
+    appointment.rescheduleCharges = rescheduleCharge;
+
     const updatedAppointment = await appointment.save();
 
     res.status(200).json({
@@ -4095,6 +4212,7 @@ exports.rescheduleAppointment = async (req, res) => {
     res.status(500).json({ success: false, message: "Internal server error" });
   }
 };
+
 exports.getNotInterestedAppointmentCounts =async (req, res) => {
   try {
     const { classification } = req.body;
