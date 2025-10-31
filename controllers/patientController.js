@@ -3354,53 +3354,62 @@ function getFrequency(arr) {
 }
 
 /**
- * Helper function to convert 12-hour AM/PM time to 24-hour format.
- * @param {string} timeStr - Time in "hh:mm AM/PM" or "HH:mm" format.
- * @returns {string} - Time in "HH:mm" format.
- */
+ * Helper function to convert 12-hour AM/PM time to 24-hour format.
+ * @param {string} timeStr - Time in "hh:mm AM/PM" or "HH:mm" format.
+ * @returns {string} - Time in "HH:mm" format.
+ */
 function convertTo24Hour(timeStr) {
-  const time = timeStr.toUpperCase();
-  const [hoursMinutes, modifier] = time.split(' ');
-  let [hours, minutes] = hoursMinutes.split(':');
+  const time = timeStr.toUpperCase();
+  const [hoursMinutes, modifier] = time.split(' ');
+  let [hours, minutes] = hoursMinutes.split(':');
 
-  if (modifier === 'PM' && hours !== '12') {
-    hours = parseInt(hours, 10) + 12;
-  }
-  if (modifier === 'AM' && hours === '12') {
-    hours = '00';
-  }
+  // Handle case where no AM/PM is provided (already 24-hour)
+  if (!modifier) {
+    return `${String(hours).padStart(2, '0')}:${minutes}`;
+  }
 
-  // Pad hours with a leading zero if needed
-  return `${String(hours).padStart(2, '0')}:${minutes}`;
+  if (modifier === 'PM' && hours !== '12') {
+    hours = parseInt(hours, 10) + 12;
+  }
+  if (modifier === 'AM' && hours === '12') {
+    hours = '00';
+  }
+
+  // Pad hours with a leading zero if needed
+  return `${String(hours).padStart(2, '0')}:${minutes}`;
 }
 
 
 /**
- * NEW AND IMPROVED HELPER FUNCTION
- * Generates time slots and handles both 24-hour and 12-hour AM/PM formats.
- * @param {string} start - Start time (e.g., "09:00 AM" or "09:00").
- * @param {string} end - End time (e.g., "05:00 PM" or "17:00").
- * @param {number} duration - Duration of each slot in minutes.
- * @returns {Array<string>} - An array of time slots.
- */
+ * Generates time slots and handles both 24-hour and 12-hour AM/PM formats.
+ * @param {string} start - Start time (e.g., "09:00 AM" or "09:00").
+ * @param {string} end - End time (e.g., "05:00 PM" or "17:00").
+ * @param {number} duration - Duration of each slot in minutes.
+ * @returns {Array<string>} - An array of time slots.
+ */
 function getTimeSlots24(start, end, duration) {
-    // Convert times to 24-hour format first
-    const startTime24 = convertTo24Hour(start);
-    const endTime24 = convertTo24Hour(end);
+    // Convert times to 24-hour format first
+    const startTime24 = convertTo24Hour(start);
+    const endTime24 = convertTo24Hour(end);
 
-    const slots = [];
-    let currentTime = new Date(`1970-01-01T${startTime24}:00`);
-    const endTime = new Date(`1970-01-01T${endTime24}:00`);
+    const slots = [];
+    let currentTime = new Date(`1970-01-01T${startTime24}:00`);
+    const endTime = new Date(`1970-01-01T${endTime24}:00`);
 
-    if (endTime <= currentTime) {
-        endTime.setDate(endTime.getDate() + 1);
-    }
+    // --- THIS IS THE FIX ---
+    // Only add a day if the end time is strictly *earlier* than the start time
+    // (e.g., a real overnight shift like 22:00 to 06:00)
+    if (endTime < currentTime) {
+        endTime.setDate(endTime.getDate() + 1);
+    }
 
-    while (currentTime < endTime) {
-        slots.push(currentTime.toTimeString().substring(0, 5));
-        currentTime.setMinutes(currentTime.getMinutes() + duration);
-    }
-    return slots;
+    // Loop will generate slots *up to* but *not including* the end time
+    while (currentTime < endTime) {
+        slots.push(currentTime.toTimeString().substring(0, 5));
+        currentTime.setMinutes(currentTime.getMinutes() + duration);
+    }
+    
+    return slots;
 }
 
 /**
