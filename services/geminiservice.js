@@ -5,8 +5,7 @@ require("dotenv").config();
 
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 // NEW - Correct model name
-const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${GEMINI_API_KEY}`;
-/**
+const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`;/**
  * Takes a piece of text and uses the Gemini API to make it more sharp and formal.
  * @param {string} originalText The text to be improved.
  * @returns {Promise<string>} The polished, formal text.
