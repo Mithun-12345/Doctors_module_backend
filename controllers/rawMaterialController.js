@@ -7,13 +7,17 @@ const streamifier = require('streamifier');
 const AmendmentHistory = require('../models/AmendmentHistory');
 
 // Utility: Generate QR code buffer
-const generateQrCodeBuffer = async (text) => {
+const generateQrCodeBuffer = async (text, scale) => {
+  // Default to scale 3 if no valid scale is provided
+  const a = scale;
+  const qrScale = Number(scale) > 0 ? Number(scale) : 3;
+
   return new Promise((resolve, reject) => {
     bwipjs.toBuffer(
       {
-        bcid: 'qrcode', // Changed from 'code128' to 'qrcode'
+        bcid: 'qrcode',
         text: text,
-        scale: 3,
+        scale: qrScale, // Use the scale from the payload
       },
       (err, png) => {
         if (err) reject(err);
@@ -96,13 +100,14 @@ exports.createRawMaterial = async (req, res) => {
       quantity,
       currentQuantity,
       thresholdQuantity,
-      expiryDate, // Can be undefined or empty
+      expiryDate,
       costPerUnit,
-      totalWeight, // Can be undefined or empty
+      totalWeight,
       isAlcohol,
       vendorName,
       vendorPhone,
-      vendorLocation
+      vendorLocation,
+      scale // <-- ADD THIS
     } = req.body;
 
     let productImageUrl = '';
@@ -113,7 +118,10 @@ exports.createRawMaterial = async (req, res) => {
     }
 
     const uniqueIdForQr = await generateUniqueId();
-    const qrCodeBuffer = await generateQrCodeBuffer(uniqueIdForQr);
+    
+    // Pass the new scale to the generator
+    const qrCodeBuffer = await generateQrCodeBuffer(uniqueIdForQr, scale);
+    
     const qrCodeImageUrl = await uploadToCloudinary(qrCodeBuffer);
 
     let bottleWeight = 0;
@@ -132,9 +140,9 @@ exports.createRawMaterial = async (req, res) => {
       currentQuantity: Number(currentQuantity),
       thresholdQuantity: Number(thresholdQuantity),
       costPerUnit: Number(costPerUnit) / Number(quantity),
-      barcode: uniqueIdForQr, // Storing the unique ID in the 'barcode' field
+      barcode: uniqueIdForQr,
       isAlcohol,
-      barcodeImageUrl: qrCodeImageUrl, // Storing the QR code image URL
+      barcodeImageUrl: qrCodeImageUrl,
       bottleWeight,
       vendorName,
       vendorPhone,
