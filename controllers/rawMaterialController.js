@@ -7,23 +7,33 @@ const streamifier = require('streamifier');
 const AmendmentHistory = require('../models/AmendmentHistory');
 
 // Utility: Generate QR code buffer
-const generateQrCodeBuffer = async (text, scale) => {
-  // Default to scale 3 if no valid scale is provided
-  const a = scale;
-  const qrScale = Number(scale) > 0 ? Number(scale) : 3;
+// Utility: Generate QR code buffer
+const generateQrCodeBuffer = async (text, widthCm, heightCm) => {
+  // 1 inch = 72 points
+  // 1 inch = 2.54 cm
+  // 1 cm = 72 / 2.54 points (approx 28.346)
+  const cmToPoints = 72 / 2.54;
+
+  const options = {
+    bcid: 'qrcode',
+    text: text,
+  };
+
+  if (widthCm && heightCm) {
+    // Use physical dimensions in points.
+    // bwipjs will fit the square QR code within these dimensions.
+    options.width = widthCm * cmToPoints;
+    options.height = heightCm * cmToPoints;
+  } else {
+    // Fallback to original behavior if no dimensions are provided
+    options.scale = 3;
+  }
 
   return new Promise((resolve, reject) => {
-    bwipjs.toBuffer(
-      {
-        bcid: 'qrcode',
-        text: text,
-        scale: qrScale, // Use the scale from the payload
-      },
-      (err, png) => {
-        if (err) reject(err);
-        else resolve(png);
-      }
-    );
+    bwipjs.toBuffer(options, (err, png) => {
+      if (err) reject(err);
+      else resolve(png);
+    });
   });
 };
 
@@ -89,6 +99,7 @@ const fs = require('fs');
 const path = require('path');
 
 // Create a new raw material
+// Create a new raw material
 exports.createRawMaterial = async (req, res) => {
   try {
     const {
@@ -107,7 +118,8 @@ exports.createRawMaterial = async (req, res) => {
       vendorName,
       vendorPhone,
       vendorLocation,
-      scale // <-- ADD THIS
+      widthCm,  // <-- ADD THIS
+      heightCm  // <-- ADD THIS
     } = req.body;
 
     let productImageUrl = '';
@@ -119,8 +131,9 @@ exports.createRawMaterial = async (req, res) => {
 
     const uniqueIdForQr = await generateUniqueId();
     
-    // Pass the new scale to the generator
-    const qrCodeBuffer = await generateQrCodeBuffer(uniqueIdForQr, scale);
+    // Pass the new dimensions to the generator
+    // If widthCm/heightCm are undefined, the function will use the scale: 3 fallback
+    const qrCodeBuffer = await generateQrCodeBuffer(uniqueIdForQr, widthCm, heightCm);
     
     const qrCodeImageUrl = await uploadToCloudinary(qrCodeBuffer);
 
