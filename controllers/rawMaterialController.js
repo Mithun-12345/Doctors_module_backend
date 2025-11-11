@@ -8,7 +8,15 @@ const AmendmentHistory = require('../models/AmendmentHistory');
 
 // Utility: Generate QR code buffer
 // Utility: Generate QR code buffer
-const generateQrCodeBuffer = async (text, widthCm, heightCm) => {
+const generateQrCodeBuffer = async (text, qrSize) => {
+  // Define the mapping from size string to cm dimensions
+  const sizeMap = {
+    "Very Small": { width: 0.5, height: 0.5 },
+    "Small":      { width: 1.0, height: 1.0 },
+    "Medium":     { width: 1.5, height: 1.5 },
+    "Large":      { width: 2.0, height: 2.0 }
+  };
+
   // 1 inch = 72 points
   // 1 inch = 2.54 cm
   // 1 cm = 72 / 2.54 points (approx 28.346)
@@ -19,13 +27,14 @@ const generateQrCodeBuffer = async (text, widthCm, heightCm) => {
     text: text,
   };
 
-  if (widthCm && heightCm) {
-    // Use physical dimensions in points.
-    // bwipjs will fit the square QR code within these dimensions.
-    options.width = widthCm * cmToPoints;
-    options.height = heightCm * cmToPoints;
+  // Check if the provided qrSize is in our map
+  if (qrSize && sizeMap[qrSize]) {
+    const dims = sizeMap[qrSize];
+    // Use physical dimensions in points
+    options.width = dims.width * cmToPoints;
+    options.height = dims.height * cmToPoints;
   } else {
-    // Fallback to original behavior if no dimensions are provided
+    // Fallback to original behavior if no valid size is provided
     options.scale = 3;
   }
 
@@ -118,8 +127,7 @@ exports.createRawMaterial = async (req, res) => {
       vendorName,
       vendorPhone,
       vendorLocation,
-      widthCm,  // <-- ADD THIS
-      heightCm  // <-- ADD THIS
+      qrSize  // <-- CHANGED: Replaced width/height with this
     } = req.body;
 
     let productImageUrl = '';
@@ -131,9 +139,9 @@ exports.createRawMaterial = async (req, res) => {
 
     const uniqueIdForQr = await generateUniqueId();
     
-    // Pass the new dimensions to the generator
-    // If widthCm/heightCm are undefined, the function will use the scale: 3 fallback
-    const qrCodeBuffer = await generateQrCodeBuffer(uniqueIdForQr, widthCm, heightCm);
+    // Pass the new size string to the generator
+    // The generator will handle the mapping or fallback
+    const qrCodeBuffer = await generateQrCodeBuffer(uniqueIdForQr, qrSize);
     
     const qrCodeImageUrl = await uploadToCloudinary(qrCodeBuffer);
 
