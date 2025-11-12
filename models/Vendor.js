@@ -62,8 +62,7 @@ const VendorSchema = new Schema({
     type: String,
     required: [true, 'Zip code is required'],
     trim: true,
-    match: [/^\d{5}(-\d{4})?$/, 'Please enter a valid zip code']
-  },
+    },
   country: {
     type: String,
     required: [true, 'Country is required'],
