@@ -171,9 +171,9 @@ exports.createRawMaterial = async (req, res) => {
       productImage: productImageUrl
     };
 
-    // Only add totalWeight if it was provided
-    if (totalWeight) {
-      rawMaterialData.totalWeight = Number(totalWeight);
+// Only add totalWeight if it was provided AND it was a valid number
+    if (totalWeightIsValid) {
+      rawMaterialData.totalWeight = parsedTotalWeight; // Use the safe parsed value
     }
 
     // Only add expiryDate if it was provided
