@@ -108,7 +108,6 @@ const fs = require('fs');
 const path = require('path');
 
 // Create a new raw material
-// Create a new raw material
 exports.createRawMaterial = async (req, res) => {
   try {
     const {
@@ -122,34 +121,44 @@ exports.createRawMaterial = async (req, res) => {
       thresholdQuantity,
       expiryDate,
       costPerUnit,
-      totalWeight,
+      totalWeight, // <-- This is the raw string ("NaN" in your image)
       isAlcohol,
       vendorName,
       vendorPhone,
       vendorLocation,
-      qrSize  // <-- CHANGED: Replaced width/height with this
+      qrSize
     } = req.body;
+
+    // --- 👇 YOU ARE MISSING THIS BLOCK ---
+    // 1. Parse the totalWeight string into a number
+    //    parseFloat("NaN") will result in NaN
+    const parsedTotalWeight = parseFloat(totalWeight);
+    
+    // 2. Check if the result is a valid, finite number
+    //    isFinite(NaN) will be false, which is correct!
+    const totalWeightIsValid = isFinite(parsedTotalWeight);
+    // --- 👆 END OF MISSING BLOCK ---
+
 
     let productImageUrl = '';
     if (req.file && req.file.path) {
-      // Assuming you have Cloudinary configured for product images as well
+      // ... (cloudinary upload)
       const result = await cloudinary.uploader.upload(req.file.path, { folder: 'products' });
       productImageUrl = result.secure_url;
     }
 
     const uniqueIdForQr = await generateUniqueId();
-    
-    // Pass the new size string to the generator
-    // The generator will handle the mapping or fallback
     const qrCodeBuffer = await generateQrCodeBuffer(uniqueIdForQr, qrSize);
-    
     const qrCodeImageUrl = await uploadToCloudinary(qrCodeBuffer);
 
     let bottleWeight = 0;
-    // This check already correctly handles an empty totalWeight
-    if (type !== "Packaging" && totalWeight && quantity) {
-      bottleWeight = Number(totalWeight) - Number(quantity);
+    // --- 👇 UPDATE THIS LINE ---
+    // Use the *validated* boolean and *parsed* number
+    if (type !== "Packaging" && totalWeightIsValid && quantity) {
+      bottleWeight = parsedTotalWeight - Number(quantity); 
     }
+    // --- 👆 END OF UPDATE ---
+
 
     const rawMaterialData = {
       name,
@@ -164,19 +173,20 @@ exports.createRawMaterial = async (req, res) => {
       barcode: uniqueIdForQr,
       isAlcohol,
       barcodeImageUrl: qrCodeImageUrl,
-      bottleWeight,
+      bottleWeight, // This is now safe
       vendorName,
       vendorPhone,
       vendorLocation,
       productImage: productImageUrl
     };
 
-// Only add totalWeight if it was provided AND it was a valid number
+    // --- This part is correct ---
+    // It will now work because totalWeightIsValid is defined
     if (totalWeightIsValid) {
       rawMaterialData.totalWeight = parsedTotalWeight; // Use the safe parsed value
     }
+    // --- End of correct part ---
 
-    // Only add expiryDate if it was provided
     if (expiryDate) {
       rawMaterialData.expiryDate = new Date(expiryDate);
     }
