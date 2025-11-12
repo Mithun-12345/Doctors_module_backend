@@ -44,6 +44,8 @@ exports.createVendor = catchAsync(async (req, res, next) => {
     products: products.map((product) => ({
       rawMaterialName: sanitizeInput(product.rawMaterialName),
       rawMaterialPrice: parseFloat(product.rawMaterialPrice),
+      quantity: product.quantity ? parseFloat(product.quantity) : undefined,
+      uom: product.uom ? sanitizeInput(product.uom) : undefined,
     })),
   };
 
