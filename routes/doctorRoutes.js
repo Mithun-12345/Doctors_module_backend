@@ -44,7 +44,9 @@ const {
   markDoctorAttendance,
   getDoctorAttendanceReport,
   getFollowUpCallList,
-   updateFollowUpCallStatus
+  updateFollowUpCallStatus,
+  updateFollowUpCall,
+  addFollowUpCall
 } = require("../controllers/doctorController");
 const {
   upload,
@@ -68,9 +70,9 @@ router.get("/show-every-payment", getAllDoctorPaymentsTotal);
 router.get('/follow-up-calls', getFollowUpCallList);
 router.patch('/update-follow-up-call-status/:patientId', updateFollowUpCallStatus);
 router.post("/todays-appointments",validateToken,getTodaysAppointments);
-// ... other patient routes like GET, POST, etc.
-
-// 2. Define the route to allow phone calls
+router.patch('/update-follow-up-call-status/:patientId', updateFollowUpCallStatus);
+router.patch('/update-follow-up-call', updateFollowUpCall);
+router.patch('/add-follow-up', addFollowUpCall);
 router.patch('/:patientId/allow-calls',validateToken, allowPhoneCalls);
 
 // 3. Define the route to increment the call count

@@ -20,6 +20,12 @@ const patientSchema = new mongoose.Schema(
       type: String,
       required: false,
     },
+patientUniqueId: {
+      type: String,
+      required: true,
+      unique: true, // <--- Ensures no duplicates in the database
+      trim: true    // <--- Removes accidental whitespace
+    },
     age: {
       type: Number,
       required: false,

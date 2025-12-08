@@ -19,6 +19,7 @@ const createPrescription = async (req, res) => {
       patientId,
       prescriptionItems,
       followUpDays,
+      followUpDate,
       medicineCharges,
       shippingCharges,
       additionalCharges,
@@ -231,6 +232,17 @@ const createPrescription = async (req, res) => {
     patientAppointment.prescriptionCreated = true;
     patientAppointment.prescriptionID = savedPrescription._id;
     patientAppointment.follow = nextFollowStatus; // <-- FIX 1: Use the variable
+    if (followUpDate) {
+      // 1. Update the main timestamp (useful for sorting/filtering lists)
+      patientAppointment.followUpTimestamp = followUpDate;
+
+      // 2. Push to the new history map (as "Pending" initially)
+      patientAppointment.followUpCalls.push({
+        callDate: followUpDate,
+        status: "Pending",
+        remarks: ""
+      });
+    }
     await patientAppointment.save();
 
     // --- NEW LOGIC ADDED HERE ---

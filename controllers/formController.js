@@ -76,10 +76,28 @@ exports.createPatient = asyncHandler(async (req, res) => {
       message: "A user with this phone number or email already exists.",
     });
   }
+
+  // --- NEW LOGIC: GENERATE UNIQUE PATIENT ID (P + Number) ---
+  // 1. Find the last created patient to get the previous ID
+  const lastPatient = await Patient.findOne().sort({ createdAt: -1 });
+  
+  let newPatientUniqueId = "P1"; // Default for the very first patient
+
+  if (lastPatient && lastPatient.patientUniqueId) {
+    // 2. Remove 'P', convert to number, and add 1
+    const lastIdNumber = parseInt(lastPatient.patientUniqueId.replace("P", ""), 10);
+    if (!isNaN(lastIdNumber)) {
+        newPatientUniqueId = `P${lastIdNumber + 1}`;
+    }
+  }
+  console.log("Generated New Patient ID:", newPatientUniqueId);
+  // -----------------------------------------------------------
+
   // --- Create Patient Record (Password logic is REMOVED) ---
   const newPatient = new Patient({
     name, age, phone, whatsappNumber, email, gender,
     patientEntry, currentLocation,
+    patientUniqueId: newPatientUniqueId, // <--- ADDED HERE
     // Note: We no longer create a password here.
     requiresPasswordReset: true,
   });
@@ -150,10 +168,3 @@ exports.createPatient = asyncHandler(async (req, res) => {
     });
   }
 });
-
-
-
-
-
-
-

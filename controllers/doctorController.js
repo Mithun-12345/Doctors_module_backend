@@ -1871,6 +1871,129 @@ exports.chatPatientWithDoctorAndIsReadCount = async (req, res) => {
         return res.status(500).json({ success: false, message: "Internal server error" });
     }
 };
+exports.addFollowUpCall = async (req, res) => {
+  try {
+    const { 
+      appointmentId, 
+      callDate, 
+      status, 
+      remarks 
+    } = req.body;
+
+    if (!appointmentId || !callDate) {
+      return res.status(400).json({ 
+        success: false, 
+        message: "Appointment ID and Call Date are required" 
+      });
+    }
+
+    const appointment = await Appointment.findById(appointmentId);
+
+    if (!appointment) {
+      return res.status(404).json({ success: false, message: "Appointment not found" });
+    }
+
+    // 1. Create the new call object
+    const newCall = {
+      callDate: new Date(callDate),
+      status: status || "Pending", // Default to Pending if not sent
+      remarks: remarks || ""
+    };
+
+    // 2. Push it into the array
+    appointment.followUpCalls.push(newCall);
+
+    // 3. (Optional but Recommended) Update the main timestamp 
+    // This ensures your main dashboard shows this new date as the active follow-up
+    appointment.followUpTimestamp = newCall.callDate;
+
+    // 4. Save
+    await appointment.save();
+
+    res.status(200).json({
+      success: true,
+      message: "New follow-up call added successfully",
+      data: newCall
+    });
+
+  } catch (error) {
+    console.error("Error adding follow-up call:", error);
+    res.status(500).json({ 
+      success: false, 
+      message: "Internal server error", 
+      error: error.message 
+    });
+  }
+}; 
+exports.updateFollowUpCall = async (req, res) => {
+  try {
+    const { 
+      appointmentId, 
+      originalCallDate, // Used to find the specific log entry
+      newCallDate,      // Optional: If you are rescheduling the time
+      status, 
+      remarks 
+    } = req.body;
+
+    if (!appointmentId || !originalCallDate) {
+      return res.status(400).json({ 
+        success: false, 
+        message: "Appointment ID and Original Call Date are required" 
+      });
+    }
+
+    const appointment = await Appointment.findById(appointmentId);
+
+    if (!appointment) {
+      return res.status(404).json({ success: false, message: "Appointment not found" });
+    }
+
+    // 1. Find the specific call in the array
+    // We compare timestamps to ensure we find the exact match
+    const callIndex = appointment.followUpCalls.findIndex(
+      (call) => new Date(call.callDate).getTime() === new Date(originalCallDate).getTime()
+    );
+
+    if (callIndex === -1) {
+      return res.status(404).json({ 
+        success: false, 
+        message: "Follow-up call record not found for this date" 
+      });
+    }
+
+    // 2. Update fields if provided
+    if (status) appointment.followUpCalls[callIndex].status = status;
+    if (remarks) appointment.followUpCalls[callIndex].remarks = remarks;
+    
+    // 3. Handle Date Change (Rescheduling)
+    if (newCallDate) {
+      appointment.followUpCalls[callIndex].callDate = newCallDate;
+      
+      // OPTIONAL: If this was the call driving the main 'followUpTimestamp', update that too.
+      // This logic checks if the call we are moving was the one currently set on the main document.
+      if (new Date(appointment.followUpTimestamp).getTime() === new Date(originalCallDate).getTime()) {
+         appointment.followUpTimestamp = newCallDate;
+      }
+    }
+
+    // 4. Save the changes
+    await appointment.save();
+
+    res.status(200).json({
+      success: true,
+      message: "Follow-up call updated successfully",
+      data: appointment.followUpCalls[callIndex]
+    });
+
+  } catch (error) {
+    console.error("Error updating follow-up call:", error);
+    res.status(500).json({ 
+      success: false, 
+      message: "Internal server error", 
+      error: error.message 
+    });
+  }
+};
 exports.getTotalAppointmentsForDoctor = async (req, res) => {
   try {
     // 1. Get the logged-in doctor's ID from the token

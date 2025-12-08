@@ -27,7 +27,7 @@ const {
   submitFeedbackResponse,
   bulkUpdateFeedbackQuestions,
   getListPendingPayments,
-   getDoctorUpcomingAppointments
+  getDoctorUpcomingAppointments
 } = require("../controllers/dashboardAnalyticsController");
 const {
   upload,

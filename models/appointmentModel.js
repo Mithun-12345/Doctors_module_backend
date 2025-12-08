@@ -10,7 +10,21 @@ const commentSchema = new mongoose.Schema({
     default: Date.now,
   },
 });
-
+const followUpCallSchema = new mongoose.Schema({
+  callDate: {
+    type: Date,
+    required: true, // Stores the date and time of the call
+  },
+  status: {
+    type: String, 
+    default: "Pending", // e.g., "Done", "Ringing", "Patient Busy", "Network Issue"
+    // User requested explicitly NO ENUM here to allow flexibility
+  },
+  remarks: { 
+    type: String, // Optional: Useful if you need to type "Patient asked to call back in 10 mins"
+    default: ""
+  }
+});
 const appointmentSchema = new mongoose.Schema(
   {
     doctor: {
@@ -52,6 +66,7 @@ const appointmentSchema = new mongoose.Schema(
       type: String, // Changed from mongoose.Schema.Types.ObjectId
       required: false
     },
+    followUpCalls: [followUpCallSchema],
     diseaseName: {
       //consultingReason
       type: String,
