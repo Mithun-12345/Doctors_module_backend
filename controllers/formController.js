@@ -81,7 +81,7 @@ exports.createPatient = asyncHandler(async (req, res) => {
   // 1. Find the last created patient to get the previous ID
   const lastPatient = await Patient.findOne().sort({ createdAt: -1 });
   
-  let newPatientUniqueId = "P1"; // Default for the very first patient
+  let newPatientUniqueId = "P01"; // Default for the very first patient
 
   if (lastPatient && lastPatient.patientUniqueId) {
     // 2. Remove 'P', convert to number, and add 1
