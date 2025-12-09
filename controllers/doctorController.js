@@ -2036,15 +2036,99 @@ exports.updateFollowUpCall = async (req, res) => {
     });
   }
 };
+// Route: POST /api/patients/log-call-attempt
+exports.logWelcomeCallAttempt = async (req, res) => {
+  try {
+    const { patientId } = req.body;
+
+    const patient = await Patient.findByIdAndUpdate(
+      patientId,
+      {
+        $inc: { "newPatientFollowUp.callsMade": 1 }, // Increment Count
+        // Optional: Add a log entry that a call was tried
+        $push: {
+          "newPatientFollowUp.history": {
+            action: "Call Attempt",
+            timestamp: new Date(),
+            note: "Staff clicked Call Button"
+          }
+        }
+      },
+      { new: true }
+    );
+
+    if (!patient) return res.status(404).json({ message: "Patient not found" });
+
+    res.status(200).json({
+      success: true,
+      callsMade: patient.newPatientFollowUp.callsMade,
+      message: "Call count incremented"
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+};
+// Route: POST /api/patients/reschedule-welcome
+exports.rescheduleWelcomeCall = async (req, res) => {
+  try {
+    const { patientId, newDate, newTime, remarks } = req.body;
+
+    // 1. Combine Date and Time into a JS Date object
+    // Assuming newDate is "YYYY-MM-DD" and newTime is "HH:mm"
+    const combinedDateTime = new Date(`${newDate}T${newTime}:00`);
+
+    if (isNaN(combinedDateTime)) {
+      return res.status(400).json({ message: "Invalid Date or Time format" });
+    }
+
+    // 2. Find the patient first to get the OLD scheduled time (for the log)
+    const patient = await Patient.findById(patientId);
+    if (!patient) return res.status(404).json({ message: "Patient not found" });
+
+    const oldTime = patient.newPatientFollowUp.scheduledTime;
+
+    // 3. Update everything atomically
+    const updatedPatient = await Patient.findByIdAndUpdate(
+      patientId,
+      {
+        // A. Set the new future logic
+        $set: {
+          "newPatientFollowUp.scheduledTime": combinedDateTime,
+          "newPatientFollowUp.status": "Pending", // Reset status to Pending since it's in the future now
+          "newPatientFollowUp.remarks": remarks || "Rescheduled by staff"
+        },
+        // B. Push the OLD state to history
+        $push: {
+          "newPatientFollowUp.history": {
+            action: "Rescheduled",
+            timestamp: new Date(),
+            note: `Rescheduled from ${oldTime} to ${combinedDateTime}. Reason: ${remarks}`
+          }
+        }
+      },
+      { new: true }
+    );
+
+    res.status(200).json({
+      success: true,
+      message: "Welcome call rescheduled successfully",
+      newSchedule: updatedPatient.newPatientFollowUp.scheduledTime
+    });
+
+  } catch (error) {
+    console.error("Reschedule Error:", error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+};
 exports.getPrescriptionFollowUpReport = async (req, res) => {
   try {
     // 1. Find all appointments that HAVE a prescriptionID
-    // The query checks that the field exists and is not null
     const appointments = await Appointment.find({
       prescriptionID: { $exists: true, $ne: null },
     })
-      .populate("patient", "patientUniqueId name") // Fetch specific patient fields
-      .lean(); // Use lean() for faster read-only performance
+      // ADDED: "phone" to the list of fields to fetch
+      .populate("patient", "patientUniqueId name phone") 
+      .lean(); 
 
     // 2. Map through appointments to format the data
     const reportData = appointments.map((appt) => {
@@ -2061,8 +2145,12 @@ exports.getPrescriptionFollowUpReport = async (req, res) => {
         (c) => c.status === "Missed"
       ).length;
 
+      // ADDED: Count for Pending calls
+      const pendingCount = calls.filter(
+        (c) => c.status === "Pending"
+      ).length;
+
       // B. Find "Last" Follow-Up (Only "Completed" or "Missed")
-      // We filter valid past calls, then sort by date descending (newest first)
       const pastCalls = calls
         .filter((c) => c.status === "Completed" || c.status === "Missed")
         .sort((a, b) => new Date(b.callDate) - new Date(a.callDate));
@@ -2070,7 +2158,6 @@ exports.getPrescriptionFollowUpReport = async (req, res) => {
       const lastCall = pastCalls.length > 0 ? pastCalls[0] : null;
 
       // C. Find "Next" Follow-Up (Usually "Pending")
-      // We filter pending calls, then sort by date ascending (soonest first)
       const pendingCalls = calls
         .filter((c) => c.status === "Pending")
         .sort((a, b) => new Date(a.callDate) - new Date(b.callDate));
@@ -2079,19 +2166,26 @@ exports.getPrescriptionFollowUpReport = async (req, res) => {
 
       // D. Return the "Line Item"
       return {
+        // ADDED: Appointment ID
+        appointmentId: appt._id,
+
         // Patient Details
         patientUniqueId: appt.patient?.patientUniqueId || "N/A",
         patientName: appt.patient?.name || "Unknown",
+        // ADDED: Phone Number
+        phoneNumber: appt.patient?.phone || "N/A",
         
         // Appointment Details
         appointmentDate: appt.appointmentDate,
-        timeSlot: appt.timeSlot, // Assuming you want the slot string too
+        timeSlot: appt.timeSlot, 
         prescriptionId: appt.prescriptionID,
 
         // Follow-Up Stats
         totalFollowUpsScheduled: totalFollowUps,
         completedFollowUps: completedCount,
         missedFollowUps: missedCount,
+        // ADDED: Pending Count
+        pendingFollowUps: pendingCount,
 
         // Last Follow-Up Details
         lastFollowUpDate: lastCall ? lastCall.callDate : null,

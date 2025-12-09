@@ -20,4 +20,5 @@ const followUpSettingsSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
+
 module.exports = mongoose.model("FollowUpSetting", followUpSettingsSchema);

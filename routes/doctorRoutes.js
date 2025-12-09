@@ -49,7 +49,9 @@ const {
   addFollowUpCall,
   incrementCallCountByOne,
   getPrescriptionFollowUpReport,
-  getPatientCallReport
+  getPatientCallReport,
+  logWelcomeCallAttempt, 
+  rescheduleWelcomeCall
 } = require("../controllers/doctorController");
 const {
   upload,
@@ -85,6 +87,8 @@ router.get('/patient-calls', getPatientCallReport);
 // 3. Define the route to increment the call count
 router.patch('/:patientId/increment-call',validateToken, incrementCallCount);
 router.post('/:doctorId/attendance', validateToken, markDoctorAttendance);
+router.post('/log-call-attempt', logWelcomeCallAttempt);
+router.post('/reschedule-welcome', rescheduleWelcomeCall);
 
 // @route   POST /api/doctor/addDoctor
 // @desc    Add a new doctor

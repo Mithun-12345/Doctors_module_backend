@@ -5,7 +5,7 @@ const nodemailer = require("nodemailer");
 const { sendSetPasswordEmail } = require('../services/emailService');
 const asyncHandler = require("express-async-handler");
 const Doctor=require("../models/doctorModel")
-
+const FollowUpSetting = require('../models/followUpSettings'); // Check your path!
 // predictionController.js                                                                                                                                                                                                                                                                                                                                                                             const express = require('express');
 const axios = require("axios");
 // require('dotenv').config();
@@ -93,13 +93,41 @@ exports.createPatient = asyncHandler(async (req, res) => {
   console.log("Generated New Patient ID:", newPatientUniqueId);
   // -----------------------------------------------------------
 
+  // =================================================================
+  // ADDED BLOCK 1: CALCULATE FOLLOW-UP TIME (SLA)
+  // =================================================================
+  const setting = await FollowUpSetting.findOne().lean();
+  let slaMinutes = setting?.allowCallAfterMinutes;
+  
+  // Default to 30 minutes if setting is missing
+  if (typeof slaMinutes !== 'number') {
+    slaMinutes = 30; 
+  }
+
+  // Current Time + SLA Minutes
+  const welcomeCallTime = new Date(Date.now() + slaMinutes * 60 * 1000);
+  console.log(`FollowUp Logic: SLA is ${slaMinutes} mins. Scheduled for: ${welcomeCallTime}`);
+  // =================================================================
+
+
   // --- Create Patient Record (Password logic is REMOVED) ---
   const newPatient = new Patient({
     name, age, phone, whatsappNumber, email, gender,
     patientEntry, currentLocation,
-    patientUniqueId: newPatientUniqueId, // <--- ADDED HERE
+    patientUniqueId: newPatientUniqueId, 
     // Note: We no longer create a password here.
     requiresPasswordReset: true,
+
+    // ===============================================================
+    // ADDED BLOCK 2: STORE FOLLOW-UP DATA
+    // ===============================================================
+    newPatientFollowUp: {
+      scheduledTime: welcomeCallTime, 
+      status: 'Pending',
+      callsMade: 0,
+      remarks: "System: Welcome call scheduled upon registration."
+    }
+    // ===============================================================
   });
 
   // --- Generate and store the password set token ---

@@ -45,6 +45,30 @@ patientUniqueId: {
       type: Boolean,
       default:false 
     },
+// ============================================================
+    //  NEW PATIENT WELCOME CALL TRACKER
+    // ============================================================
+    newPatientFollowUp: {
+      scheduledTime: { type: Date },
+      status: {
+        type: String,
+        enum: ['Pending', 'Overdue', 'Rescheduled', 'Lost', 'Completed'],
+        default: 'Pending'
+      },
+      callsMade: { type: Number, default: 0 }, // The counter
+      remarks: { type: String, default: "" },
+      
+      // NEW: The Audit Log
+      history: [
+        {
+          action: { type: String }, // e.g., "Call Attempt", "Rescheduled"
+          timestamp: { type: Date, default: Date.now },
+          note: String,
+          _id: false // No need for separate IDs here
+        }
+      ]
+    },
+    // ============================================================
     followUpCallsMade: [followUpCallSchema],
     firstLoginTime:{
       type:Date
