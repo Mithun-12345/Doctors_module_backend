@@ -14,6 +14,8 @@ const ConsultationNote = require("../models/ConsultationNots.js")
 const multer = require('multer');
 const upload = multer({ dest: 'uploads/' });
 const Message = require('../models/messageModel'); // Or whatever the path to your file is
+const FollowUpSetting = require("../models/followUpSettings"); // Adjust path as needed
+
 
 // ... other controller functions
 
@@ -1924,7 +1926,46 @@ exports.addFollowUpCall = async (req, res) => {
       error: error.message 
     });
   }
-}; 
+};
+exports.incrementCallCountByOne = async (req, res) => {
+  try {
+    const { appointmentId } = req.body;
+
+    if (!appointmentId) {
+      return res.status(400).json({ 
+        success: false, 
+        message: "Appointment ID is required" 
+      });
+    }
+
+    const updatedAppointment = await Appointment.findByIdAndUpdate(
+      appointmentId,
+      { 
+        $inc: { callCount: 1 },        // Increment count by 1
+        $set: { lastCallMade: new Date() } // Set timestamp to NOW
+      }, 
+      { new: true } // Returns the updated document
+    );
+
+    if (!updatedAppointment) {
+      return res.status(404).json({ success: false, message: "Appointment not found" });
+    }
+
+    res.status(200).json({
+      success: true,
+      message: "Call count and timestamp updated",
+      data: {
+        _id: updatedAppointment._id,
+        callCount: updatedAppointment.callCount,
+        lastCallMade: updatedAppointment.lastCallMade // Return this so UI updates instantly
+      }
+    });
+
+  } catch (error) {
+    console.error("Error updating call count:", error);
+    res.status(500).json({ success: false, message: "Internal server error" });
+  }
+};
 exports.updateFollowUpCall = async (req, res) => {
   try {
     const { 
@@ -1968,6 +2009,7 @@ exports.updateFollowUpCall = async (req, res) => {
     // 3. Handle Date Change (Rescheduling)
     if (newCallDate) {
       appointment.followUpCalls[callIndex].callDate = newCallDate;
+      appointment.followUpCalls[callIndex].rescheduleCount += 1;
       
       // OPTIONAL: If this was the call driving the main 'followUpTimestamp', update that too.
       // This logic checks if the call we are moving was the one currently set on the main document.
@@ -1992,6 +2034,177 @@ exports.updateFollowUpCall = async (req, res) => {
       message: "Internal server error", 
       error: error.message 
     });
+  }
+};
+exports.getPrescriptionFollowUpReport = async (req, res) => {
+  try {
+    // 1. Find all appointments that HAVE a prescriptionID
+    // The query checks that the field exists and is not null
+    const appointments = await Appointment.find({
+      prescriptionID: { $exists: true, $ne: null },
+    })
+      .populate("patient", "patientUniqueId name") // Fetch specific patient fields
+      .lean(); // Use lean() for faster read-only performance
+
+    // 2. Map through appointments to format the data
+    const reportData = appointments.map((appt) => {
+      const calls = appt.followUpCalls || [];
+
+      // A. Calculate Counts
+      const totalFollowUps = calls.length;
+      
+      const completedCount = calls.filter(
+        (c) => c.status === "Completed"
+      ).length;
+      
+      const missedCount = calls.filter(
+        (c) => c.status === "Missed"
+      ).length;
+
+      // B. Find "Last" Follow-Up (Only "Completed" or "Missed")
+      // We filter valid past calls, then sort by date descending (newest first)
+      const pastCalls = calls
+        .filter((c) => c.status === "Completed" || c.status === "Missed")
+        .sort((a, b) => new Date(b.callDate) - new Date(a.callDate));
+      
+      const lastCall = pastCalls.length > 0 ? pastCalls[0] : null;
+
+      // C. Find "Next" Follow-Up (Usually "Pending")
+      // We filter pending calls, then sort by date ascending (soonest first)
+      const pendingCalls = calls
+        .filter((c) => c.status === "Pending")
+        .sort((a, b) => new Date(a.callDate) - new Date(b.callDate));
+        
+      const nextCall = pendingCalls.length > 0 ? pendingCalls[0] : null;
+
+      // D. Return the "Line Item"
+      return {
+        // Patient Details
+        patientUniqueId: appt.patient?.patientUniqueId || "N/A",
+        patientName: appt.patient?.name || "Unknown",
+        
+        // Appointment Details
+        appointmentDate: appt.appointmentDate,
+        timeSlot: appt.timeSlot, // Assuming you want the slot string too
+        prescriptionId: appt.prescriptionID,
+
+        // Follow-Up Stats
+        totalFollowUpsScheduled: totalFollowUps,
+        completedFollowUps: completedCount,
+        missedFollowUps: missedCount,
+
+        // Last Follow-Up Details
+        lastFollowUpDate: lastCall ? lastCall.callDate : null,
+        lastFollowUpStatus: lastCall ? lastCall.status : null,
+        lastFollowUpRemarks: lastCall ? lastCall.remarks : null,
+
+        // Next Follow-Up Details
+        nextFollowUpDate: nextCall ? nextCall.callDate : null,
+      };
+    });
+
+    res.status(200).json({
+      success: true,
+      count: reportData.length,
+      data: reportData,
+    });
+  } catch (error) {
+    console.error("Error fetching follow-up report:", error);
+    res.status(500).json({
+      success: false,
+      message: "Internal server error",
+      error: error.message,
+    });
+  }
+};
+exports.getPatientCallReport = async (req, res) => {
+  try {
+    // 1. Fetch Settings safely
+    const setting = await FollowUpSetting.findOne().lean();
+    
+    // FIX: Use 'allowCallAfterMinutes' (matching your DB) instead of 'slaWindow'
+    let windowMinutes = setting?.allowCallAfterMinutes;
+
+    // SAFETY CHECK: If it's missing or not a number, default to 30
+    if (typeof windowMinutes !== 'number') {
+        windowMinutes = 30; 
+    }
+
+    // Convert to milliseconds
+    const slaWindowMs = windowMinutes * 60 * 1000;
+
+    const report = await Patient.aggregate([
+      {
+        $lookup: {
+          from: 'followups',
+          localField: '_id',
+          foreignField: 'patientId',
+          as: 'callHistory'
+        }
+      },
+      {
+        $addFields: {
+          totalCallsMade: { $size: "$callHistory" },
+          missedCallCount: {
+            $size: {
+              $filter: {
+                input: "$callHistory",
+                as: "call",
+                cond: { $eq: ["$$call.status", "Missed"] }
+              }
+            }
+          },
+          lastInteraction: {
+            $arrayElemAt: [
+              { $sortArray: { input: "$callHistory", sortBy: { callTime: -1 } } },
+              0
+            ]
+          }
+        }
+      },
+      {
+        $project: {
+          _id: 1,
+          uniqueId: "$uniqueId",
+          patientName: "$name",
+          phoneNumber: "$phone",
+          disease: "$disease",
+          createdAt: 1, 
+
+          // FIX: slaWindowMs is now guaranteed to be a valid number
+          slaTime: {
+            $add: [
+              { $ifNull: [ "$lastInteraction.rescheduledTo", "$createdAt" ] }, 
+              slaWindowMs 
+            ]
+          },
+
+          lastCallAttempt: { $ifNull: ["$lastInteraction.callTime", null] },
+          followUpStatus: { $ifNull: ["$lastInteraction.status", "Pending"] },
+          
+          rescheduledTime: {
+            $cond: {
+              if: { $eq: ["$lastInteraction.status", "Rescheduled"] },
+              then: "$lastInteraction.rescheduledTo",
+              else: null
+            }
+          },
+
+          totalCallsMade: 1,
+          missedCallCount: 1
+        }
+      }
+    ]);
+
+    res.status(200).json({
+      success: true,
+      count: report.length,
+      data: report
+    });
+
+  } catch (error) {
+    console.error("Error generating report:", error);
+    res.status(500).json({ success: false, message: "Server Error: " + error.message });
   }
 };
 exports.getTotalAppointmentsForDoctor = async (req, res) => {

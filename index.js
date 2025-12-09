@@ -84,6 +84,7 @@ const pushNotificationRouter = require("./routes/pushNotificationRouter.js");
 const geminiTextServiceRoutes=require("./routes/geminiTextServiceRoutes.js")
 const creditDebitRoutes = require('./routes/debitCreditRoutes.js');
 const dashboardAnalyticsRoutes= require('./routes/dashboardAnalyticsRoutes.js')
+const followUpSetting = require("./routes/followUpRoute.js");
 
 
 // ✅ CUSTOM MIDDLEWARE
@@ -162,6 +163,7 @@ app.use("/api/order", orderRoutes);
 app.use("/api/medicine-summary", medPrepSummary);
 app.use("/api", labelRoutes);
 app.use("/api/consumptions", consumptionRoutes);
+app.use("/api/settings", followUpSetting);
 app.use("/api/prescriptionControl", prescriptionControl);
 app.use('/api', scheduleRoutes);
 app.use('/api/medication', scheduleRoutes);

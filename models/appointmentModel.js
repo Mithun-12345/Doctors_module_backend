@@ -22,7 +22,11 @@ const followUpCallSchema = new mongoose.Schema({
   },
   remarks: { 
     type: String, // Optional: Useful if you need to type "Patient asked to call back in 10 mins"
-    default: ""
+    default: "",
+  },
+  rescheduleCount: {
+    type: Number,
+    default: 0
   }
 });
 const appointmentSchema = new mongoose.Schema(
@@ -139,6 +143,10 @@ const appointmentSchema = new mongoose.Schema(
       //no need in frontend
       type: Number,
       default: 0,
+    },
+    lastCallMade: {
+      type: Date,
+      default: null
     },
     comments: [commentSchema],
     symptomNotKnown: {

@@ -46,7 +46,10 @@ const {
   getFollowUpCallList,
   updateFollowUpCallStatus,
   updateFollowUpCall,
-  addFollowUpCall
+  addFollowUpCall,
+  incrementCallCountByOne,
+  getPrescriptionFollowUpReport,
+  getPatientCallReport
 } = require("../controllers/doctorController");
 const {
   upload,
@@ -74,6 +77,10 @@ router.patch('/update-follow-up-call-status/:patientId', updateFollowUpCallStatu
 router.patch('/update-follow-up-call', updateFollowUpCall);
 router.patch('/add-follow-up', addFollowUpCall);
 router.patch('/:patientId/allow-calls',validateToken, allowPhoneCalls);
+router.patch('/increment-call-count-by-one', incrementCallCountByOne);
+// GET method since we are just retrieving data
+router.get("/reports/prescription-follow-ups", getPrescriptionFollowUpReport);
+router.get('/patient-calls', getPatientCallReport);
 
 // 3. Define the route to increment the call count
 router.patch('/:patientId/increment-call',validateToken, incrementCallCount);
