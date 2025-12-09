@@ -51,7 +51,8 @@ const {
   getPrescriptionFollowUpReport,
   getPatientCallReport,
   logWelcomeCallAttempt, 
-  rescheduleWelcomeCall
+  rescheduleWelcomeCall,
+  getNewPatientDashboard 
 } = require("../controllers/doctorController");
 const {
   upload,
@@ -83,6 +84,7 @@ router.patch('/increment-call-count-by-one', incrementCallCountByOne);
 // GET method since we are just retrieving data
 router.get("/reports/prescription-follow-ups", getPrescriptionFollowUpReport);
 router.get('/patient-calls', getPatientCallReport);
+router.get('/dashboard/new-patients', getNewPatientDashboard);
 
 // 3. Define the route to increment the call count
 router.patch('/:patientId/increment-call',validateToken, incrementCallCount);

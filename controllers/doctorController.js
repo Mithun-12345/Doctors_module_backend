@@ -2120,6 +2120,146 @@ exports.rescheduleWelcomeCall = async (req, res) => {
     res.status(500).json({ success: false, error: error.message });
   }
 };
+exports.getNewPatientDashboard = async (req, res) => {
+  try {
+    const dashboardData = await Patient.aggregate([
+      // 1. FILTER: Only "New" Patients
+      {
+        $match: {
+          newExisting: "New"
+        }
+      },
+
+      // 2. LOOKUP: Fetch Disease Name from 'medicaldetails' collection
+      // (Because diseaseName is stored in MedicalDetails, not Patient)
+      {
+        $lookup: {
+          from: "medicaldetails", // Ensure this matches your actual MongoDB collection name
+          localField: "_id",
+          foreignField: "patientId",
+          as: "medDetails"
+        }
+      },
+      // Unwind array to get object (preserve if no medical details exist)
+      { $unwind: { path: "$medDetails", preserveNullAndEmptyArrays: true } },
+
+      {
+        $facet: {
+          // --- BLOCK A: KPI CARDS (Calculated on the filtered "New" patients) ---
+          "kpis": [
+            {
+              $group: {
+                _id: null,
+                totalRegistered: { $sum: 1 },
+                completed: { 
+                  $sum: { $cond: [{ $eq: ["$newPatientFollowUp.status", "Completed"] }, 1, 0] } 
+                },
+                rescheduled: { 
+                  $sum: { $cond: [{ $eq: ["$newPatientFollowUp.status", "Rescheduled"] }, 1, 0] } 
+                },
+                overdue: { 
+                  $sum: { $cond: [{ $eq: ["$newPatientFollowUp.status", "Overdue"] }, 1, 0] } 
+                },
+                lost: { 
+                  $sum: { $cond: [{ $eq: ["$newPatientFollowUp.status", "Lost"] }, 1, 0] } 
+                }
+              }
+            },
+            {
+              $project: {
+                _id: 0,
+                totalRegistered: 1,
+                completed: 1,
+                rescheduled: 1,
+                overdue: 1,
+                lost: 1,
+                slaCompletionPercentage: {
+                  $cond: {
+                    if: { $eq: ["$totalRegistered", 0] },
+                    then: 0,
+                    else: { $multiply: [{ $divide: ["$completed", "$totalRegistered"] }, 100] }
+                  }
+                }
+              }
+            }
+          ],
+
+          // --- BLOCK B: PIE CHART ---
+          "callAttemptsBreakdown": [
+            {
+              $group: {
+                _id: "$newPatientFollowUp.callsMade",
+                count: { $sum: 1 }
+              }
+            },
+            { $sort: { _id: 1 } }
+          ],
+
+          // --- BLOCK C: TABLE LIST ---
+          "tableList": [
+            { $sort: { createdAt: -1 } }, 
+            {
+              $project: {
+                _id: 1,
+                patientName: { $ifNull: ["$name", "-"] },
+                phoneNumber: { $ifNull: ["$phone", "-"] },
+                registrationTime: "$createdAt",
+
+                // NEW: Disease Name from the joined MedicalDetails
+                diseaseName: { $ifNull: ["$medDetails.diseaseName", "-"] },
+
+                // NEW: Scheduled Time
+                scheduledTime: { $ifNull: ["$newPatientFollowUp.scheduledTime", "-"] },
+
+                // NEW: Last Call Attempt (Extracts timestamp from last history item)
+                lastCallAttempt: { 
+                    $let: {
+                        vars: { 
+                          lastLog: { 
+                            $arrayElemAt: [ { $slice: [ "$newPatientFollowUp.history", -1 ] }, 0 ] 
+                          } 
+                        },
+                        in: { $ifNull: ["$$lastLog.timestamp", "-"] }
+                    }
+                },
+
+                // NEW: Calls Made
+                callsMade: { $ifNull: ["$newPatientFollowUp.callsMade", "-"] },
+                
+                // Rescheduled Time (Only if currently Rescheduled)
+                rescheduledTime: {
+                  $cond: {
+                    if: { $eq: ["$newPatientFollowUp.status", "Rescheduled"] },
+                    then: { $ifNull: ["$newPatientFollowUp.rescheduledTo", "-"] },
+                    else: "-"
+                  }
+                },
+
+                status: "$newPatientFollowUp.status"
+              }
+            }
+          ]
+        }
+      }
+    ]);
+
+    const result = dashboardData[0];
+
+    res.status(200).json({
+      success: true,
+      kpis: result.kpis[0] || { 
+          totalRegistered: 0, completed: 0, rescheduled: 0, 
+          overdue: 0, lost: 0, slaCompletionPercentage: 0 
+      },
+      pieChart: result.callAttemptsBreakdown,
+      tableData: result.tableList
+    });
+
+  } catch (error) {
+    console.error("Dashboard Error:", error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+};
 exports.getPrescriptionFollowUpReport = async (req, res) => {
   try {
     // 1. Find all appointments that HAVE a prescriptionID
