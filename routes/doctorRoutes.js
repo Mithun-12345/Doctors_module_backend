@@ -76,11 +76,10 @@ router.get("/zoom/authorize", zoomAuth);
 router.get("/zoom/callback", zoomCallback);
 router.get("/show-every-payment", getAllDoctorPaymentsTotal);
 router.get('/follow-up-calls', getFollowUpCallList);
-router.patch('/update-follow-up-call-status/:patientId', updateFollowUpCallStatus);
+router.patch('/update-follow-up-call-status/:appointmentId', updateFollowUpCallStatus);
 router.post("/todays-appointments",validateToken,getTodaysAppointments);
-router.patch('/update-follow-up-call-status/:patientId', updateFollowUpCallStatus);
 router.patch('/update-follow-up-call', updateFollowUpCall);
-router.patch('/add-follow-up', addFollowUpCall);
+router.post('/add-follow-up', addFollowUpCall);
 router.patch('/:patientId/allow-calls',validateToken, allowPhoneCalls);
 router.patch('/increment-call-count-by-one', incrementCallCountByOne);
 // GET method since we are just retrieving data
