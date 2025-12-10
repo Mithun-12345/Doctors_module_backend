@@ -17,7 +17,6 @@ const Message = require('../models/messageModel'); // Or whatever the path to yo
 const FollowUpSetting = require("../models/followUpSettings"); // Adjust path as needed
 
 
-
 // ... other controller functions
 
 /**
@@ -2167,6 +2166,7 @@ exports.updateWelcomeCallStatus = async (req, res) => {
     res.status(500).json({ success: false, error: error.message });
   }
 };
+const MedicalDetails = require('../models/patientDetails'); // Import this to get disease name
 
 exports.getPatientCallLogs = async (req, res) => {
   try {
@@ -2230,16 +2230,16 @@ exports.getNewPatientDashboard = async (req, res) => {
         }
       },
 
-      // 2. LOOKUP: Fetch Medical Details
+      // 2. LOOKUP: Fetch patientDetails (Replaced MedicalDetails)
       {
         $lookup: {
-          from: "medicaldetails", // Ensure this matches your DB collection name
+          from: "patientdetails", // <--- CHANGED: Now looks in 'patientdetails' collection
           localField: "_id",
           foreignField: "patientId",
-          as: "medDetails"
+          as: "medDetails" // Kept alias same to avoid breaking projection logic below
         }
       },
-      // Unwind to flatten the array (preserve if no medical details exist)
+      // Unwind to flatten the array (preserve if no details exist)
       { $unwind: { path: "$medDetails", preserveNullAndEmptyArrays: true } },
 
       {
@@ -2305,10 +2305,9 @@ exports.getNewPatientDashboard = async (req, res) => {
                 registrationTime: "$createdAt",
                 appDownload: { $ifNull: ["$appDownload", 0] },
 
-                // --- ADDED MEDICAL DETAILS HERE ---
+                // --- FETCHING FROM patientDetails (via medDetails alias) ---
                 diseaseName: { $ifNull: ["$medDetails.diseaseName", "-"] },
                 consultingFor: { $ifNull: ["$medDetails.consultingFor", "-"] },
-                // Handles the nested 'name' inside diseaseType object
                 diseaseType: { $ifNull: ["$medDetails.diseaseType.name", "-"] }, 
                 // ----------------------------------
 
@@ -2412,6 +2411,7 @@ exports.getPrescriptionFollowUpReport = async (req, res) => {
 
         // Patient Details
         patientUniqueId: appt.patient?.patientUniqueId || "N/A",
+        patientId: appt.patient?._id,
         patientName: appt.patient?.name || "Unknown",
         // ADDED: Phone Number
         phoneNumber: appt.patient?.phone || "N/A",
