@@ -1145,6 +1145,10 @@ exports.bookAppointment = asyncHandler(async (req, res) => {
     });
 
     const savedAppointment = await newAppointment.save();
+    if (user.newPatientFollowUp) {
+       user.newPatientFollowUp.status = "Completed";
+       await user.save();
+    }
 
     const appointmentFullDate = new Date(`${appointmentDate}T${timeSlot}`);
     const istFormatter = new Intl.DateTimeFormat('en-IN', {

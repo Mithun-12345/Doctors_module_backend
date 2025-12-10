@@ -2134,14 +2134,25 @@ exports.updateWelcomeCallStatus = async (req, res) => {
       });
     }
 
+    // 1. Prepare the dynamic updates
+    let updateFields = {
+      "newPatientFollowUp.status": status,
+      // Optional: Update remarks if provided, otherwise keep existing
+      ...(remarks && { "newPatientFollowUp.remarks": remarks }) 
+    };
+
+    // 2. ADDED: Logic for "Lost" status
+    if (status === 'Lost') {
+      updateFields.userStatus = "Inactive";
+      updateFields.patientStage = "Miscellaneous";
+      updateFields.follow = "Miscellaneous";
+      updateFields.enquiryStatus = "Not Interested";
+    }
+
     const patient = await Patient.findByIdAndUpdate(
       patientId,
       {
-        $set: { 
-          "newPatientFollowUp.status": status,
-          // Optional: Update remarks if provided, otherwise keep existing
-          ...(remarks && { "newPatientFollowUp.remarks": remarks }) 
-        },
+        $set: updateFields,
         $push: {
           "newPatientFollowUp.history": {
             action: "Status Change",
@@ -2454,92 +2465,52 @@ exports.getPrescriptionFollowUpReport = async (req, res) => {
 };
 exports.getPatientCallReport = async (req, res) => {
   try {
-    // 1. Fetch Settings safely
-    const setting = await FollowUpSetting.findOne().lean();
-    
-    // FIX: Use 'allowCallAfterMinutes' (matching your DB) instead of 'slaWindow'
-    let windowMinutes = setting?.allowCallAfterMinutes;
+    const { patientId } = req.params;
 
-    // SAFETY CHECK: If it's missing or not a number, default to 30
-    if (typeof windowMinutes !== 'number') {
-        windowMinutes = 30; 
+    // 1. Fetch Patient Data (including the history array)
+    const patient = await Patient.findById(patientId).lean();
+
+    if (!patient) {
+      return res.status(404).json({ success: false, message: "Patient not found" });
     }
 
-    // Convert to milliseconds
-    const slaWindowMs = windowMinutes * 60 * 1000;
+    // 2. Fetch Disease Name using your specific model import
+    const details = await patientDetails.findOne({ patientId: patient._id }).select('diseaseName').lean();
 
-    const report = await Patient.aggregate([
-      {
-        $lookup: {
-          from: 'followups',
-          localField: '_id',
-          foreignField: 'patientId',
-          as: 'callHistory'
-        }
-      },
-      {
-        $addFields: {
-          totalCallsMade: { $size: "$callHistory" },
-          missedCallCount: {
-            $size: {
-              $filter: {
-                input: "$callHistory",
-                as: "call",
-                cond: { $eq: ["$$call.status", "Missed"] }
-              }
-            }
-          },
-          lastInteraction: {
-            $arrayElemAt: [
-              { $sortArray: { input: "$callHistory", sortBy: { callTime: -1 } } },
-              0
-            ]
-          }
-        }
-      },
-      {
-        $project: {
-          _id: 1,
-          uniqueId: "$uniqueId",
-          patientName: "$name",
-          phoneNumber: "$phone",
-          disease: "$disease",
-          createdAt: 1, 
+    // 3. Format the response
+    const profileData = {
+      patientName: patient.name,
+      phoneNumber: patient.phone,
+      email: patient.email || "-",
+      gender: patient.gender || "-",
+      source: patient.patientEntry || "Direct", 
+      
+      // Location Details
+      city: patient.currentLocation || "-",
+      address: patient.address || "-", 
+      
+      // Use the fetched details to get diseaseName
+      diseaseName: details ? details.diseaseName : "-",
+      
+      // Current Status
+      currentStatus: patient.newPatientFollowUp?.status || "Pending",
+      scheduledTime: patient.newPatientFollowUp?.scheduledTime || null
+    };
 
-          // FIX: slaWindowMs is now guaranteed to be a valid number
-          slaTime: {
-            $add: [
-              { $ifNull: [ "$lastInteraction.rescheduledTo", "$createdAt" ] }, 
-              slaWindowMs 
-            ]
-          },
-
-          lastCallAttempt: { $ifNull: ["$lastInteraction.callTime", null] },
-          followUpStatus: { $ifNull: ["$lastInteraction.status", "Pending"] },
-          
-          rescheduledTime: {
-            $cond: {
-              if: { $eq: ["$lastInteraction.status", "Rescheduled"] },
-              then: "$lastInteraction.rescheduledTo",
-              else: null
-            }
-          },
-
-          totalCallsMade: 1,
-          missedCallCount: 1
-        }
-      }
-    ]);
+    // 4. Get the Call Log (History)
+    const callLogs = (patient.newPatientFollowUp?.history || []).sort((a, b) => 
+      new Date(b.timestamp) - new Date(a.timestamp)
+    );
 
     res.status(200).json({
       success: true,
-      count: report.length,
-      data: report
+      profile: profileData,
+      logs: callLogs
     });
 
   } catch (error) {
-    console.error("Error generating report:", error);
-    res.status(500).json({ success: false, message: "Server Error: " + error.message });
+    console.error("Error fetching patient logs:", error);
+    res.status(500).json({ success: false, error: error.message });
   }
 };
 exports.getTotalAppointmentsForDoctor = async (req, res) => {

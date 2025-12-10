@@ -5,7 +5,48 @@ const NotificationReminderSettings = require('../models/NotificationReminderSett
 const { pushnotificationModel } = require("../models/pushNotificationModel"); // Adjust path
 const admin = require("../configs/firebase"); // Your initialized Firebase Admin SDK
 const { calculateOverallTatAnalytics,getOverallClinicAnalytics } = require('../controllers/dashboardAnalyticsController'); // Adjust path
+const Patient = require('../models/patientModel'); // Adjust path to your Patient model
 
+// --- NEW FUNCTION: Update Welcome Call Status ---
+const updateWelcomeCallStatuses = async () => {
+  try {
+    console.log('Running cron job: Updating Welcome Call statuses to Overdue...');
+    const now = new Date();
+
+    // efficient single-command update
+    const result = await Patient.updateMany(
+      {
+        // 1. Target calls that are currently Pending
+        'newPatientFollowUp.status': 'Pending',
+        // 2. AND where the scheduled time has already passed
+        'newPatientFollowUp.scheduledTime': { $lt: now }
+      },
+      {
+        // 3. Update status to Overdue
+        $set: { 'newPatientFollowUp.status': 'Overdue' }
+      }
+    );
+
+    if (result.modifiedCount > 0) {
+      console.log(`✅ Successfully marked ${result.modifiedCount} welcome calls as 'Overdue'.`);
+    } else {
+      console.log('No pending welcome calls have exceeded their scheduled time.');
+    }
+
+  } catch (error) {
+    console.error('Error running welcome call status update:', error);
+  }
+};
+
+// --- SCHEDULER ---
+const startWelcomeCallStatusCronJob = () => {
+  // Run every 10 minutes
+  cron.schedule('*/1 * * * *', updateWelcomeCallStatuses, {
+    scheduled: true,
+    timezone: "Asia/Kolkata"
+  });
+  console.log('✅ Welcome Call status update cron job scheduled to run every 1 minutes.');
+};
 
 // No changes to this function. It is correct.
 const generateAppointmentReminders = async () => {
@@ -364,5 +405,6 @@ module.exports = {
     startExactTimeReminderCronJob,
     startUserStatusCronJob,
     startTatAnalyticsCronJob,
-    startOverallAnalyticsCronJob
+    startOverallAnalyticsCronJob,
+    startWelcomeCallStatusCronJob
 };
