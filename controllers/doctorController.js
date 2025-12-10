@@ -2364,11 +2364,37 @@ exports.getPrescriptionFollowUpReport = async (req, res) => {
     const appointments = await Appointment.find({
       prescriptionID: { $exists: true, $ne: null },
     })
-      // ADDED: "phone" to the list of fields to fetch
       .populate("patient", "patientUniqueId name phone") 
       .lean(); 
 
-    // 2. Map through appointments to format the data
+    // ============================================================
+    // --- NEW ADDITION: CALCULATE CHART STATISTICS ---
+    // ============================================================
+    let globalPending = 0;
+    let globalRescheduled = 0;
+    let globalCompleted = 0;
+    let globalTotalCalls = 0;
+
+    appointments.forEach(appt => {
+        const calls = appt.followUpCalls || [];
+        globalTotalCalls += calls.length;
+
+        calls.forEach(call => {
+            if (call.status === 'Pending') globalPending++;
+            if (call.status === 'Rescheduled') globalRescheduled++;
+            if (call.status === 'Completed') globalCompleted++;
+        });
+    });
+
+    // Calculate Completion Rate (Percentage)
+    // Formula: (Total Completed / Total Calls) * 100
+    const completionRate = globalTotalCalls > 0 
+        ? Math.round((globalCompleted / globalTotalCalls) * 100) 
+        : 0;
+    // ============================================================
+
+
+    // 2. Map through appointments to format the data (UNTOUCHED)
     const reportData = appointments.map((appt) => {
       const calls = appt.followUpCalls || [];
 
@@ -2438,6 +2464,14 @@ exports.getPrescriptionFollowUpReport = async (req, res) => {
 
     res.status(200).json({
       success: true,
+      // --- NEW ADDITION: STATS OBJECT FOR CHART ---
+      stats: {
+          pending: globalPending,
+          rescheduled: globalRescheduled,
+          completed: globalCompleted,
+          completionRate: completionRate
+      },
+      // --------------------------------------------
       count: reportData.length,
       data: reportData,
     });
