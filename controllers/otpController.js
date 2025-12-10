@@ -586,6 +586,7 @@ exports.loginUser = async (req, res) => {
     if (role === 'Patient' && !user.firstLoginDone) {
       user.firstLoginTime = new Date();
       user.firstLoginDone = true;
+      user.appDownload = 1;
     }
     
     // --- Save all changes for the successful login at once ---

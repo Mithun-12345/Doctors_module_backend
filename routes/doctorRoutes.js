@@ -52,7 +52,9 @@ const {
   getPatientCallReport,
   logWelcomeCallAttempt, 
   rescheduleWelcomeCall,
-  getNewPatientDashboard 
+  getNewPatientDashboard,
+  updateWelcomeCallStatus,
+  getPatientCallLogs
 } = require("../controllers/doctorController");
 const {
   upload,
@@ -91,6 +93,8 @@ router.patch('/:patientId/increment-call',validateToken, incrementCallCount);
 router.post('/:doctorId/attendance', validateToken, markDoctorAttendance);
 router.post('/log-call-attempt', logWelcomeCallAttempt);
 router.post('/reschedule-welcome', rescheduleWelcomeCall);
+router.put('/update-status', updateWelcomeCallStatus);
+router.get('/:patientId/logs', getPatientCallLogs);
 
 // @route   POST /api/doctor/addDoctor
 // @desc    Add a new doctor

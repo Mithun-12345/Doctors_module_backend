@@ -17,6 +17,7 @@ const Message = require('../models/messageModel'); // Or whatever the path to yo
 const FollowUpSetting = require("../models/followUpSettings"); // Adjust path as needed
 
 
+
 // ... other controller functions
 
 /**
@@ -2120,6 +2121,105 @@ exports.rescheduleWelcomeCall = async (req, res) => {
     res.status(500).json({ success: false, error: error.message });
   }
 };
+// Route: PUT /api/patients/update-status
+exports.updateWelcomeCallStatus = async (req, res) => {
+  try {
+    const { patientId, status, remarks } = req.body;
+
+    // Validate Status Enum
+    const validStatuses = ['Pending', 'Overdue', 'Rescheduled', 'Lost', 'Completed'];
+    if (!validStatuses.includes(status)) {
+      return res.status(400).json({ 
+        success: false, 
+        message: `Invalid status. Allowed: ${validStatuses.join(', ')}` 
+      });
+    }
+
+    const patient = await Patient.findByIdAndUpdate(
+      patientId,
+      {
+        $set: { 
+          "newPatientFollowUp.status": status,
+          // Optional: Update remarks if provided, otherwise keep existing
+          ...(remarks && { "newPatientFollowUp.remarks": remarks }) 
+        },
+        $push: {
+          "newPatientFollowUp.history": {
+            action: "Status Change",
+            timestamp: new Date(),
+            note: `Status manually updated to ${status}. ${remarks ? `Remarks: ${remarks}` : ''}`
+          }
+        }
+      },
+      { new: true }
+    );
+
+    if (!patient) return res.status(404).json({ success: false, message: "Patient not found" });
+
+    res.status(200).json({
+      success: true,
+      message: `Status updated to ${status}`,
+      currentStatus: patient.newPatientFollowUp.status
+    });
+
+  } catch (error) {
+    console.error("Update Status Error:", error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+};
+
+exports.getPatientCallLogs = async (req, res) => {
+  try {
+    const { patientId } = req.params;
+
+    // 1. Fetch Patient Data (including the history array)
+    const patient = await Patient.findById(patientId).lean();
+
+    if (!patient) {
+      return res.status(404).json({ success: false, message: "Patient not found" });
+    }
+
+    // 2. Fetch Disease Name from MedicalDetails
+    const medDetails = await MedicalDetails.findOne({ patientId: patient._id }).select('diseaseName').lean();
+
+    // 3. Format the response
+    const profileData = {
+      patientName: patient.name,
+      phoneNumber: patient.phone,
+      email: patient.email || "-",
+      gender: patient.gender || "-",
+      source: patient.patientEntry || "Direct", // Maps to 'patientEntry'
+      
+      // Location Details
+      city: patient.currentLocation || "-",
+      address: patient.address || "-", 
+      // Note: Country/Pincode are not separate fields in your schema, 
+      // so we return the full address.
+      
+      diseaseName: medDetails ? medDetails.diseaseName : "-",
+      
+      // Current Status
+      currentStatus: patient.newPatientFollowUp?.status || "Pending",
+      scheduledTime: patient.newPatientFollowUp?.scheduledTime || null
+    };
+
+    // 4. Get the Call Log (History)
+    // We sort it so the most recent events appear first
+    const callLogs = (patient.newPatientFollowUp?.history || []).sort((a, b) => 
+      new Date(b.timestamp) - new Date(a.timestamp)
+    );
+
+    res.status(200).json({
+      success: true,
+      profile: profileData,
+      logs: callLogs
+    });
+
+  } catch (error) {
+    console.error("Error fetching patient logs:", error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+};
 exports.getNewPatientDashboard = async (req, res) => {
   try {
     const dashboardData = await Patient.aggregate([
@@ -2130,22 +2230,21 @@ exports.getNewPatientDashboard = async (req, res) => {
         }
       },
 
-      // 2. LOOKUP: Fetch Disease Name from 'medicaldetails' collection
-      // (Because diseaseName is stored in MedicalDetails, not Patient)
+      // 2. LOOKUP: Fetch Medical Details
       {
         $lookup: {
-          from: "medicaldetails", // Ensure this matches your actual MongoDB collection name
+          from: "medicaldetails", // Ensure this matches your DB collection name
           localField: "_id",
           foreignField: "patientId",
           as: "medDetails"
         }
       },
-      // Unwind array to get object (preserve if no medical details exist)
+      // Unwind to flatten the array (preserve if no medical details exist)
       { $unwind: { path: "$medDetails", preserveNullAndEmptyArrays: true } },
 
       {
         $facet: {
-          // --- BLOCK A: KPI CARDS (Calculated on the filtered "New" patients) ---
+          // --- BLOCK A: KPI CARDS ---
           "kpis": [
             {
               $group: {
@@ -2204,14 +2303,18 @@ exports.getNewPatientDashboard = async (req, res) => {
                 patientName: { $ifNull: ["$name", "-"] },
                 phoneNumber: { $ifNull: ["$phone", "-"] },
                 registrationTime: "$createdAt",
+                appDownload: { $ifNull: ["$appDownload", 0] },
 
-                // NEW: Disease Name from the joined MedicalDetails
+                // --- ADDED MEDICAL DETAILS HERE ---
                 diseaseName: { $ifNull: ["$medDetails.diseaseName", "-"] },
+                consultingFor: { $ifNull: ["$medDetails.consultingFor", "-"] },
+                // Handles the nested 'name' inside diseaseType object
+                diseaseType: { $ifNull: ["$medDetails.diseaseType.name", "-"] }, 
+                // ----------------------------------
 
-                // NEW: Scheduled Time
                 scheduledTime: { $ifNull: ["$newPatientFollowUp.scheduledTime", "-"] },
 
-                // NEW: Last Call Attempt (Extracts timestamp from last history item)
+                // Last Call Attempt Logic
                 lastCallAttempt: { 
                     $let: {
                         vars: { 
@@ -2223,10 +2326,8 @@ exports.getNewPatientDashboard = async (req, res) => {
                     }
                 },
 
-                // NEW: Calls Made
                 callsMade: { $ifNull: ["$newPatientFollowUp.callsMade", "-"] },
                 
-                // Rescheduled Time (Only if currently Rescheduled)
                 rescheduledTime: {
                   $cond: {
                     if: { $eq: ["$newPatientFollowUp.status", "Rescheduled"] },
