@@ -2044,15 +2044,8 @@ exports.logWelcomeCallAttempt = async (req, res) => {
     const patient = await Patient.findByIdAndUpdate(
       patientId,
       {
-        $inc: { "newPatientFollowUp.callsMade": 1 }, // Increment Count
-        // Optional: Add a log entry that a call was tried
-        $push: {
-          "newPatientFollowUp.history": {
-            action: "Call Attempt",
-            timestamp: new Date(),
-            note: "Staff clicked Call Button"
-          }
-        }
+        $inc: { "newPatientFollowUp.callsMade": 1 }, // Only Increment Count
+        // REMOVED: History entry for "Call Attempt" as it wasn't in your allowed list.
       },
       { new: true }
     );
@@ -2068,46 +2061,40 @@ exports.logWelcomeCallAttempt = async (req, res) => {
     res.status(500).json({ success: false, error: error.message });
   }
 };
+
 // Route: POST /api/patients/reschedule-welcome
 exports.rescheduleWelcomeCall = async (req, res) => {
   try {
     const { patientId, newDate, newTime, remarks } = req.body;
 
     // 1. Combine Date and Time into a JS Date object
-    // Assuming newDate is "YYYY-MM-DD" and newTime is "HH:mm"
     const combinedDateTime = new Date(`${newDate}T${newTime}:00`);
 
     if (isNaN(combinedDateTime)) {
       return res.status(400).json({ message: "Invalid Date or Time format" });
     }
 
-    // 2. Find the patient first to get the OLD scheduled time (for the log)
-    const patient = await Patient.findById(patientId);
-    if (!patient) return res.status(404).json({ message: "Patient not found" });
-
-    const oldTime = patient.newPatientFollowUp.scheduledTime;
-
-    // 3. Update everything atomically
+    // 2. Find and Update
     const updatedPatient = await Patient.findByIdAndUpdate(
       patientId,
       {
-        // A. Set the new future logic
         $set: {
           "newPatientFollowUp.scheduledTime": combinedDateTime,
-          "newPatientFollowUp.status": "Pending", // Reset status to Pending since it's in the future now
+          "newPatientFollowUp.status": "Pending", 
           "newPatientFollowUp.remarks": remarks || "Rescheduled by staff"
         },
-        // B. Push the OLD state to history
         $push: {
           "newPatientFollowUp.history": {
             action: "Rescheduled",
             timestamp: new Date(),
-            note: `Rescheduled from ${oldTime} to ${combinedDateTime}. Reason: ${remarks}`
+            note: "Rescheduled" // <--- STRICT NOTE AS REQUESTED
           }
         }
       },
       { new: true }
     );
+
+    if (!updatedPatient) return res.status(404).json({ message: "Patient not found" });
 
     res.status(200).json({
       success: true,
@@ -2120,6 +2107,7 @@ exports.rescheduleWelcomeCall = async (req, res) => {
     res.status(500).json({ success: false, error: error.message });
   }
 };
+
 // Route: PUT /api/patients/update-status
 exports.updateWelcomeCallStatus = async (req, res) => {
   try {
@@ -2137,11 +2125,10 @@ exports.updateWelcomeCallStatus = async (req, res) => {
     // 1. Prepare the dynamic updates
     let updateFields = {
       "newPatientFollowUp.status": status,
-      // Optional: Update remarks if provided, otherwise keep existing
       ...(remarks && { "newPatientFollowUp.remarks": remarks }) 
     };
 
-    // 2. ADDED: Logic for "Lost" status
+    // 2. Logic for "Lost" status
     if (status === 'Lost') {
       updateFields.userStatus = "Inactive";
       updateFields.patientStage = "Miscellaneous";
@@ -2157,7 +2144,7 @@ exports.updateWelcomeCallStatus = async (req, res) => {
           "newPatientFollowUp.history": {
             action: "Status Change",
             timestamp: new Date(),
-            note: `Status manually updated to ${status}. ${remarks ? `Remarks: ${remarks}` : ''}`
+            note: status // <--- STRICT NOTE: Will be "Completed" or "Lost" etc.
           }
         }
       },
