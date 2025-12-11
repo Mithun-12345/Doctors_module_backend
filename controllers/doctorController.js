@@ -2045,7 +2045,77 @@ exports.getPrescriptionsByAppointmentForNewDash = async (req, res) => {
     return res.status(500).json({ message: "Server Error", error: error.message });
   }
 };
+exports.getActiveRemindersByAppointment = async (req, res) => {
+  try {
+    const { appointmentId } = req.params;
 
+    // 1. Fetch Appointment (to check for legacy prescriptionID link)
+    const appointment = await Appointment.findById(appointmentId).lean();
+    if (!appointment) {
+      return res.status(404).json({ message: "Appointment not found" });
+    }
+
+    // 2. Build Query to find LINKED Prescriptions
+    const queryConditions = [
+      { appointment: appointmentId },     // Standard link
+      { appointmentID: appointmentId }    // Alternative naming link
+    ];
+
+    // Add legacy link if it exists in the appointment doc
+    if (appointment.prescriptionID) {
+      queryConditions.push({ _id: appointment.prescriptionID });
+    }
+
+    // 3. Fetch ONLY "Active" Prescriptions matching those links
+    const activePrescriptions = await Prescription.find({
+      $and: [
+        { $or: queryConditions },
+        { prescriptionStatus: "Active" } // <--- FILTER: Only Active
+      ]
+    }).select('_id').lean();
+
+    // If no active prescriptions found, return empty list immediately
+    if (activePrescriptions.length === 0) {
+      return res.status(200).json({
+        success: true,
+        message: "No active prescriptions found for this appointment",
+        data: []
+      });
+    }
+
+    // Extract just the IDs (e.g., ['68e4...', '691b...'])
+    const activePrescriptionIds = activePrescriptions.map(p => p._id);
+
+    // 4. Fetch Reminders linked to these Active Prescriptions
+    const reminders = await NotificationReminderSettings.find({
+      prescriptionId: { $in: activePrescriptionIds }
+    })
+    .sort({ date: 1, doseTime: 1 }) // Sorted chronologically
+    .lean();
+
+    // 5. Map the results to your requested fields
+    const formattedReminders = reminders.map(reminder => ({
+      reminderId: reminder._id,
+      prescriptionId: reminder.prescriptionId, // Included for reference
+      medicineName: reminder.medicineName,
+      date: reminder.date,
+      day: reminder.day || "-",
+      doseTime: reminder.doseTime,
+      quantityConsumed: reminder.quantityConsumed,
+      status: reminder.status // true/false/null
+    }));
+
+    return res.status(200).json({
+      success: true,
+      count: formattedReminders.length,
+      data: formattedReminders
+    });
+
+  } catch (error) {
+    console.error("Error fetching active reminders:", error);
+    return res.status(500).json({ message: "Server Error", error: error.message });
+  }
+};
 exports.getPatientHistoryForNewDash = async (req, res) => {
   try {
     const { patientId } = req.params;
@@ -2055,7 +2125,7 @@ exports.getPatientHistoryForNewDash = async (req, res) => {
 
     // 1. Fetch Patient
     const patient = await Patient.findById(patientId)
-      .select('patientUniqueId gender email address currentLocation patientEntry');
+      .select('patientUniqueId gender email address currentLocation patientEntry phone');
 
     if (!patient) {
       return res.status(404).json({ message: 'Patient not found' });
@@ -2136,7 +2206,8 @@ exports.getPatientHistoryForNewDash = async (req, res) => {
         address: check(patient.address, "-"),
         city: check(patient.currentLocation, "-"),
         source: check(patient.patientEntry, "-"),
-        lastVisit: check(lastVisitDate, "-")
+        lastVisit: check(lastVisitDate, "-"),
+        phoneNumber: check(patient.phone,"-")
       },
       appointments: processedAppointments
     };

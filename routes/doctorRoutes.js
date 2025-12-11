@@ -59,7 +59,7 @@ const {
   getPrescriptionsByAppointmentForNewDash,
   updatePrescriptionSpecificStatus,
   getPrescriptionRemindersForNewDash,
-  
+  getActiveRemindersByAppointment  
 } = require("../controllers/doctorController");
 const {
   upload,
@@ -77,6 +77,8 @@ const router = express.Router();
 router.get("/google/authorize", googleAuth);
 router.get("/google/callback", googleCallback);
 router.get("/show-all-payments-doctor/:doctorId", getPaymentsByDoctor);
+// GET /api/reminders/appointment/:appointmentId/active
+router.get('/appointment/:appointmentId/active', getActiveRemindersByAppointment);
 // GET /api/prescriptions/appointment/:appointmentId
 router.get('/appointment/:appointmentId', getPrescriptionsByAppointmentForNewDash);
 router.get("/zoom/authorize", zoomAuth);
