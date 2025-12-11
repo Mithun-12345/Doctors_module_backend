@@ -2190,8 +2190,16 @@ exports.getPatientHistoryForNewDash = async (req, res) => {
   try {
     const { patientId } = req.params;
 
-    // Helper
+    // Helper: Returns val if exists, else "-"
     const check = (val, fieldName) => (val && val !== "") ? val : fieldName;
+
+    // Helper: Specific check for Valid Dates
+    const checkDate = (dateVal) => {
+      if (!dateVal) return "-";
+      const d = new Date(dateVal);
+      // Check if date is valid (isValid check) AND not in the future (optional, based on your logic)
+      return !isNaN(d.getTime()) ? dateVal : "-";
+    };
 
     // 1. Fetch Patient
     const patient = await Patient.findById(patientId)
@@ -2209,25 +2217,19 @@ exports.getPatientHistoryForNewDash = async (req, res) => {
     // 3. Process Appointments
     const processedAppointments = await Promise.all(appointments.map(async (appt) => {
       
-      // --- FIX IS HERE ---
-      // Build the query conditions dynamically
       const queryConditions = [
-        { appointment: appt._id },     // Standard link
-        { appointmentID: appt._id }    // Alternative naming link
+        { appointment: appt._id },
+        { appointmentID: appt._id } 
       ];
 
-      // If the Appointment document has a legacy 'prescriptionID' field, add it to the search
       if (appt.prescriptionID) {
         queryConditions.push({ _id: appt.prescriptionID });
       }
 
-      // Fetch Prescriptions matching ANY of those conditions
       const prescriptions = await Prescription.find({ 
         $or: queryConditions
       }).lean();
-      // -------------------
 
-      // --- STATUS LOGIC (unchanged) ---
       let status = 'Unknown';
       const currentDate = new Date();
       const hasPrescriptions = prescriptions.length > 0;
@@ -2246,7 +2248,6 @@ exports.getPatientHistoryForNewDash = async (req, res) => {
         status = 'New';
       }
 
-      // Safe Access
       const dType = (appt.diseaseType && appt.diseaseType.name) ? appt.diseaseType.name : null;
 
       return {
@@ -2254,19 +2255,15 @@ exports.getPatientHistoryForNewDash = async (req, res) => {
         appointmentUniqueId: check(appt.appointmentUniqueId,"-"),
         diseaseType: check(dType, "Disease Type"), 
         consultingFor: check(appt.diseaseName, "Consulting For"),
-        
-        // This will now be correct because we fetched the legacy prescription too
         prescriptionCount: prescriptions.length, 
-        
         appointmentDate: check(appt.appointmentDate, "Appointment Date"),
         createdAt: check(appt.createdAt, "Created At"),
         status: check(status, "Status")
       };
     }));
 
-    // 4. Last Visit
-// 4. Last Visit (Strict Logic: Must be <= Today)
-let lastVisitVal = "-"; // Default to dash
+    // 4. Last Visit Logic (Robust & Strict)
+    let lastVisitVal = "-"; // Default to dash
 
     if (appointments.length > 0) {
       const now = new Date();
@@ -2281,6 +2278,7 @@ let lastVisitVal = "-"; // Default to dash
         lastVisitVal = pastAppt.appointmentDate;
       }
     }
+
     const responsePayload = {
       patientDetails: {
         id: check(patient._id, "ID"),
@@ -2290,8 +2288,10 @@ let lastVisitVal = "-"; // Default to dash
         address: check(patient.address, "-"),
         city: check(patient.currentLocation, "-"),
         source: check(patient.patientEntry, "-"),
-        lastVisit: checkDate(lastVisitVal),
-        phoneNumber: check(patient.phone,"-")
+        phoneNumber: check(patient.phone,"-"),
+        
+        // This is the safety net:
+        lastVisit: checkDate(lastVisitVal) 
       },
       appointments: processedAppointments
     };
