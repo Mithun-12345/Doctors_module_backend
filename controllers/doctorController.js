@@ -2266,15 +2266,19 @@ exports.getPatientHistoryForNewDash = async (req, res) => {
 
     // 4. Last Visit
 // 4. Last Visit (Strict Logic: Must be <= Today)
-    let lastVisitDate = null;
-    
+let lastVisitVal = "-"; // Default to dash
+
     if (appointments.length > 0) {
       const now = new Date();
-      // Since array is sorted DESC, the first one we find <= now is the correct Last Visit
-      const pastAppt = appointments.find(appt => new Date(appt.appointmentDate) <= now);
       
+      // Find the first appointment where date is Valid AND <= Today
+      const pastAppt = appointments.find(appt => {
+        const d = new Date(appt.appointmentDate);
+        return !isNaN(d.getTime()) && d <= now;
+      });
+
       if (pastAppt) {
-        lastVisitDate = pastAppt.appointmentDate;
+        lastVisitVal = pastAppt.appointmentDate;
       }
     }
     const responsePayload = {
