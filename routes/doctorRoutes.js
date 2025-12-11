@@ -54,7 +54,12 @@ const {
   rescheduleWelcomeCall,
   getNewPatientDashboard,
   updateWelcomeCallStatus,
-  getPatientCallLogs
+  getPatientCallLogs,
+  getPatientHistoryForNewDash,
+  getPrescriptionsByAppointmentForNewDash,
+  updatePrescriptionSpecificStatus,
+  getPrescriptionRemindersForNewDash,
+  
 } = require("../controllers/doctorController");
 const {
   upload,
@@ -72,6 +77,8 @@ const router = express.Router();
 router.get("/google/authorize", googleAuth);
 router.get("/google/callback", googleCallback);
 router.get("/show-all-payments-doctor/:doctorId", getPaymentsByDoctor);
+// GET /api/prescriptions/appointment/:appointmentId
+router.get('/appointment/:appointmentId', getPrescriptionsByAppointmentForNewDash);
 router.get("/zoom/authorize", zoomAuth);
 router.get("/zoom/callback", zoomCallback);
 router.get("/show-every-payment", getAllDoctorPaymentsTotal);
@@ -79,7 +86,12 @@ router.get('/follow-up-calls', getFollowUpCallList);
 router.patch('/update-follow-up-call-status/:appointmentId', updateFollowUpCallStatus);
 router.post("/todays-appointments",validateToken,getTodaysAppointments);
 router.patch('/update-follow-up-call', updateFollowUpCall);
+// PUT /api/prescriptions/status/:prescriptionId
+router.put('/status/:prescriptionId', updatePrescriptionSpecificStatus);
+// GET /api/reminders/prescription/:prescriptionId
+router.get('/prescription-new-dash/:prescriptionId', getPrescriptionRemindersForNewDash);
 router.post('/add-follow-up', addFollowUpCall);
+router.get('/history/:patientId', getPatientHistoryForNewDash);
 router.patch('/:patientId/allow-calls',validateToken, allowPhoneCalls);
 router.patch('/increment-call-count-by-one', incrementCallCountByOne);
 // GET method since we are just retrieving data

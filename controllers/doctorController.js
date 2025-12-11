@@ -1966,6 +1966,278 @@ exports.incrementCallCountByOne = async (req, res) => {
     res.status(500).json({ success: false, message: "Internal server error" });
   }
 };
+exports.getPrescriptionsByAppointmentForNewDash = async (req, res) => {
+  try {
+    const { appointmentId } = req.params;
+
+    // Helper: Returns val if exists, else "-"
+    const check = (val) => (val && val !== "" && val !== null && val !== undefined) ? val : "-";
+
+    // 1. Fetch Appointment Details
+    // We need this for diseaseType, consultingFor, and uniqueID
+    const appointment = await Appointment.findById(appointmentId).lean();
+
+    if (!appointment) {
+      return res.status(404).json({ message: "Appointment not found" });
+    }
+
+    // 2. Fetch Prescriptions linked to this Appointment
+    // Checking both 'appointmentID' (from your JSON) and 'appointment' (standard) to be safe
+    const prescriptions = await Prescription.find({
+      $or: [{ appointmentID: appointmentId }, { appointment: appointmentId }]
+    }).lean();
+
+    // Initialize Status Counter
+    const statusCounts = {};
+
+    // 3. Process Each Prescription
+    const processedPrescriptions = prescriptions.map(presc => {
+      
+      // A. Extract Medicine Names
+      const medicineNames = (presc.prescriptionItems && presc.prescriptionItems.length > 0)
+        ? presc.prescriptionItems.map(item => item.medicineName).join(", ")
+        : "-";
+
+      // B. Determine Status
+      // checking top-level 'status' first, then 'action.status' (from your JSON)
+      let rawStatus = presc.status || (presc.action ? presc.action.status : null);
+      const pStatus = check(rawStatus);
+
+      // C. Update Status Count
+      if (statusCounts[pStatus]) {
+        statusCounts[pStatus]++;
+      } else {
+        statusCounts[pStatus] = 1;
+      }
+
+      // D. Safe Access for Nested Appointment Fields
+      const apptDiseaseType = (appointment.diseaseType && appointment.diseaseType.name) 
+        ? appointment.diseaseType.name 
+        : "-";
+
+      return {
+        prescriptionId: check(presc._id),
+        prescriptionUniqueId: check(presc.prescriptionUniqueId), // Assuming this field exists in schema
+        
+        // Fields from Appointment Schema
+        appointmentUniqueId: check(appointment.appointmentUniqueId),
+        diseaseType: check(apptDiseaseType),
+        consultingFor: check(appointment.diseaseName), // Mapping 'diseaseName' to 'consultingFor'
+        
+        // Fields from Prescription Schema
+        createdAt: check(presc.createdAt),
+        medicineNames: medicineNames,
+        prescriptionStatus: pStatus
+      };
+    });
+
+    // 4. Construct Final Response
+    return res.status(200).json({
+      appointmentId: check(appointment._id),
+      appointmentUniqueId: check(appointment.appointmentUniqueId),
+      totalPrescriptions: prescriptions.length,
+      statusCounts: statusCounts.length === 0 ? "-" : statusCounts, // Return "-" if empty, else the object
+      prescriptions: processedPrescriptions
+    });
+
+  } catch (error) {
+    console.error("Error fetching prescriptions:", error);
+    return res.status(500).json({ message: "Server Error", error: error.message });
+  }
+};
+
+exports.getPatientHistoryForNewDash = async (req, res) => {
+  try {
+    const { patientId } = req.params;
+
+    // Helper
+    const check = (val, fieldName) => (val && val !== "") ? val : fieldName;
+
+    // 1. Fetch Patient
+    const patient = await Patient.findById(patientId)
+      .select('patientUniqueId gender email address currentLocation patientEntry');
+
+    if (!patient) {
+      return res.status(404).json({ message: 'Patient not found' });
+    }
+
+    // 2. Fetch Appointments
+    const appointments = await Appointment.find({ patient: patient._id })
+      .sort({ appointmentDate: -1 })
+      .lean();
+
+    // 3. Process Appointments
+    const processedAppointments = await Promise.all(appointments.map(async (appt) => {
+      
+      // --- FIX IS HERE ---
+      // Build the query conditions dynamically
+      const queryConditions = [
+        { appointment: appt._id },     // Standard link
+        { appointmentID: appt._id }    // Alternative naming link
+      ];
+
+      // If the Appointment document has a legacy 'prescriptionID' field, add it to the search
+      if (appt.prescriptionID) {
+        queryConditions.push({ _id: appt.prescriptionID });
+      }
+
+      // Fetch Prescriptions matching ANY of those conditions
+      const prescriptions = await Prescription.find({ 
+        $or: queryConditions
+      }).lean();
+      // -------------------
+
+      // --- STATUS LOGIC (unchanged) ---
+      let status = 'Unknown';
+      const currentDate = new Date();
+      const hasPrescriptions = prescriptions.length > 0;
+      
+      const allPrescriptionsExpired = hasPrescriptions && prescriptions.every(p => {
+        return p.endDate && new Date(p.endDate) < currentDate;
+      });
+
+      if (hasPrescriptions && allPrescriptionsExpired) {
+        status = 'Completed';
+      } else if (appt.follow && appt.follow.toLowerCase() === 'patient care') { 
+        status = 'Ongoing';
+      } else if (['Consultation', 'Prescription', 'Payment', 'Medicine Preparation'].includes(appt.follow)) {
+        status = 'New';
+      } else if (appt.status === 'confirmed' && !appt.follow) {
+        status = 'New';
+      }
+
+      // Safe Access
+      const dType = (appt.diseaseType && appt.diseaseType.name) ? appt.diseaseType.name : null;
+
+      return {
+        appointmentId: check(appt._id, "Appointment ID"),
+        appointmentUniqueId: check(appt.appointmentUniqueId,"-"),
+        diseaseType: check(dType, "Disease Type"), 
+        consultingFor: check(appt.diseaseName, "Consulting For"),
+        
+        // This will now be correct because we fetched the legacy prescription too
+        prescriptionCount: prescriptions.length, 
+        
+        appointmentDate: check(appt.appointmentDate, "Appointment Date"),
+        createdAt: check(appt.createdAt, "Created At"),
+        status: check(status, "Status")
+      };
+    }));
+
+    // 4. Last Visit
+    const lastVisitDate = appointments.length > 0 ? appointments[0].appointmentDate : null;
+
+    const responsePayload = {
+      patientDetails: {
+        id: check(patient._id, "ID"),
+        patientUniqueId: check(patient.patientUniqueId, "-"),
+        gender: check(patient.gender, "-"),
+        email: check(patient.email, "-"),
+        address: check(patient.address, "-"),
+        city: check(patient.currentLocation, "-"),
+        source: check(patient.patientEntry, "-"),
+        lastVisit: check(lastVisitDate, "-")
+      },
+      appointments: processedAppointments
+    };
+
+    return res.status(200).json(responsePayload);
+
+  } catch (error) {
+    console.error("Error fetching patient history:", error);
+    return res.status(500).json({ message: 'Server Error', error: error.message });
+  }
+};
+exports.getPrescriptionRemindersForNewDash = async (req, res) => {
+  try {
+    const { prescriptionId } = req.params;
+
+    // 1. Fetch Reminders
+    // We sort by 'date' (ASC) and then 'doseTime' (ASC) so the frontend gets an ordered timeline
+    const reminders = await NotificationReminderSettings.find({ prescriptionId: prescriptionId })
+      .sort({ date: 1, doseTime: 1 }) 
+      .lean();
+
+    if (!reminders || reminders.length === 0) {
+      return res.status(200).json({ 
+        message: "No reminders found for this prescription", 
+        data: [] 
+      });
+    }
+
+    // 2. Map specific fields requested
+    const formattedReminders = reminders.map(reminder => {
+      return {
+        reminderId: reminder._id, // Always good to include the ID for future updates
+        medicineName: reminder.medicineName,
+        date: reminder.date,      // Returns ISO Date string (e.g., 2025-12-12T00:00:00.000Z)
+        day: reminder.day || "-",
+        doseTime: reminder.doseTime,
+        quantityConsumed: reminder.quantityConsumed,
+        status: reminder.status   // true (Taken), false (Missed), or null (Pending)
+      };
+    });
+
+    // 3. Return Response
+    return res.status(200).json({
+      success: true,
+      count: formattedReminders.length,
+      data: formattedReminders
+    });
+
+  } catch (error) {
+    console.error("Error fetching prescription reminders:", error);
+    return res.status(500).json({ message: "Server Error", error: error.message });
+  }
+};
+exports.updatePrescriptionSpecificStatus = async (req, res) => {
+  try {
+    const { prescriptionId } = req.params; // Get ID from URL parameter
+    const { status } = req.body;           // Get new status from Body
+
+    // 1. Validate Input
+    if (!status) {
+      return res.status(400).json({ message: "Status is required" });
+    }
+
+    // Validate against allowed Enum values (Active, Hold, Closed)
+    const validStatuses = ["Active", "Hold", "Closed"];
+    if (!validStatuses.includes(status)) {
+      return res.status(400).json({ 
+        message: `Invalid status. Allowed values are: ${validStatuses.join(", ")}` 
+      });
+    }
+
+    // 2. Find and Update
+    const updatedPrescription = await Prescription.findByIdAndUpdate(
+      prescriptionId,
+      { 
+        prescriptionStatus: status,
+        updatedAt: Date.now() // Good practice to update timestamp
+      },
+      { new: true } // Return the updated document
+    );
+
+    if (!updatedPrescription) {
+      return res.status(404).json({ message: "Prescription not found" });
+    }
+
+    // 3. Success Response
+    return res.status(200).json({
+      success: true,
+      message: "Prescription status updated successfully",
+      data: {
+        prescriptionId: updatedPrescription._id,
+        newStatus: updatedPrescription.prescriptionStatus,
+        updatedAt: updatedPrescription.updatedAt
+      }
+    });
+
+  } catch (error) {
+    console.error("Error updating prescription status:", error);
+    return res.status(500).json({ message: "Server Error", error: error.message });
+  }
+};
 exports.updateFollowUpCall = async (req, res) => {
   try {
     const { 
