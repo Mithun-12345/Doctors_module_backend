@@ -36,12 +36,19 @@ const appointmentSchema = new mongoose.Schema(
       ref: "Doctor",
       required: false,
     },
+    
     patient: {
       type: mongoose.Types.ObjectId,
       ref: "Patient",
       required: false,
     },
-    
+    // --- NEW FIELD ADDED HERE ---
+    appointmentUniqueId: {
+      type: String,
+      required: true,
+      unique: true,
+      trim: true
+    },
     price: { type: String, required: false },
     appointmentDate: {
       type: Date,
@@ -134,11 +141,11 @@ const appointmentSchema = new mongoose.Schema(
     rescheduleCharges:{
       type: Number,
     },
-    prescriptionID: {
+// In appointmentModel.js
+    prescriptionID: [{  // <--- Changed to Array of Objects
       type: mongoose.Schema.Types.ObjectId,
       ref: "Prescription",
-      required: false,
-    },
+    }],
     callCount: {
       //no need in frontend
       type: Number,

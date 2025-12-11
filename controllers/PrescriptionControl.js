@@ -69,9 +69,21 @@ const createPrescription = async (req, res) => {
         }
       }
     }
+    // =================================================================
+    // --- GENERATE PRESCRIPTION UNIQUE ID (e.g., CHP001) ---
+    // =================================================================
+    const lastPrescription = await Prescription.findOne({}, { prescriptionUniqueId: 1 }).sort({ _id: -1 });
+
+    const lastNum = lastPrescription && lastPrescription.prescriptionUniqueId 
+        ? parseInt(lastPrescription.prescriptionUniqueId.replace("CHP", "")) 
+        : 0;
+
+    const generatedPrescriptionId = `CHP${String(lastNum + 1).padStart(3, "0")}`;
+    // =================================================================
 
     // Create prescription object (existing logic)
     const prescription = new Prescription({
+      prescriptionUniqueId: generatedPrescriptionId,
       patientId,
       doctorId,
       appointmentID,
@@ -230,7 +242,11 @@ const createPrescription = async (req, res) => {
       return res.status(404).json({ message: "Appointment not found" });
     }
     patientAppointment.prescriptionCreated = true;
-    patientAppointment.prescriptionID = savedPrescription._id;
+     // Check if the array exists (just in case), then push the new ID
+    if (!patientAppointment.prescriptionID) {
+    patientAppointment.prescriptionID = [];
+    }
+    patientAppointment.prescriptionID.push(savedPrescription._id);
     patientAppointment.follow = nextFollowStatus; // <-- FIX 1: Use the variable
     if (followUpDate) {
       // 1. Update the main timestamp (useful for sorting/filtering lists)

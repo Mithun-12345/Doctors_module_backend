@@ -251,6 +251,17 @@ const prescriptionSchema = new mongoose.Schema({
     type: mongoose.Schema.Types.ObjectId,
     ref: "Appointment",
   },
+  prescriptionStatus: {
+    type: String,
+    enum: ["Active", "Hold", "Closed"],
+    default: "Active"
+  },
+  prescriptionUniqueId: {
+    type: String,
+    required: true,
+    unique: true,
+    trim: true
+  },
   prescriptionItems: [prescriptionItemSchema],
   followUpDays: {
     type: Number,
@@ -288,6 +299,10 @@ const prescriptionSchema = new mongoose.Schema({
   shippedDate: {
   type: Date,
   default: null
+  },
+  shipmentLost:{
+    type:Boolean,
+    default:false
   },
   receivedDate: {
   type: Date,

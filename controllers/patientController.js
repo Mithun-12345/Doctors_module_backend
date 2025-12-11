@@ -1122,8 +1122,21 @@ exports.bookAppointment = asyncHandler(async (req, res) => {
 
 
     // ... (rest of your referral logic) ...
+        // =================================================================
+    // --- GENERATE APPOINTMENT UNIQUE ID (e.g., CH001) ---
+    // =================================================================
+    const lastAppt = await Appointment.findOne({}, { appointmentUniqueId: 1 }).sort({ _id: -1 });
+    
+    // If last exists, take number (e.g., 1 from CH001) and add 1. If not, start at 1.
+    const lastNum = lastAppt && lastAppt.appointmentUniqueId 
+        ? parseInt(lastAppt.appointmentUniqueId.replace("CH", "")) 
+        : 0;
+        
+    const generatedId = `CH${String(lastNum + 1).padStart(3, "0")}`;
+    // =================================================================
     
     const newAppointment = new Appointment({
+      appointmentUniqueId: generatedId, // <--- ADD THIS LINE
       patient: user._id,
       patientEmail: user.email,
       patientName: user.name,
@@ -1143,6 +1156,7 @@ exports.bookAppointment = asyncHandler(async (req, res) => {
       reservedAt: new Date(),
       expiresAt: new Date(Date.now() + 7 * 60 * 1000),
     });
+
 
     const savedAppointment = await newAppointment.save();
     if (user.newPatientFollowUp) {
