@@ -2290,7 +2290,7 @@ let lastVisitVal = "-"; // Default to dash
         address: check(patient.address, "-"),
         city: check(patient.currentLocation, "-"),
         source: check(patient.patientEntry, "-"),
-        lastVisit: check(lastVisitDate, "-"),
+        lastVisit: checkDate(lastVisitVal),
         phoneNumber: check(patient.phone,"-")
       },
       appointments: processedAppointments
