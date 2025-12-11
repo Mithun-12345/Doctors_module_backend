@@ -1966,6 +1966,7 @@ exports.incrementCallCountByOne = async (req, res) => {
     res.status(500).json({ success: false, message: "Internal server error" });
   }
 };
+
 exports.getPrescriptionsByAppointmentForNewDash = async (req, res) => {
   try {
     const { appointmentId } = req.params;
@@ -1974,23 +1975,36 @@ exports.getPrescriptionsByAppointmentForNewDash = async (req, res) => {
     const check = (val) => (val && val !== "" && val !== null && val !== undefined) ? val : "-";
 
     // 1. Fetch Appointment Details
-    // We need this for diseaseType, consultingFor, and uniqueID
     const appointment = await Appointment.findById(appointmentId).lean();
 
     if (!appointment) {
       return res.status(404).json({ message: "Appointment not found" });
     }
 
-    // 2. Fetch Prescriptions linked to this Appointment
-    // Checking both 'appointmentID' (from your JSON) and 'appointment' (standard) to be safe
+    // 2. Build Robust Query (checking all possible link locations)
+    const queryConditions = [
+      { appointment: appointmentId },     // Standard link
+      { appointmentID: appointmentId }    // Alternative link
+    ];
+
+    // If Appointment has a legacy ID stored, check that too
+    if (appointment.prescriptionID) {
+      queryConditions.push({ _id: appointment.prescriptionID });
+    }
+
+    // 3. Fetch Prescriptions
     const prescriptions = await Prescription.find({
-      $or: [{ appointmentID: appointmentId }, { appointment: appointmentId }]
+      $or: queryConditions
     }).lean();
 
-    // Initialize Status Counter
-    const statusCounts = {};
+    // 4. Initialize Status Counts (Strictly these 3)
+    const statusCounts = {
+      "Active": 0,
+      "Hold": 0,
+      "Closed": 0
+    };
 
-    // 3. Process Each Prescription
+    // 5. Process Prescriptions
     const processedPrescriptions = prescriptions.map(presc => {
       
       // A. Extract Medicine Names
@@ -1998,17 +2012,17 @@ exports.getPrescriptionsByAppointmentForNewDash = async (req, res) => {
         ? presc.prescriptionItems.map(item => item.medicineName).join(", ")
         : "-";
 
-      // B. Determine Status
-      // checking top-level 'status' first, then 'action.status' (from your JSON)
-      let rawStatus = presc.status || (presc.action ? presc.action.status : null);
-      const pStatus = check(rawStatus);
+      // B. Determine Status (Schema Field: prescriptionStatus)
+      // Default to "Active" if missing (as per your Schema default), or "-" if you prefer.
+      // We prioritize the explicit schema field.
+      const pStatus = presc.prescriptionStatus || "Active"; 
 
       // C. Update Status Count
-      if (statusCounts[pStatus]) {
+      // Only increment if it matches one of our valid keys to keep the object clean
+      if (statusCounts.hasOwnProperty(pStatus)) {
         statusCounts[pStatus]++;
-      } else {
-        statusCounts[pStatus] = 1;
-      }
+      } 
+      // Optional: If you have dirty data (e.g. "In Progress"), you might want to map it to "Active" here.
 
       // D. Safe Access for Nested Appointment Fields
       const apptDiseaseType = (appointment.diseaseType && appointment.diseaseType.name) 
@@ -2017,31 +2031,87 @@ exports.getPrescriptionsByAppointmentForNewDash = async (req, res) => {
 
       return {
         prescriptionId: check(presc._id),
-        prescriptionUniqueId: check(presc.prescriptionUniqueId), // Assuming this field exists in schema
+        prescriptionUniqueId: check(presc.prescriptionUniqueId),
         
         // Fields from Appointment Schema
         appointmentUniqueId: check(appointment.appointmentUniqueId),
         diseaseType: check(apptDiseaseType),
-        consultingFor: check(appointment.diseaseName), // Mapping 'diseaseName' to 'consultingFor'
+        consultingFor: check(appointment.diseaseName), 
         
         // Fields from Prescription Schema
         createdAt: check(presc.createdAt),
         medicineNames: medicineNames,
-        prescriptionStatus: pStatus
+        prescriptionStatus: pStatus // Returns Active, Hold, or Closed
       };
     });
 
-    // 4. Construct Final Response
+    // 6. Construct Final Response
     return res.status(200).json({
       appointmentId: check(appointment._id),
       appointmentUniqueId: check(appointment.appointmentUniqueId),
       totalPrescriptions: prescriptions.length,
-      statusCounts: statusCounts.length === 0 ? "-" : statusCounts, // Return "-" if empty, else the object
+      statusCounts: statusCounts, // Will always show Active/Hold/Closed counts
       prescriptions: processedPrescriptions
     });
 
   } catch (error) {
     console.error("Error fetching prescriptions:", error);
+    return res.status(500).json({ message: "Server Error", error: error.message });
+  }
+};
+exports.closePrescriptionsByAppointment = async (req, res) => {
+  try {
+    const { appointmentId } = req.params;
+
+    // 1. Fetch Appointment 
+    // We need this to check if it exists AND to get the legacy prescriptionID if present
+    const appointment = await Appointment.findById(appointmentId);
+
+    if (!appointment) {
+      return res.status(404).json({ message: "Appointment not found" });
+    }
+
+    // 2. Build Query Conditions
+    // Matches standard links OR legacy links
+    const queryConditions = [
+      { appointment: appointmentId },     // Field: appointment
+      { appointmentID: appointmentId }    // Field: appointmentID
+    ];
+
+    // If the Appointment doc has a legacy direct link, include it
+    if (appointment.prescriptionID) {
+      queryConditions.push({ _id: appointment.prescriptionID });
+    }
+
+    // 3. Perform Bulk Update
+    // updateMany finds all matching documents and sets the status to "Closed"
+    const result = await Prescription.updateMany(
+      { $or: queryConditions },
+      { 
+        $set: { 
+          prescriptionStatus: "Closed",
+          updatedAt: Date.now() // Keep timestamp fresh
+        } 
+      }
+    );
+
+    // 4. Return Response
+    if (result.matchedCount === 0) {
+      return res.status(200).json({
+        success: true,
+        message: "No prescriptions found linked to this appointment.",
+        count: 0
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: "Prescriptions closed successfully.",
+      count: result.modifiedCount // Number of prescriptions actually updated
+    });
+
+  } catch (error) {
+    console.error("Error closing prescriptions:", error);
     return res.status(500).json({ message: "Server Error", error: error.message });
   }
 };

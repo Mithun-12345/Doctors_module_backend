@@ -59,7 +59,8 @@ const {
   getPrescriptionsByAppointmentForNewDash,
   updatePrescriptionSpecificStatus,
   getPrescriptionRemindersForNewDash,
-  getActiveRemindersByAppointment  
+  getActiveRemindersByAppointment,
+  closePrescriptionsByAppointment
 } = require("../controllers/doctorController");
 const {
   upload,
@@ -81,6 +82,8 @@ router.get("/show-all-payments-doctor/:doctorId", getPaymentsByDoctor);
 router.get('/appointment/:appointmentId/active', getActiveRemindersByAppointment);
 // GET /api/prescriptions/appointment/:appointmentId
 router.get('/appointment/:appointmentId', getPrescriptionsByAppointmentForNewDash);
+// PUT /api/prescriptions/close-all/:appointmentId
+router.put('/close-all/:appointmentId', closePrescriptionsByAppointment);
 router.get("/zoom/authorize", zoomAuth);
 router.get("/zoom/callback", zoomCallback);
 router.get("/show-every-payment", getAllDoctorPaymentsTotal);
