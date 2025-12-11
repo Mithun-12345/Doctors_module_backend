@@ -2265,8 +2265,18 @@ exports.getPatientHistoryForNewDash = async (req, res) => {
     }));
 
     // 4. Last Visit
-    const lastVisitDate = appointments.length > 0 ? appointments[0].appointmentDate : null;
-
+// 4. Last Visit (Strict Logic: Must be <= Today)
+    let lastVisitDate = null;
+    
+    if (appointments.length > 0) {
+      const now = new Date();
+      // Since array is sorted DESC, the first one we find <= now is the correct Last Visit
+      const pastAppt = appointments.find(appt => new Date(appt.appointmentDate) <= now);
+      
+      if (pastAppt) {
+        lastVisitDate = pastAppt.appointmentDate;
+      }
+    }
     const responsePayload = {
       patientDetails: {
         id: check(patient._id, "ID"),
