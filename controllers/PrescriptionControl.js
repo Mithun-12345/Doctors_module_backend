@@ -187,6 +187,8 @@ const createPrescription = async (req, res) => {
         });
         return {
           medicineName: item.medicineName || "",
+          isMixedMedicine: item.isMixedMedicine || false,
+          mixedMedicineNo: item.mixedMedicineNo || 0,
           rawMaterialDetails: (item.rawMaterialDetails || []).map((rm) => ({
             _id: rm._id,
             name: rm.name,

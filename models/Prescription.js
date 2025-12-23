@@ -134,6 +134,14 @@ const prescriptionItemSchema = new mongoose.Schema({
     enum: ["Standard", "Frequent", "standard", "frequent"],
     required: false,
   },
+  isMixedMedicine: {
+    type: Boolean,
+    default: false,
+  },
+  mixedMedicineNo: {
+    type: Number,
+    default: 0, // Used to group specific raw materials into "Mix #1", "Mix #2", etc.
+  },
   // Store the complete frequency configuration
   frequencies: [
     {
