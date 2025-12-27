@@ -57,6 +57,7 @@ const {
   getDashboardStatistics,
   getAllAppointmentCountsByStagePerfect,
   updatePatientAddress,
+  getPaymentsByAppointment 
 } = require("../controllers/patientController");
 const {
   upload,
@@ -101,6 +102,7 @@ router.post(
 router.post("/bookAppointment", validateToken, bookAppointment);
 router.post("/deleteAppointment/:appointmentId",validateToken,  deleteAppointment);
 router.put("/editAppointment/:appointmentId",validateToken, editAppointmentOnce);
+router.get('/new-crm-appointment/:appointmentId',getPaymentsByAppointment);
 
 router.post("/createDoctorAppointmentInitialSetup",validateToken,createDoctorAppointmentInitialSetup);
 router.post("/appointmentBookingTimeSlot",validateToken,appointmentBookingTimeSlot);

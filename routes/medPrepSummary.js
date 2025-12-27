@@ -28,7 +28,8 @@ const {
   setMedicineExpiryDate,
   updateShipmentStatus,
   getFollowUpAppointmentsPrescriptions,
-  getPatientPendingShipments
+  getPatientPendingShipments,
+  getMedicinePreparationSummariesByPrescriptionIds
 } = require('../controllers/medPrepSummary');
 
 
@@ -38,6 +39,7 @@ router.patch("/update-preweight", updatePreWeight);
 router.patch("/update-postweight", updatePostWeight);
 router.get('/leakages/detected', getAllLeakagesDetected);
 router.get('/leakages/above-threshold', getLeakagesAboveThreshold);
+router.post('/summaries', getMedicinePreparationSummariesByPrescriptionIds);
 router.patch('/summary', getAllMedPrepSummaryData );
 router.post('/upload-preparation-video', upload.single('video'), uploadPreparationVideo);
 router.get('/packaging', getPackagingMaterials );

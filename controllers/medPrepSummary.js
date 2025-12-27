@@ -850,6 +850,55 @@ const  getAllMedicinePreparationSummaries = async (req, res) => {
     res.status(500).json({ message: "Server error while fetching medicine preparations" });
   }
 };
+const getMedicinePreparationSummariesByPrescriptionIds = async (req, res) => {
+  try {
+    // 1. Get prescriptionIds from payload (request body)
+    const { prescriptionIds } = req.body;
+
+    if (!prescriptionIds || !Array.isArray(prescriptionIds)) {
+      return res.status(400).json({ 
+        message: "Please provide an array of prescriptionIds in the request body." 
+      });
+    }
+
+    // 2. Fetch only preparation documents matching the provided IDs
+    const allPreparations = await MedicinePreparationSummary.find({
+      prescriptionId: { $in: prescriptionIds }
+    });
+
+    // 3. Keep the enrichment logic exactly the same
+    const enrichedPreparations = await Promise.all(
+      allPreparations.map(async (preparation) => {
+        const prescription = await Prescription.findById(preparation.prescriptionId);
+        if (!prescription) {
+          return {
+            ...preparation.toObject(),
+            doctorId: null,
+            doctorName: null,
+            patientId: null,
+            patientName: null
+          };
+        }
+
+        const doctor = await Doctor.findById(prescription.doctorId);
+        const patient = await Patient.findById(prescription.patientId);
+
+        return {
+          ...preparation.toObject(),
+          doctorId: prescription.doctorId || null,
+          doctorName: doctor?.name || null,
+          patientId: prescription.patientId || null,
+          patientName: patient?.name || null
+        };
+      })
+    );
+
+    res.status(200).json(enrichedPreparations);
+  } catch (error) {
+    console.error("Error fetching medicine preparations:", error);
+    res.status(500).json({ message: "Server error while fetching medicine preparations" });
+  }
+};
 
 const updateMedicinePrepared = async (req, res) => {
     try {
@@ -1528,6 +1577,7 @@ module.exports = {
   updateShipmentStatus,
   setMedicineExpiryDate,
   getFollowUpAppointmentsPrescriptions,
-  getPatientPendingShipments
+  getPatientPendingShipments,
+  getMedicinePreparationSummariesByPrescriptionIds
 };
 

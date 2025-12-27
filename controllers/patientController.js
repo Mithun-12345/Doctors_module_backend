@@ -3640,6 +3640,52 @@ exports.getPaymentsByPatient = async (req, res) => {
     res.status(500).json({ success: false, message: "Server Error" });
   }
 };
+exports.getPaymentsByAppointment = async (req, res) => {
+  try {
+    const { appointmentId } = req.params; // Now taking appointmentId from params
+
+    // 1. Validate if the provided appointmentId is a valid MongoDB ObjectId
+    if (!mongoose.Types.ObjectId.isValid(appointmentId)) {
+      return res.status(400).json({ 
+        success: false, 
+        message: "Invalid Appointment ID format." 
+      });
+    }
+
+    // 2. Find all payments associated directly with this specific appointmentId
+    const payments = await Payment.find({ appointmentId: appointmentId })
+      .populate({
+        path: 'appointmentId',
+        select: 'appointmentDate timeSlot doctor', 
+        populate: {
+          path: 'doctor',
+          select: 'name specialization' 
+        }
+      })
+      .sort({ createdAt: -1 });
+
+    // 3. Handle case where no payments exist for this ID
+    if (!payments || payments.length === 0) {
+      return res.json({
+        success: true,
+        message: "No payments found for this specific appointment.",
+        data: [],
+      });
+    }
+
+    // 4. Return the same response structure
+    res.json({
+      success: true,
+      message: "Payments retrieved successfully.",
+      count: payments.length,
+      data: payments,
+    });
+
+  } catch (err) {
+    console.error("Error fetching appointment payments:", err);
+    res.status(500).json({ success: false, message: "Server Error" });
+  }
+};
 // Assuming Appointment and Doctor models are imported
 
 exports.getAllAppointmentsForPatientDashboard = async (req, res) => {
