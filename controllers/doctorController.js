@@ -2186,6 +2186,52 @@ exports.getActiveRemindersByAppointment = async (req, res) => {
     return res.status(500).json({ message: "Server Error", error: error.message });
   }
 };
+exports.getPatientAppointmentStatusForNewCRM = async (req, res) => {
+  try {
+    const { patientId } = req.body; // Getting patientId from payload
+
+    if (!patientId) {
+      return res.status(400).json({ success: false, message: "patientId is required" });
+    }
+
+    // Fetch appointments for the patient
+    const appointments = await Appointment.find({ patient: patientId })
+      .select("appointmentUniqueId follow")
+      .lean();
+
+    let completedCount = 0;
+    let ongoingCount = 0;
+
+    // Map through appointments to apply custom status logic
+    const data = appointments.map((app) => {
+      // Custom Logic: Miscellaneous -> Completed, Else -> Ongoing
+      const calculatedStatus = app.follow === "Miscellaneous" ? "Completed" : "Ongoing";
+
+      // Update counters
+      if (calculatedStatus === "Completed") completedCount++;
+      else ongoingCount++;
+
+      return {
+        appointmentId: app._id,
+        appointmentUniqueId: app.appointmentUniqueId,
+        status: calculatedStatus,
+      };
+    });
+
+    res.status(200).json({
+      success: true,
+      counts: {
+        total: appointments.length,
+        completed: completedCount,
+        ongoing: ongoingCount,
+      },
+      data: data,
+    });
+  } catch (error) {
+    console.error("Error fetching appointment statuses:", error);
+    res.status(500).json({ success: false, message: "Internal server error" });
+  }
+};
 exports.getPatientHistoryForNewDash = async (req, res) => {
   try {
     const { patientId } = req.params;

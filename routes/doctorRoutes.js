@@ -60,7 +60,8 @@ const {
   updatePrescriptionSpecificStatus,
   getPrescriptionRemindersForNewDash,
   getActiveRemindersByAppointment,
-  closePrescriptionsByAppointment
+  closePrescriptionsByAppointment,
+  getPatientAppointmentStatusForNewCRM
 } = require("../controllers/doctorController");
 const {
   upload,
@@ -103,6 +104,8 @@ router.patch('/increment-call-count-by-one', incrementCallCountByOne);
 router.get("/reports/prescription-follow-ups", getPrescriptionFollowUpReport);
 router.get('/patient-calls', getPatientCallReport);
 router.get('/dashboard/new-patients', getNewPatientDashboard);
+// URL: POST /api/appointments/status-summary
+router.post('/status-summary',getPatientAppointmentStatusForNewCRM);
 
 // 3. Define the route to increment the call count
 router.patch('/:patientId/increment-call',validateToken, incrementCallCount);
