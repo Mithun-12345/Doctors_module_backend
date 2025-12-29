@@ -1009,6 +1009,7 @@ exports.bookAppointment = asyncHandler(async (req, res) => {
     consultingFor,
     consultingReason,
     symptom,
+    isEmergency,
   } = req.body;
   
   const doctorId = "67bc3391654d85340a8ce713"; // should be changed
@@ -1150,6 +1151,7 @@ exports.bookAppointment = asyncHandler(async (req, res) => {
       timeSlot,
       appointmentSlotType: newSlotDetails.slotType, // <-- THIS IS THE NEW LINE
       isChronic,
+      isEmergency: isEmergency || false,
       status: "reserved",
       isPaid: false,
       payment: appointmentPrice, 

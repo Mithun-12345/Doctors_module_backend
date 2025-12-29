@@ -42,6 +42,10 @@ const appointmentSchema = new mongoose.Schema(
       ref: "Patient",
       required: false,
     },
+    isEmergency: {
+    type: Boolean,
+    default: false,
+  },
     // --- NEW FIELD ADDED HERE ---
     appointmentUniqueId: {
       type: String,
