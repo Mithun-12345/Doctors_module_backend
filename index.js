@@ -85,7 +85,7 @@ const geminiTextServiceRoutes=require("./routes/geminiTextServiceRoutes.js")
 const creditDebitRoutes = require('./routes/debitCreditRoutes.js');
 const dashboardAnalyticsRoutes= require('./routes/dashboardAnalyticsRoutes.js')
 const followUpSetting = require("./routes/followUpRoute.js");
-
+const callRoutes = require("./routes/IvrCallRoutes.js");
 
 // ✅ CUSTOM MIDDLEWARE
 const validateToken = require("./middlewares/validateTokenHandler");
@@ -173,6 +173,7 @@ app.use("/api/notification", pushNotificationRouter);
 app.use("/api/payments", paymentRoutes);
 app.use("/api/gemini",geminiTextServiceRoutes);
 app.use('/api/notes', creditDebitRoutes);
+app.use("/api/call", callRoutes);
 
 // =================================================================================
 //                              SOCKET.IO LOGIC
