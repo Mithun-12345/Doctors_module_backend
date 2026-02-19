@@ -1,4 +1,5 @@
 const axios = require("axios");
+
 const Patient = require("../models/patientModel");
 const CallLog = require("../models/CallLog");
 
@@ -10,28 +11,29 @@ exports.callPatient = async (req, res) => {
       return res.status(400).json({ message: "patientId is required" });
     }
 
-    const { API_TOKEN, API_KEY, AGENT_MOBILE } = process.env;
-console.log("ENV VALUES:", {
-  API_TOKEN: process.env.API_TOKEN,
-  API_KEY: process.env.API_KEY,
-  AGENT_MOBILE: process.env.AGENT_MOBILE
-});
+    const {
+      COMPANY_ID,
+      SECRET_TOKEN,
+      PUBLIC_IVR_ID,
+      X_API_KEY
+    } = process.env;
 
-    if (!API_TOKEN || !API_KEY || !AGENT_MOBILE) {
+    if (!COMPANY_ID || !SECRET_TOKEN || !PUBLIC_IVR_ID || !X_API_KEY) {
       return res.status(500).json({
-        message: "MyOperator Public API credentials missing"
+        message: "OBD API credentials missing"
       });
     }
 
-    //  Find Patient
+   
+  
+
+    //  Get Patient
     const patient = await Patient.findById(patientId);
 
-    if (!patient) {
-      return res.status(404).json({ message: "Patient not found" });
-    }
-
-    if (!patient.phoneAllowed) {
-      return res.status(403).json({ message: "Patient not allowed for call" });
+    if (!patient || !patient.phoneAllowed) {
+      return res.status(400).json({
+        message: "Patient not available for call"
+      });
     }
 
     const formattedNumber = patient.phone.startsWith("+")
@@ -40,8 +42,9 @@ console.log("ENV VALUES:", {
 
     const referenceId = `CALL_${Date.now()}`;
 
-    //  Create Call Log
+    // Create Call Log
     const callLog = await CallLog.create({
+     
       patient: patient._id,
       patientPhone: formattedNumber,
       referenceId,
@@ -49,44 +52,45 @@ console.log("ENV VALUES:", {
       status: "initiated"
     });
 
-    console.log("Calling from:", AGENT_MOBILE);
-    console.log("Calling to:", formattedNumber);
+    console.log("Calling via OBD...");
+    console.log("Patient number:", formattedNumber);
 
     try {
       const response = await axios.post(
-"https://api.myoperator.co/v1/clicktocall", 
-       {
-          from: AGENT_MOBILE,
-          to: formattedNumber
+        "https://obd-api.myoperator.co/obd-api-v1",
+        {
+          company_id: COMPANY_ID,
+          secret_token: SECRET_TOKEN,
+          type: "1", 
+          user_id: "6984348450629128", 
+          number: formattedNumber,
+          public_ivr_id: PUBLIC_IVR_ID,
+          reference_id: referenceId
         },
         {
           headers: {
-            "Authorization": `Bearer ${API_TOKEN}`,
-            "x-api-key": API_KEY,
+            "x-api-key": X_API_KEY,
             "Content-Type": "application/json"
           },
           timeout: 10000
         }
       );
 
-      // 🔹 Update log on success
       callLog.status = "ringing";
       callLog.providerResponse = response.data;
       await callLog.save();
 
-      patient.phoneReceived += 1;
-      await patient.save();
-
       return res.status(200).json({
-        message: "Call initiated successfully",
+        message: "Call initiated successfully via OBD",
         data: response.data
       });
 
     } catch (apiError) {
+
       const providerStatus = apiError.response?.status || 500;
       const providerData = apiError.response?.data || apiError.message;
 
-      console.error("MyOperator Error:", providerStatus, providerData);
+      console.error("OBD Error:", providerStatus, providerData);
 
       callLog.status = "failed";
       callLog.errorMessage =
@@ -95,7 +99,7 @@ console.log("ENV VALUES:", {
       await callLog.save();
 
       return res.status(providerStatus).json({
-        message: "Call failed",
+        message: "Call failed via OBD",
         error: providerData
       });
     }
@@ -107,5 +111,26 @@ console.log("ENV VALUES:", {
       message: "Server error",
       error: error.message
     });
+  }
+};
+
+exports.checkPatient = async (req, res) => {
+  try {
+    const callerNumber = req.body.from; 
+
+    const patient = await Patient.findOne({ phone: callerNumber });
+
+    if (patient) {
+      return res.json({
+        status: "existing"
+      });
+    } else {
+      return res.json({
+        status: "new"
+      });
+    }
+
+  } catch (error) {
+    res.status(500).json({ status: "error" });
   }
 };

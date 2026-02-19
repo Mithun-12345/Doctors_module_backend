@@ -386,15 +386,36 @@ exports.doctorDetails = async (req, res) => {
 exports.getDoctorFollow = async (req, res) => {
   console.log("GetDoctorFollow reached");
   console.log("GetDoctorFollow reached");
-  const phone = req.user.phone; // Use the phone from the token
+  const phone = req.user.phone; 
   console.log("doctor Phone:", phone);
   console.log("doctor Phone:", phone);
   try {
-    const doctor = await Doctor.findOne({ phone }); // Find by phone instead of ID
+    const doctor = await Doctor.findOne({ phone }); 
     if (!doctor) {
       return res.status(404).json({ message: "Doctor not found" });
     }
-    res.json({ follow: doctor.follow });
+     const removeList = [
+      "Chronic-New",
+      "Chronic-Existing",
+      "Acute-New",
+      "Acute-Existing",
+      "Medicine-Prep"
+    ];
+
+    let filteredFollow = doctor.follow;
+
+    // If follow is a comma-separated string
+    if (typeof doctor.follow === "string") {
+      filteredFollow = doctor.follow
+        .split(",")
+        .map(item => item.trim())
+        .filter(item => !removeList.includes(item))
+        .join(", ");
+    }
+
+
+    res.json({ follow: filteredFollow });
+console.log(filteredFollow,"filteredFollow")
   } catch (error) {
     res.status(500).json({ message: "Server error" });
   }
