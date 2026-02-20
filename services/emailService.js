@@ -1,14 +1,17 @@
 require('dotenv').config();
-const Brevo = require('@getbrevo/brevo');
 
-// Initialize the API instance
-const apiInstance = new Brevo.TransactionalEmailsApi();
+const {
+  TransactionalEmailsApi,
+  TransactionalEmailsApiApiKeys
+} = require('@getbrevo/brevo');
 
-// ✅ Correct way to set API key for newer versions
+const apiInstance = new TransactionalEmailsApi();
+
 apiInstance.setApiKey(
-  Brevo.TransactionalEmailsApiApiKeys.apiKey,
+  TransactionalEmailsApiApiKeys.apiKey,
   process.env.BREVO_API_KEY
 );
+
 
 
 /**
@@ -87,4 +90,4 @@ const sendPasswordResetEmail = async (userEmail, resetUrl) => {
   }
 };
 
-module.exports = { sendSetPasswordEmail, sendPasswordResetEmail };
+module.exports = { sendSetPasswordEmail, sendPasswordResetEmail, };

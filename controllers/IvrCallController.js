@@ -115,22 +115,17 @@ exports.callPatient = async (req, res) => {
 };
 
 exports.checkPatient = async (req, res) => {
-  try {
-    const callerNumber = req.body.from; 
+  const callerNumber = req.body.from;
 
-    const patient = await Patient.findOne({ phone: callerNumber });
+  const patient = await Patient.findOne({ phone: callerNumber });
 
-    if (patient) {
-      return res.json({
-        status: "existing"
-      });
-    } else {
-      return res.json({
-        status: "new"
-      });
-    }
-
-  } catch (error) {
-    res.status(500).json({ status: "error" });
+  if (patient) {
+    return res.json({
+      route: "existing"
+    });
+  } else {
+    return res.json({
+      route: "new"
+    });
   }
 };
