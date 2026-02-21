@@ -24,8 +24,8 @@ exports.callPatient = async (req, res) => {
       });
     }
 
-   
-  
+
+
 
     //  Get Patient
     const patient = await Patient.findById(patientId);
@@ -44,7 +44,7 @@ exports.callPatient = async (req, res) => {
 
     // Create Call Log
     const callLog = await CallLog.create({
-     
+
       patient: patient._id,
       patientPhone: formattedNumber,
       referenceId,
@@ -61,8 +61,8 @@ exports.callPatient = async (req, res) => {
         {
           company_id: COMPANY_ID,
           secret_token: SECRET_TOKEN,
-          type: "1", 
-          user_id: "6984348450629128", 
+          type: "1",
+          user_id: "6984348450629128",
           number: formattedNumber,
           public_ivr_id: PUBLIC_IVR_ID,
           reference_id: referenceId
@@ -115,17 +115,29 @@ exports.callPatient = async (req, res) => {
 };
 
 exports.checkPatient = async (req, res) => {
-  const callerNumber = req.body.from;
+  try {
+    const callerNumber = req.body.from ||
+      req.body.number ||
+      req.query.from ||
+      req.query.number;
+console.log(callerNumber,"caller")
+    if (!callerNumber) {
+      return res.status(400).json({
+        error: "Caller number is required"
+      });
+    }
 
-  const patient = await Patient.findOne({ phone: callerNumber });
+    const patient = await Patient.findOne({ phone: callerNumber });
 
-  if (patient) {
-    return res.json({
-      route: "existing"
-    });
-  } else {
-    return res.json({
-      route: "new"
-    });
+    if (patient) {
+      return res.json({ route: "existing" });
+    } else {
+      return res.json({ route: "new" });
+    }
+
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ error: "Server error" });
   }
 };
+

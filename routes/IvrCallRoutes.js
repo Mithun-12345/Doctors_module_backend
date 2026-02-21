@@ -6,6 +6,7 @@ const IvrCallController = require("../controllers/IvrCallController");
 
 router.post("/call-patient", IvrCallController.callPatient);
 
-router.post("/check-patient", IvrCallController.checkPatient);
+router.all("/check-patient", IvrCallController.checkPatient);
+
 
 module.exports = router;
