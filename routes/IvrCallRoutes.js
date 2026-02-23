@@ -8,5 +8,7 @@ router.post("/call-patient", IvrCallController.callPatient);
 
 router.all("/check-patient", IvrCallController.checkPatient);
 
+router.post("/webhook", IvrCallController.afterCallWebhook);
+
 
 module.exports = router;

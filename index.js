@@ -174,6 +174,8 @@ app.use("/api/payments", paymentRoutes);
 app.use("/api/gemini",geminiTextServiceRoutes);
 app.use('/api/notes', creditDebitRoutes);
 app.use("/api/call", callRoutes);
+app.use("/api/myoperator", callRoutes);
+
 
 // =================================================================================
 //                              SOCKET.IO LOGIC

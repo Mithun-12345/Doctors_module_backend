@@ -141,3 +141,55 @@ console.log(callerNumber,"caller")
   }
 };
 
+exports.afterCallWebhook = async (req, res) => {
+  try {
+    console.log("📞 MyOperator Webhook received:", req.body);
+
+    const {
+      unique_id,
+      reference_id,
+      call_status,
+      duration,
+      recording_url
+    } = req.body;
+
+    if (!reference_id) {
+      return res.status(400).json({
+        message: "reference_id missing in webhook"
+      });
+    }
+
+ 
+    const call = await CallLog.findOne({ referenceId: reference_id });
+
+    if (!call) {
+      console.log("Call not found for reference:", reference_id);
+      return res.status(404).json({
+        message: "Call not found"
+      });
+    }
+
+  
+    call.status = call_status || call.status;
+    call.duration = duration || 0;
+    call.recordingUrl = recording_url || null;
+    call.providerUniqueId = unique_id || null;
+
+    await call.save();
+
+    console.log("Call log updated successfully");
+
+    return res.status(200).json({
+      message: "Webhook processed successfully"
+    });
+
+  } catch (error) {
+    console.error("Webhook Error:", error);
+
+    return res.status(500).json({
+      message: "Webhook server error",
+      error: error.message
+    });
+  }
+};
+
