@@ -13,7 +13,7 @@ const callLogSchema = new mongoose.Schema(
       required: true
     },
 
-    reference_id: {
+    referenceId: {
       type: String,
       required: true
     },
@@ -56,7 +56,7 @@ const callLogSchema = new mongoose.Schema(
       type: Object
     },
 
-  
+
     errorMessage: {
       type: String
     }

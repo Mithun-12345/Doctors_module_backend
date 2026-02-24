@@ -47,7 +47,7 @@ exports.callPatient = async (req, res) => {
 
       patient: patient._id,
       patientPhone: formattedNumber,
-      referenceId,
+      referenceId:referenceId,
       direction: "agent_to_patient",
       status: "initiated"
     });
@@ -143,6 +143,15 @@ console.log(callerNumber,"caller")
 
 exports.afterCallWebhook = async (req, res) => {
   try {
+  console.log("========== WEBHOOK RECEIVED ==========");
+    console.log("Headers:", req.headers);
+    console.log("Body:", JSON.stringify(req.body, null, 2));
+    console.log("======================================");
+    const webhookKey = req.headers["x-api-key"];
+
+if (webhookKey !== process.env.X_API_KEY) {
+  return res.status(403).json({ message: "Unauthorized webhook" });
+}
     console.log("📞 MyOperator Webhook received:", req.body);
 
     const {
@@ -170,9 +179,9 @@ exports.afterCallWebhook = async (req, res) => {
     }
 
   
-    call.status = call_status || call.status;
+    call.status = call_status
     call.duration = duration || 0;
-    call.recordingUrl = recording_url || null;
+    call.recording_url = recording_url || null;
     call.providerUniqueId = unique_id || null;
 
     await call.save();
