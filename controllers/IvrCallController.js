@@ -179,10 +179,10 @@ if (webhookKey !== process.env.X_API_KEY) {
     }
 
   
-    call.status = call_status
+    call.call_status = call_status
     call.duration = duration || 0;
     call.recording_url = recording_url || null;
-    call.providerUniqueId = unique_id || null;
+    call.unique_id = unique_id || null;
 
     await call.save();
 

@@ -13,7 +13,7 @@ const callLogSchema = new mongoose.Schema(
       required: true
     },
 
-    referenceId: {
+    referenceId: {   
       type: String,
       required: true
     },
@@ -32,12 +32,11 @@ const callLogSchema = new mongoose.Schema(
     call_status: {
       type: String,
       enum: [
-        "initiated",
-        "ringing",
-        "connected",
+        "answered",
         "completed",
-        "missed",
-        "failed"
+        "failed",
+        "busy",
+        "no-answer"
       ],
       default: "initiated"
     },
