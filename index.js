@@ -86,7 +86,7 @@ const creditDebitRoutes = require('./routes/debitCreditRoutes.js');
 const dashboardAnalyticsRoutes= require('./routes/dashboardAnalyticsRoutes.js')
 const followUpSetting = require("./routes/followUpRoute.js");
 const callRoutes = require("./routes/IvrCallRoutes.js");
-
+const myOperatorRoutes = require("./routes/myOperatorRoutes");
 // ✅ CUSTOM MIDDLEWARE
 const validateToken = require("./middlewares/validateTokenHandler");
 
@@ -174,7 +174,7 @@ app.use("/api/payments", paymentRoutes);
 app.use("/api/gemini",geminiTextServiceRoutes);
 app.use('/api/notes', creditDebitRoutes);
 app.use("/api/call", callRoutes);
-app.use("/api/myoperator", callRoutes);
+app.use("/api/myoperator", myOperatorRoutes);
 
 
 // =================================================================================

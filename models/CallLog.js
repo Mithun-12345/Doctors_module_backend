@@ -32,6 +32,7 @@ const callLogSchema = new mongoose.Schema(
     call_status: {
       type: String,
       enum: [
+        "initiated",
         "answered",
         "completed",
         "failed",
