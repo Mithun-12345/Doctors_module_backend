@@ -49,7 +49,7 @@ exports.callPatient = async (req, res) => {
       patientPhone: formattedNumber,
       referenceId:referenceId,
       direction: "agent_to_patient",
-      status: "initiated"
+      call_status: "initiated"
     });
 
     console.log("Calling via OBD...");
@@ -76,7 +76,7 @@ exports.callPatient = async (req, res) => {
         }
       );
 
-      callLog.status = "ringing";
+      callLog.call_status = "ringing";
       callLog.providerResponse = response.data;
       await callLog.save();
 
@@ -92,7 +92,7 @@ exports.callPatient = async (req, res) => {
 
       console.error("OBD Error:", providerStatus, providerData);
 
-      callLog.status = "failed";
+      callLog.call_status = "failed";
       callLog.errorMessage =
         providerData?.message || apiError.message;
 
@@ -147,9 +147,9 @@ exports.afterCallWebhook = async (req, res) => {
     console.log("Headers:", req.headers);
     console.log("Body:", JSON.stringify(req.body, null, 2));
     console.log("======================================");
-    const webhookKey = req.headers["x-api-key"];
+   const authHeader = req.headers["authorization"];
 
-if (webhookKey !== process.env.X_API_KEY) {
+if (!authHeader || authHeader !== `Bearer ${process.env.API_TOKEN}`) {
   return res.status(403).json({ message: "Unauthorized webhook" });
 }
     console.log("📞 MyOperator Webhook received:", req.body);
