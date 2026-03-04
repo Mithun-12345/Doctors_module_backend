@@ -48,11 +48,11 @@ const appointmentSchema = new mongoose.Schema(
   },
     // --- NEW FIELD ADDED HERE ---
     appointmentUniqueId: {
-      type: String,
-      required: true,
-      unique: true,
-      trim: true
-    },
+  type: String,
+  required: true,
+  unique: true,
+
+},
     price: { type: String, required: false },
     appointmentDate: {
       type: Date,
@@ -65,6 +65,10 @@ const appointmentSchema = new mongoose.Schema(
     payment: {
       required: false,
       type: Number,
+    },
+    paymentSettled: {
+      required: false,
+      type: Boolean,
     },
     isChronic: {
       type: Boolean,

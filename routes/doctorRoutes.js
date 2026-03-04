@@ -6,6 +6,7 @@ const Message = require('../models/messageModel'); // Or whatever the path to yo
 const {
   addDoctor,
   getAvailableSlots,
+  bookAppointment,
   getAppointments,
   redirectAppointment,
   getDoctorAppointments,
@@ -39,7 +40,7 @@ const {
   getTodaysAppointmentCount,
   markShipmentAsLost,
   markAppointmentAsNoShow,
-  allowPhoneCalls, 
+  allowPhoneCalls,
   incrementCallCount,
   markDoctorAttendance,
   getDoctorAttendanceReport,
@@ -50,7 +51,7 @@ const {
   incrementCallCountByOne,
   getPrescriptionFollowUpReport,
   getPatientCallReport,
-  logWelcomeCallAttempt, 
+  logWelcomeCallAttempt,
   rescheduleWelcomeCall,
   getNewPatientDashboard,
   updateWelcomeCallStatus,
@@ -61,7 +62,15 @@ const {
   getPrescriptionRemindersForNewDash,
   getActiveRemindersByAppointment,
   closePrescriptionsByAppointment,
-  getPatientAppointmentStatusForNewCRM
+  getPatientAppointmentStatusForNewCRM,
+  getPatientWithAppointmentsById,
+  checkAvailableSlots,
+  updatePaymentSettled,
+  getAppointmentCountsBasedOnClassification,
+  getDashboardStatistics,
+
+  getEmergencyAppointments,
+  // getEmergencyAppointments
 } = require("../controllers/doctorController");
 const {
   upload,
@@ -73,6 +82,7 @@ const {
   googleCallback,
 } = require("../controllers/googleController");
 const { zoomAuth, zoomCallback } = require("../controllers/zoomController");
+const { appointmentBookingTimeSlot } = require("../controllers/patientController");
 
 const router = express.Router();
 
@@ -90,7 +100,7 @@ router.get("/zoom/callback", zoomCallback);
 router.get("/show-every-payment", getAllDoctorPaymentsTotal);
 router.get('/follow-up-calls', getFollowUpCallList);
 router.patch('/update-follow-up-call-status/:appointmentId', updateFollowUpCallStatus);
-router.post("/todays-appointments",validateToken,getTodaysAppointments);
+router.post("/todays-appointments", validateToken, getTodaysAppointments);
 router.patch('/update-follow-up-call', updateFollowUpCall);
 // PUT /api/prescriptions/status/:prescriptionId
 router.put('/status/:prescriptionId', updatePrescriptionSpecificStatus);
@@ -98,17 +108,17 @@ router.put('/status/:prescriptionId', updatePrescriptionSpecificStatus);
 router.get('/prescription-new-dash/:prescriptionId', getPrescriptionRemindersForNewDash);
 router.post('/add-follow-up', addFollowUpCall);
 router.get('/history/:patientId', getPatientHistoryForNewDash);
-router.patch('/:patientId/allow-calls',validateToken, allowPhoneCalls);
+router.patch('/:patientId/allow-calls', validateToken, allowPhoneCalls);
 router.patch('/increment-call-count-by-one', incrementCallCountByOne);
 // GET method since we are just retrieving data
 router.get("/reports/prescription-follow-ups", getPrescriptionFollowUpReport);
 router.get('/patient-calls', getPatientCallReport);
 router.get('/dashboard/new-patients', getNewPatientDashboard);
 // URL: POST /api/appointments/status-summary
-router.post('/status-summary',getPatientAppointmentStatusForNewCRM);
+router.post('/status-summary', getPatientAppointmentStatusForNewCRM);
 
 // 3. Define the route to increment the call count
-router.patch('/:patientId/increment-call',validateToken, incrementCallCount);
+router.patch('/:patientId/increment-call', validateToken, incrementCallCount);
 router.post('/:doctorId/attendance', validateToken, markDoctorAttendance);
 router.post('/log-call-attempt', logWelcomeCallAttempt);
 router.post('/reschedule-welcome', rescheduleWelcomeCall);
@@ -144,7 +154,7 @@ router.get(
   getAllAppointmentsWithPatientData
 );
 router.post("/notes", validateToken, submitNotes);
-router.get("/appointments",validateToken, getDoctorAppointments);
+router.get("/appointments", validateToken, getDoctorAppointments);
 router.get("/profile", validateToken, fetchProfile);
 router.post(
   "/uploadProfilePicture",
@@ -163,10 +173,10 @@ router.patch(
   "/prescriptions/:prescriptionId/start",
   startPrescription
 );
-router.patch('/:prescriptionId/mark-lost',validateToken,markShipmentAsLost);
+router.patch('/:prescriptionId/mark-lost', validateToken, markShipmentAsLost);
 router.patch(
-  '/prescriptions/:prescriptionId/tracking', 
-  upload.single('shipmentImage'), 
+  '/prescriptions/:prescriptionId/tracking',
+  upload.single('shipmentImage'),
   updateTrackingId
 );
 router.get("/medications/summary/:doctorId", getDoctorPatientMedicationSummary);
@@ -181,17 +191,29 @@ router.post(
 );
 router.put("/updateProfile", validateToken, updateProfile);
 router.get("/doctor/me", validateToken, getDoctorByFollow);
-router.get('/getAppointedPatients',validateToken,getAppointedPatients)
-router.get('/getAppointmentWithTimedata',validateToken,getAppointmentWithTimedata);
+router.get('/getAppointedPatients', validateToken, getAppointedPatients)
+router.get('/getAppointmentWithTimedata', validateToken, getAppointmentWithTimedata);
 router.post('/consultationNotes', validateToken, consultationNotes)
 router.get('/secondFormDetails', validateToken, secondFormDetails);
 // patient id's . whose are chat with doctor
-router.get("/chatPatientWithDoctorAndIsReadCount",validateToken,chatPatientWithDoctorAndIsReadCount);
+router.get("/chatPatientWithDoctorAndIsReadCount", validateToken, chatPatientWithDoctorAndIsReadCount);
 router.get("/appointments/total-count", validateToken, getTotalAppointmentsForDoctor);
 router.get("/appointments/today/count", validateToken, getTodaysAppointmentCount);
-router.patch("/:appointmentId/no-show", validateToken,  markAppointmentAsNoShow);
+router.patch("/:appointmentId/no-show", validateToken, markAppointmentAsNoShow);
 router.get('/attendance-report', getDoctorAttendanceReport);
-
+router.get("/getPatientWithAppointments/:id", getPatientWithAppointmentsById);
+router.post(
+  "/bookAppointment",
+  validateToken,
+  bookAppointment
+);
+console.log("bookAppointment:", bookAppointment);
+router.post("/checkSlots", validateToken, checkAvailableSlots);
+router.post("/appointmentBookingTimeSlot",validateToken,appointmentBookingTimeSlot);
+router.patch("/update-payment-settled/:id",validateToken,updatePaymentSettled);
+router.patch("/sort-classification", getAppointmentCountsBasedOnClassification );
+router.get("/dashboard-statistics", getDashboardStatistics);
+router.get("/emergency-appointments", getEmergencyAppointments);
 
 
 module.exports = router;

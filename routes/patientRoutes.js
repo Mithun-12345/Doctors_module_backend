@@ -4,7 +4,7 @@ const {
   sendForm,
   patientDetails,
   sendChronicForm,
-  bookAppointment,
+  // bookAppointment,
   deleteAppointment,
   editAppointmentOnce,
   // updateAppointment,
@@ -50,11 +50,11 @@ const {
   getTotalAppointmentsCount,
   getPatientById,
   rescheduleAppointment,
-  getAppointmentCountsBasedOnClassification,
+ 
   getPatientStatistics,
   getNotInterestedAppointmentCounts,
   getNotInterestedPatientCountsTotal,
-  getDashboardStatistics,
+
   getAllAppointmentCountsByStagePerfect,
   updatePatientAddress,
   getPaymentsByAppointment 
@@ -79,11 +79,13 @@ const validateToken = require("../middlewares/validateTokenHandler");
 
 const router = express.Router();
 router.get("/appointments/total/count", validateToken, getTotalAppointmentsCount);
-router.patch("/sort-classification", getAppointmentCountsBasedOnClassification );
+
 router.get("/sort-total-lost", getNotInterestedPatientCountsTotal );
 router.get("/perfect-sort-stage", getAllAppointmentCountsByStagePerfect );
 router.patch("/sort-lost-patients", getNotInterestedAppointmentCounts);
-router.get("/dashboard-statistics", getDashboardStatistics);
+router.patch("/sort-emergency-patients", getNotInterestedAppointmentCounts);
+
+
 router.get("/classified-total-count",getPatientStatistics);
 router.get("/appointments/past", validateToken, getPastAppointmentsCount);
 router.get("/payments/count", validateToken, getCompletedPaymentsCount);
@@ -99,13 +101,13 @@ router.post(
   handleMulterError,
   uploadProfilePicture
 );
-router.post("/bookAppointment", validateToken, bookAppointment);
+// router.post("/bookAppointment", validateToken, bookAppointment);
 router.post("/deleteAppointment/:appointmentId",validateToken,  deleteAppointment);
 router.put("/editAppointment/:appointmentId",validateToken, editAppointmentOnce);
 router.get('/new-crm-appointment/:appointmentId',getPaymentsByAppointment);
 
 router.post("/createDoctorAppointmentInitialSetup",validateToken,createDoctorAppointmentInitialSetup);
-router.post("/appointmentBookingTimeSlot",validateToken,appointmentBookingTimeSlot);
+// router.post("/appointmentBookingTimeSlot",validateToken,appointmentBookingTimeSlot);
 router.get("/patientAppointmentDates/:id",validateToken,patientAppointmentDates);
 router.get(
   "/pending-payments/:patientId", getPendingPaymentsByPatient
@@ -125,7 +127,7 @@ router.post("/finalizeAppointment", validateToken, finalizeAppointment);
 // router.get("/appointments", validateToken, getAppointmentsByDate);
 // router.get("/appointment/:id", validateToken, getAppointmentById);
 // router.delete("/appointment/:id", validateToken, cancelAppointment);
-router.post("/checkSlots", validateToken, checkAvailableSlots);
+
 
 router.get("/getUserAppointments", validateToken, getUserAppointments);
 router.get("/appointment/:appointmentId", validateToken, getAppointment);

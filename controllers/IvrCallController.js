@@ -76,7 +76,7 @@ exports.callPatient = async (req, res) => {
         }
       );
 
-      callLog.call_status = "ringing";
+      callLog.call_status = "initiated";
       callLog.providerResponse = response.data;
       await callLog.save();
 

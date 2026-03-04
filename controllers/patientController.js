@@ -376,63 +376,63 @@ exports.sendChronicForm = asyncHandler(async (req, res) => {
 
 
 // Check Available Slots
-exports.checkAvailableSlots = asyncHandler(async (req, res) => {
-  const { appointmentDate } = req.body;
-  const phone = req.user.phone;
+// exports.checkAvailableSlots = asyncHandler(async (req, res) => {
+//   const { appointmentDate } = req.body;
+//   const phone = Patient.phone;
 
-  const patient = await Patient.findOne({ phone });
-  if (!patient) {
-    return res.status(404).json({ message: "Patient not found" });
-  }
+//   const patient = await Patient.findOne({ phone });
+//   if (!patient) {
+//     return res.status(404).json({ message: "Patient not found" });
+//   }
 
-  const medicalDetails = await MedicalDetails.findOne({
-    patientId: patient._id,
-  });
-  if (!medicalDetails) {
-    return res.status(404).json({ message: "Medical details not found" });
-  }
+//   const medicalDetails = await MedicalDetails.findOne({
+//     patientId: patient._id,
+//   });
+//   if (!medicalDetails) {
+//     return res.status(404).json({ message: "Medical details not found" });
+//   }
 
-  const diseaseType = medicalDetails.diseaseType.name.toLowerCase();
+//   const diseaseType = medicalDetails.diseaseType.name.toLowerCase();
 
-  const timeSlots = [
-    "10:00",
-    "11:00",
-    "12:00",
-    "13:00",
-    "14:00",
-    "15:00",
-    "16:00",
-    "17:00",
-  ];
-  const appointments = await Appointment.find({ appointmentDate });
+//   const timeSlots = [
+//     "10:00",
+//     "11:00",
+//     "12:00",
+//     "13:00",
+//     "14:00",
+//     "15:00",
+//     "16:00",
+//     "17:00",
+//   ];
+//   const appointments = await Appointment.find({ appointmentDate });
 
-  const isMorningSlot = (slot) => timeSlots.indexOf(slot) < 4;
+//   const isMorningSlot = (slot) => timeSlots.indexOf(slot) < 4;
 
-  const availableSlots = timeSlots.filter((slot) => {
-    const isBooked = appointments.some((appt) => appt.timeSlot === slot);
-    if (isBooked) return false;
+//   const availableSlots = timeSlots.filter((slot) => {
+//     const isBooked = appointments.some((appt) => appt.timeSlot === slot);
+//     if (isBooked) return false;
 
-    if (diseaseType === "chronic") {
-      const chronicBookingInMorning = appointments.some(
-        (appt) => appt.isChronic && isMorningSlot(appt.timeSlot)
-      );
-      const chronicBookingInAfternoon = appointments.some(
-        (appt) => appt.isChronic && !isMorningSlot(appt.timeSlot)
-      );
+//     if (diseaseType === "chronic") {
+//       const chronicBookingInMorning = appointments.some(
+//         (appt) => appt.isChronic && isMorningSlot(appt.timeSlot)
+//       );
+//       const chronicBookingInAfternoon = appointments.some(
+//         (appt) => appt.isChronic && !isMorningSlot(appt.timeSlot)
+//       );
 
-      if (
-        (chronicBookingInMorning && isMorningSlot(slot)) ||
-        (chronicBookingInAfternoon && !isMorningSlot(slot))
-      ) {
-        return false;
-      }
-    }
+//       if (
+//         (chronicBookingInMorning && isMorningSlot(slot)) ||
+//         (chronicBookingInAfternoon && !isMorningSlot(slot))
+//       ) {
+//         return false;
+//       }
+//     }
 
-    return true;
-  });
+//     return true;
+//   });
 
-  res.status(200).json({ availableSlots });
-});
+//   res.status(200).json({ availableSlots });
+// });
 
 const addEventToGoogleCalendar = async (doctorId, appointment) => {
   try {
@@ -1013,7 +1013,7 @@ exports.bookAppointment = asyncHandler(async (req, res) => {
   } = req.body;
   
   const doctorId = "67bc3391654d85340a8ce713"; // should be changed
-
+  
   try {
     const user = await Patient.findOne({ phone });
     if (!user) {
@@ -1029,7 +1029,7 @@ exports.bookAppointment = asyncHandler(async (req, res) => {
       return res.status(400).json({ success: false, message: "Medical details not found" });
     }
     medicalDetails.follow = "Consultation";
-    await medicalDetails.save();
+    await medicalDetails.save(); 
 
     const doctor = await Doctor.findById(doctorId);
     if (!doctor || doctor.role !== "admin-doctor") {
@@ -1669,94 +1669,7 @@ exports.getPatientStatistics = async (req, res) => {
     res.status(500).json({ message: "Internal server error" });
   }
 };
-exports.getAppointmentCountsBasedOnClassification = async (req, res) => {
-  try {
-    const { classification, newExisting } = req.body;
 
-    // 1. Validate the input from the frontend
-    if (!classification || !["acute", "chronic"].includes(classification.toLowerCase())) {
-      return res.status(400).json({ message: "Invalid or missing classification. Must be 'acute' or 'chronic'." });
-    }
-    if (!newExisting || !["New", "Existing"].includes(newExisting)) {
-      return res.status(400).json({ message: "Invalid or missing newExisting status. Must be 'New' or 'Existing'." });
-    }
-
-    // 2. Define the aggregation pipeline
-    const pipeline = [
-      // Stage 1: Look up the patient details for each appointment
-      {
-        $lookup: {
-          from: "patients", // Your patients collection name
-          localField: "patient",
-          foreignField: "_id",
-          as: "patientInfo"
-        }
-      },
-      // Deconstruct the patientInfo array to access its fields
-      {
-        $unwind: "$patientInfo"
-      },
-      // Stage 2: Match appointments based on BOTH criteria
-      {
-        $match: {
-          "classification": { $regex: `^${classification}$`, $options: 'i' },
-          "patientInfo.newExisting": newExisting
-        }
-      },
-      // Stage 3: Group the results by the 'follow' status and count each group
-      {
-        $group: {
-          _id: "$follow",
-          count: { $sum: 1 }
-        }
-      },
-      // Stage 4: Format the output
-      {
-          $project: {
-              _id: 0,
-              stage: "$_id",
-              count: "$count"
-          }
-      }
-    ];
-
-    // 3. Execute the aggregation query
-    const results = await Appointment.aggregate(pipeline);
-
-    // 4. Format the final response to ensure all stages are present
-    const allStages = [
-      "Consultation",
-      "Prescription",
-      "Payment",
-      "Medicine Preparation",
-      "Shipment",
-      "Patient Care"
-    ];
-
-    const countsByStage = {};
-    allStages.forEach(stage => {
-      countsByStage[stage] = 0;
-    });
-
-    results.forEach(result => {
-      countsByStage[result.stage] = result.count;
-    });
-    
-    // 5. Send the final JSON response
-    res.status(200).json({
-      success: true,
-      filters: {
-          classification: classification,
-          status: newExisting
-      },
-      appointmentCounts: countsByStage
-    });
-
-  } catch (error) {
-    console.error("Error fetching appointment counts:", error);
-    res.status(500).json({ message: "Internal server error" });
-  }
-};
 // Update Call Status
 exports.updateFollowPatientCall = async (req, res) => {
   const { patientId } = req.params;

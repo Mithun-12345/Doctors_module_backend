@@ -112,7 +112,310 @@ exports.getAllDoctorPaymentsTotal = async (req, res) => {
     res.status(500).json({ success: false, message: "Server Error" });
   }
 };
+exports.getEmergencyAppointmentCounts = async (req, res) => {
+  try {
+    const { classification } = req.query; // use query for GET
 
+    let matchStage = {
+      isEmergency: true
+    };
+
+    // Optional classification filter
+    if (classification) {
+      if (!["acute", "chronic"].includes(classification.toLowerCase())) {
+        return res.status(400).json({
+          message: "Invalid classification. Must be 'acute' or 'chronic'."
+        });
+      }
+
+      const isChronic = classification.toLowerCase() === "chronic";
+      matchStage.isChronic = isChronic;
+    }
+
+    const pipeline = [
+      {
+        $match: matchStage
+      },
+      {
+        $facet: {
+          stageCounts: [
+            { $group: { _id: "$follow", count: { $sum: 1 } } }
+          ],
+          totalCount: [
+            { $count: "count" }
+          ]
+        }
+      }
+    ];
+
+    const results = await Appointment.aggregate(pipeline);
+    const resultData = results[0];
+
+    const allStages = [
+      "Consultation",
+      "Prescription",
+      "Payment",
+      "Medicine Preparation",
+      "Shipment",
+      "Patient Care"
+    ];
+
+    const countsByStage = {};
+    allStages.forEach(stage => {
+      countsByStage[stage] = 0;
+    });
+
+    if (resultData.stageCounts) {
+      resultData.stageCounts.forEach(result => {
+        if (allStages.includes(result._id)) {
+          countsByStage[result._id] = result.count;
+        }
+      });
+    }
+
+    const totalCount = resultData.totalCount[0]
+      ? resultData.totalCount[0].count
+      : 0;
+
+    res.status(200).json({
+      success: true,
+      filters: {
+        isEmergency: true,
+        classification: classification || "All",
+      },
+      totalAppointments: totalCount,
+      countsByStage
+    });
+
+  } catch (error) {
+    console.error("Error fetching emergency appointment counts:", error);
+    res.status(500).json({ message: "Internal server error" });
+  }
+};
+exports.getDashboardStatistics = async (req, res) => {
+  try {
+    // This pipeline calculates everything at once
+    const pipeline = [
+      {
+        $facet: {
+          // --- 1. All Appointments (Acute vs Chronic) ---
+          "allAppointments": [
+            { $group: { _id: "$classification", count: { $sum: 1 } } }
+          ],
+
+          // --- 2 & 3. New vs Existing Appointments (Acute vs Chronic) ---
+          "newOrExistingAppointments": [
+            // First, get the patient info for each appointment
+            {
+              $lookup: {
+                from: "patients",
+                localField: "patient",
+                foreignField: "_id",
+                as: "patientInfo"
+              }
+            },
+            { $unwind: "$patientInfo" },
+            // Group by both classification AND newExisting status
+            {
+              $group: {
+                _id: {
+                  classification: "$classification",
+                  newExisting: "$patientInfo.newExisting"
+                },
+                count: { $sum: 1 }
+              }
+            }
+          ],
+   "emergency": [
+  { $match: { isEmergency: true } },
+  {
+    $group: {
+      _id: "$classification",
+      count: { $sum: 1 }
+    }
+  }
+],
+          // --- 4. "Not Interested" Patients (Acute vs Chronic Appointments) ---
+          "notInterestedAppointments": [
+            // First, get the patient's medical details
+            {
+              $lookup: {
+                from: "patientdetails",
+                localField: "patient",
+                foreignField: "patientId",
+                as: "medicalDetails"
+              }
+            },
+            { $unwind: "$medicalDetails" },
+            // Match only those with the "Not Interested" status
+            {
+              $match: { "medicalDetails.enquiryStatus": "Not Interested" }
+            },
+            // Group the results by classification and count
+            {
+              $group: {
+                _id: "$classification",
+                count: { $sum: 1 }
+              }
+            }
+          ]
+        }
+      }
+    ];
+
+    // Execute the aggregation query
+    const result = await Appointment.aggregate(pipeline);
+    const data = result[0];
+
+    // Helper function to extract counts safely
+    const getCount = (arr, key) => arr.find(item => item._id === key)?.count || 0;
+
+    // Format the final response
+    const formattedResponse = {
+      allAppointments: {
+        total: (getCount(data.allAppointments, "acute") + getCount(data.allAppointments, "chronic")),
+        acute: getCount(data.allAppointments, "acute"),
+        chronic: getCount(data.allAppointments, "chronic")
+      },
+      newAppointments: {
+        total: data.newOrExistingAppointments.filter(item => item._id.newExisting === "New").reduce((sum, item) => sum + item.count, 0),
+        acute: data.newOrExistingAppointments.find(item => item._id.classification === "acute" && item._id.newExisting === "New")?.count || 0,
+        chronic: data.newOrExistingAppointments.find(item => item._id.classification === "chronic" && item._id.newExisting === "New")?.count || 0
+      },
+      existingAppointments: {
+        total: data.newOrExistingAppointments.filter(item => item._id.newExisting === "Existing").reduce((sum, item) => sum + item.count, 0),
+        acute: data.newOrExistingAppointments.find(item => item._id.classification === "acute" && item._id.newExisting === "Existing")?.count || 0,
+        chronic: data.newOrExistingAppointments.find(item => item._id.classification === "chronic" && item._id.newExisting === "Existing")?.count || 0
+      },
+    emergencyAppointments: {
+  total:
+    getCount(data.emergency, "acute") +
+    getCount(data.emergency, "chronic"),
+  acute: getCount(data.emergency, "acute"),
+  chronic: getCount(data.emergency, "chronic")
+},
+
+
+      notInterestedPatients: {
+        total: (getCount(data.notInterestedAppointments, "acute") + getCount(data.notInterestedAppointments, "chronic")),
+        acute: getCount(data.notInterestedAppointments, "acute"),
+        chronic: getCount(data.notInterestedAppointments, "chronic")
+      },
+
+    };
+
+    res.status(200).json({
+      success: true,
+      statistics: formattedResponse
+    });
+
+  } catch (error) {
+    console.error("Error fetching dashboard statistics:", error);
+    res.status(500).json({ message: "Internal server error" });
+  }
+};
+exports.getAppointmentCountsBasedOnClassification = async (req, res) => {
+  try {
+    const { classification, newExisting } = req.body;
+
+    if (!classification || !["acute", "chronic"].includes(classification.toLowerCase())) {
+      return res.status(400).json({ message: "Invalid or missing classification." });
+    }
+
+    if (!newExisting || !["New", "Existing", "Emergency"].includes(newExisting)) {
+      return res.status(400).json({ message: "Invalid or missing newExisting status." });
+    }
+
+    // ----------------------
+    // 1️⃣ MATCH CONDITIONS
+    // ----------------------
+    let matchConditions = {
+      classification: { $regex: `^${classification}$`, $options: "i" }
+    };
+
+   
+
+
+    // ----------------------
+    // 2️⃣ GET COUNTS
+    // ----------------------
+    const countPipeline = [
+      {
+        $lookup: {
+          from: "patients",
+          localField: "patient",
+          foreignField: "_id",
+          as: "patientInfo"
+        }
+      },
+      { $unwind: "$patientInfo" },
+      { $match: matchConditions },
+      {
+        $group: {
+          _id: "$follow",
+          count: { $sum: 1 }
+        }
+      }
+    ];
+
+    const countResults = await Appointment.aggregate(countPipeline);
+
+    const allStages = [
+      "Consultation",
+      "Prescription",
+      "Payment",
+      "Medicine Preparation",
+      "Shipment",
+      "Patient Care"
+    ];
+
+    const countsByStage = {};
+    allStages.forEach(stage => (countsByStage[stage] = 0));
+
+    countResults.forEach(result => {
+      countsByStage[result._id] = result.count;
+    });
+
+    // ----------------------
+    // 3️⃣ GET PATIENT LIST
+    // ----------------------
+    const dataPipeline = [
+      {
+        $lookup: {
+          from: "patients",
+          localField: "patient",
+          foreignField: "_id",
+          as: "patientInfo"
+        }
+      },
+      { $unwind: "$patientInfo" },
+      { $match: matchConditions },
+      { $sort: { createdAt: -1 } }
+    ];
+
+    const appointments = await Appointment.aggregate(dataPipeline);
+
+    // ----------------------
+    // 4️⃣ RESPONSE
+    // ----------------------      
+    console.log("Appointment", appointments)
+
+
+    res.status(200).json({
+      success: true,
+      filters: {
+        classification,
+        status: newExisting
+      },
+      appointmentCounts: countsByStage,
+      patients: appointments
+    });
+
+  } catch (error) {
+    console.error("Error fetching appointment counts:", error);
+    res.status(500).json({ message: "Internal server error" });
+  }
+};
 exports.addDoctor = async (req, res) => {
   const { name, age, gender, photo, specialization, bio, phone, role } =
     req.body;
@@ -252,6 +555,49 @@ exports.getAppointments = async (req, res) => {
   }
 };
 
+// GET /api/doctor/emergency-appointments
+exports.getEmergencyAppointments = async (req, res) => {
+  try {
+    // Aggregate with patient info
+    const pipeline = [
+      {
+        $match: { isEmergency: true } 
+      },
+      {
+        $lookup: {
+          from: "patients",
+          localField: "patient",
+          foreignField: "_id",
+          as: "patientInfo"
+        }
+      },
+      { $unwind: "$patientInfo" },
+      {
+        $lookup: {
+          from: "patientdetails",
+          localField: "patient",
+          foreignField: "patientId",
+          as: "medicalDetails"
+        }
+      },
+      { $unwind: "$medicalDetails" },
+      {
+        $sort: { createdAt: -1 }
+      }
+    ];
+
+    const emergencyAppointments = await Appointment.aggregate(pipeline);
+
+    res.status(200).json({
+      success: true,
+      count: emergencyAppointments.length,
+      appointments: emergencyAppointments
+    });
+  } catch (error) {
+    console.error("Error fetching emergency appointments:", error);
+    res.status(500).json({ message: "Internal server error" });
+  }
+};
 exports.redirectAppointment = async (req, res) => {
   const { assistantDoctorId, appointmentId } = req.body;
   console.log("Assistant Doctor ID:", assistantDoctorId);
@@ -297,16 +643,16 @@ exports.getDoctorAppointments = async (req, res) => {
     // 2. Find all appointments assigned to this doctor
     const appointments = await Appointment.find({ doctor: doctorId })
       .sort({ appointmentDate: 1 }) // Show soonest appointments first
-      .populate({ 
-        path: 'patient', 
+      .populate({
+        path: 'patient',
         select: 'name phone age gender' // Select which patient details to show
       });
 
     if (!appointments || appointments.length === 0) {
-      return res.status(200).json({ 
-        success: true, 
+      return res.status(200).json({
+        success: true,
         message: "No appointments found.",
-        appointments: [] 
+        appointments: []
       });
     }
 
@@ -386,15 +732,15 @@ exports.doctorDetails = async (req, res) => {
 exports.getDoctorFollow = async (req, res) => {
   console.log("GetDoctorFollow reached");
   console.log("GetDoctorFollow reached");
-  const phone = req.user.phone; 
+  const phone = req.user.phone;
   console.log("doctor Phone:", phone);
   console.log("doctor Phone:", phone);
   try {
-    const doctor = await Doctor.findOne({ phone }); 
+    const doctor = await Doctor.findOne({ phone });
     if (!doctor) {
       return res.status(404).json({ message: "Doctor not found" });
     }
-     const removeList = [
+    const removeList = [
       "Chronic-New",
       "Chronic-Existing",
       "Acute-New",
@@ -415,7 +761,7 @@ exports.getDoctorFollow = async (req, res) => {
 
 
     res.json({ follow: filteredFollow });
-console.log(filteredFollow,"filteredFollow")
+    console.log(filteredFollow, "filteredFollow")
   } catch (error) {
     res.status(500).json({ message: "Server error" });
   }
@@ -475,6 +821,388 @@ exports.getSettings = async (req, res) => {
 //     res.status(500).json({ error: "Failed to update settings" });
 //   }
 // };
+
+exports.bookAppointment = async (req, res) => {
+  try {
+    const {
+      patientId,
+      appointmentDate,
+      timeSlot,
+      consultingReason,
+      symptom,
+      isEmergency,
+
+    } = req.body;
+
+    // ================================
+    // BASIC VALIDATION
+    // ================================
+    if (!mongoose.Types.ObjectId.isValid(patientId)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid patient ID",
+      });
+    }
+
+    if (!appointmentDate || !timeSlot) {
+      return res.status(400).json({
+        success: false,
+        message: "Appointment date and time slot are required",
+      });
+    }
+
+    // ================================
+    // FIND PATIENT
+    // ================================
+    const patient = await Patient.findById(patientId);
+    if (!patient) {
+      return res.status(404).json({
+        success: false,
+        message: "Patient not found",
+      });
+    }
+
+    if (isEmergency === true) {
+      patient.newExisting = "Emergency";
+       
+      await patient.save();
+    }
+
+    // ================================
+    // MEDICAL DETAILS
+    // ================================
+    const medicalDetails = await MedicalDetails.findOne({ patientId });
+
+    if (medicalDetails) {
+      medicalDetails.follow = "Consultation";
+      await medicalDetails.save();
+    }
+
+    // ================================
+    // FIND DOCTOR (LOGGED IN)
+    // ================================
+    const doctorId = req.user.id;
+    const doctor = await Doctor.findById(doctorId);
+
+    if (!doctor) {
+      return res.status(404).json({
+        success: false,
+        message: "Doctor not found",
+      });
+    }
+
+
+    const timeSlots = [
+      "10:00", "11:00", "12:00", "13:00",
+      "14:00", "15:00", "16:00", "17:00",
+    ];
+
+    const isMorningSlot = (slot) => timeSlots.indexOf(slot) < 4;
+
+    const existingAppointments = await Appointment.find({
+      appointmentDate,
+      status: { $in: ["reserved", "confirmed"] },
+    });
+
+    const isChronic =
+      medicalDetails?.diseaseType?.name?.toLowerCase() === "chronic";
+
+    if (isChronic) {
+      const chronicBookingInMorning = existingAppointments.some(
+        (appt) => appt.isChronic && isMorningSlot(appt.timeSlot)
+      );
+
+      const chronicBookingInAfternoon = existingAppointments.some(
+        (appt) => appt.isChronic && !isMorningSlot(appt.timeSlot)
+      );
+
+      if (
+        (isMorningSlot(timeSlot) && chronicBookingInMorning) ||
+        (!isMorningSlot(timeSlot) && chronicBookingInAfternoon)
+      ) {
+        return res.status(400).json({
+          success: false,
+          message:
+            "Selected time slot not available for chronic patients",
+        });
+      }
+    } else {
+      const isSlotBooked = existingAppointments.some(
+        (appt) => appt.timeSlot === timeSlot
+      );
+
+      if (isSlotBooked) {
+        return res.status(400).json({
+          success: false,
+          message: "Time slot already booked",
+        });
+      }
+    }
+
+const lastAppt = await Appointment
+  .findOne({}, { appointmentUniqueId: 1 })
+  .sort({ _id: -1 })
+  .lean();
+
+let lastNum = 0;
+
+if (lastAppt?.appointmentUniqueId?.startsWith("CH")) {
+  lastNum = parseInt(
+    lastAppt.appointmentUniqueId.replace("CH", ""),
+    10
+  ) || 0;
+}
+
+const generatedId = `CH${String(lastNum + 1).padStart(3, "0")}`;
+console.log(generatedId,"generatedId")
+    // ================================
+    // CREATE APPOINTMENT
+    // ================================
+    const newAppointment = await Appointment.create({
+      appointmentUniqueId: generatedId,
+      
+      patient: patient._id,
+      patientName: patient.name,
+      patientEmail: patient.email,
+
+      doctor: doctor._id,
+      doctorName: doctor.name,
+      isEmergency: isEmergency === true,
+      appointmentDate,
+      timeSlot,
+
+      classification: isChronic ? "chronic" : "acute",
+      diseaseName: symptom || "",
+      appointmentFixed: "Yes",
+      follow: "Consultation",
+
+      isChronic: isChronic || false,
+
+      status: "confirmed",
+      isPaid: false,
+      paymentSettled: false,
+
+      bookedBy: doctor._id,
+    });
+
+    return res.status(201).json({
+      success: true,
+      message: isEmergency
+        ? "Emergency appointment booked successfully"
+        : "Appointment booked successfully",
+      appointmentId: newAppointment._id,
+      appointmentUniqueId: generatedId,
+    });
+
+  } catch (error) {
+    console.error("❌ Book appointment error:", error);
+    return res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+
+exports.checkAvailableSlots = async (req, res) => {
+  const { appointmentDate, patientId } = req.body;
+
+
+  if (!appointmentDate || !patientId) {
+    return res.status(400).json({
+      success: false,
+      message: "appointmentDate and patientId are required",
+    });
+  }
+
+  if (!mongoose.Types.ObjectId.isValid(patientId)) {
+    return res.status(400).json({
+      success: false,
+      message: "Invalid patient ID",
+    });
+  }
+
+  // Find patient by ID
+  const patient = await Patient.findById(patientId);
+  if (!patient) {
+    return res.status(404).json({
+      success: false,
+      message: "Patient not found",
+    });
+  }
+
+  // Get medical details
+  const medicalDetails = await MedicalDetails.findOne({
+    patientId: patient._id,
+  });
+
+  if (!medicalDetails) {
+    return res.status(404).json({
+      success: false,
+      message: "Medical details not found",
+    });
+  }
+
+  const diseaseType =
+    medicalDetails.diseaseType?.name?.toLowerCase() || "";
+
+  const timeSlots = [
+    "10:00",
+    "11:00",
+    "12:00",
+    "13:00",
+    "14:00",
+    "15:00",
+    "16:00",
+    "17:00",
+  ];
+
+  // Only check active bookings
+  const appointments = await Appointment.find({
+    appointmentDate,
+    status: { $in: ["reserved", "confirmed"] },
+  });
+
+  const isMorningSlot = (slot) => timeSlots.indexOf(slot) < 4;
+
+  const availableSlots = timeSlots.filter((slot) => {
+    const isBooked = appointments.some(
+      (appt) => appt.timeSlot === slot
+    );
+
+    if (isBooked) return false;
+
+    // Chronic logic
+    if (diseaseType === "chronic") {
+      const chronicBookingInMorning = appointments.some(
+        (appt) => appt.isChronic && isMorningSlot(appt.timeSlot)
+      );
+
+      const chronicBookingInAfternoon = appointments.some(
+        (appt) => appt.isChronic && !isMorningSlot(appt.timeSlot)
+      );
+
+      if (
+        (chronicBookingInMorning && isMorningSlot(slot)) ||
+        (chronicBookingInAfternoon && !isMorningSlot(slot))
+      ) {
+        return false;
+      }
+    }
+
+    return true;
+  });
+
+  return res.status(200).json({
+    success: true,
+    availableSlots,
+  });
+};
+
+exports.updatePaymentSettled = async (req, res) => {
+  const { id } = req.params;
+  const { paymentSettled } = req.body;
+
+  const appointment = await Appointment.findById(id);
+  if (!appointment) {
+    return res.status(404).json({ message: "Appointment not found" });
+  }
+
+  appointment.paymentSettled = paymentSettled;
+  await appointment.save();
+
+  return res.status(200).json({
+    success: true,
+    message: paymentSettled
+      ? "Payment marked as Paid"
+      : "Payment marked as Yet to Pay",
+    paymentSettled: appointment.paymentSettled,
+    paymentStatus: appointment.paymentSettled
+      ? "Paid"
+      : "Yet to Pay",
+  });
+};
+
+exports.appointmentBookingTimeSlot = async (req, res) => {
+  // 'appointmentType' is no longer needed from the request body
+  const { date } = req.body;
+
+  try {
+    // Validation now only checks for date
+    if (!date) {
+      return res.status(400).json({ message: "Date is required" });
+    }
+
+    const inputDate = new Date(date);
+    const days = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+    const dayName = days[inputDate.getDay()];
+
+    // --- 1. Fetch all necessary data in parallel ---
+    const [
+      clinicDayInfo,
+      allSlotTypes,
+      appointmentsForDay,
+      doctorDetails,
+    ] = await Promise.all([
+      ClinicOperationHours.findOne({ day: dayName }),
+      AppointmentSlotTypes.find({}),
+      Appointment.find({
+        appointmentDate: {
+          $gte: new Date(inputDate).setHours(0, 0, 0, 0),
+          $lte: new Date(inputDate).setHours(23, 59, 59, 999),
+        },
+      }),
+      DoctorPrefinedAppointmentDetails.findOne({}),
+    ]);
+
+    if (!clinicDayInfo || !doctorDetails) {
+      return res.status(404).json({ message: "Clinic or doctor settings not found." });
+    }
+
+    // --- 2. Generate Time Slots ---
+    // The quota check for 'Acute', 'Chronic', etc., has been removed.
+    const bookedTimeSlots = appointmentsForDay.map(app => app.timeSlot);
+    const { consultationTime } = doctorDetails;
+    const availableSlotsResponse = {};
+
+    // A. Handle Week Off
+    if (clinicDayInfo.status === false) {
+      const weekoffType = allSlotTypes.find(st => st.slotType === "Weekoff");
+      if (weekoffType && weekoffType.allowBooking) {
+        const allPossibleSlots = getTimeSlots24(weekoffType.startingTime, weekoffType.endingTime, consultationTime);
+        const available = removeSlots(bookedTimeSlots, allPossibleSlots);
+        if (available.length > 0) {
+          availableSlotsResponse["Weekoff"] = available.map(time => ({ time, price: weekoffType.price }));
+        }
+      }
+    }
+    // B. Handle Working Day
+    else {
+      for (const slotType of allSlotTypes) {
+        if (slotType.slotType === "Weekoff") continue; // Skip weekoff type on a working day
+
+        if (slotType.allowBooking) {
+          const allPossibleSlots = getTimeSlots24(slotType.startingTime, slotType.endingTime, consultationTime);
+          const available = removeSlots(bookedTimeSlots, allPossibleSlots);
+          if (available.length > 0) {
+            availableSlotsResponse[slotType.slotType] = available.map(time => ({ time, price: slotType.price }));
+          }
+        }
+      }
+    }
+
+    // --- 3. Return the final structured response ---
+    if (Object.keys(availableSlotsResponse).length === 0) {
+      return res.status(200).json({ message: "No available slots for this day.", result: {} });
+    }
+
+    return res.status(200).json({ result: availableSlotsResponse });
+
+  } catch (error) {
+    console.error("Error in appointmentBookingTimeSlot:", error);
+    return res.status(500).json({ message: "An internal server error occurred." });
+  }
+};
+
 
 exports.updateSettings = async (req, res) => {
   try {
@@ -600,6 +1328,7 @@ exports.getAllAppointmentsWithPatientData = async (req, res) => {
           phone: patient.phone,
           whatsappNumber: patient.whatsappNumber,
           email: patient.email,
+          isEmergency:appointment.isEmergency,
           gender: patient.gender,
           medicalRecords: patient.medicalRecords,
           patientEntry: patient.patientEntry,
@@ -619,7 +1348,7 @@ exports.getAllAppointmentsWithPatientData = async (req, res) => {
             appointmentDate: appointment.appointmentDate,
             timeSlot: appointment.timeSlot,
             diseaseName: appointment.diseaseName,
-            classification:appointment.classification,
+            classification: appointment.classification,
             diseaseType: appointment.diseaseType,
             follow: appointment.follow,
             followComment: appointment.followComment,
@@ -631,7 +1360,7 @@ exports.getAllAppointmentsWithPatientData = async (req, res) => {
             drafts: appointment.notes,
             prescriptionCreated: appointment.prescriptionCreated,
             prescription_id: appointment.prescriptionID,
-            medicinePrepared:appointment.medicinePrepared
+            medicinePrepared: appointment.medicinePrepared,
           },
         });
       });
@@ -643,7 +1372,27 @@ exports.getAllAppointmentsWithPatientData = async (req, res) => {
     res.status(500).json({ message: "Internal server error" });
   }
 };
+exports.getPatientWithAppointmentsById = async (req, res) => {
+  try {
+    const { id } = req.params;
 
+    const patient = await Patient.findById(id);
+    if (!patient) {
+      return res.status(404).json({ message: "Patient not found" });
+    }
+
+    const appointments = await Appointment.find({ patient: id });
+
+    res.status(200).json({
+      patient,
+      appointments,
+    });
+
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: "Server error" });
+  }
+};
 exports.submitNotes = async (req, res) => {
   console.log("Reached");
   const { appointmentID, notes } = req.body;
@@ -759,16 +1508,16 @@ exports.uploadProfilePicture = async (req, res) => {
       // 🖼️ Generate avatar using initials if no file uploaded
       const initials = doctor.name
         ? doctor.name
-            .split(" ")
-            .map((n) => n[0])
-            .join("")
-            .toUpperCase()
+          .split(" ")
+          .map((n) => n[0])
+          .join("")
+          .toUpperCase()
         : "P";
 
       profilePhotoUrl = `https://ui-avatars.com/api/?name=${initials}&background=random&color=fff&size=128`;
     }
 
-    // ✅ Save to doctor
+    // Save to doctor
     doctor.profilePhoto = profilePhotoUrl;
     await doctor.save();
 
@@ -790,7 +1539,7 @@ exports.updateTrackingId = async (req, res) => {
   try {
     const { prescriptionId } = req.params;
     const { trackingId, deliveryPartner, shippedDate, arrivalDate } = req.body;
-    
+
     if (!trackingId) {
       return res.status(400).json({ message: "Tracking ID is required." });
     }
@@ -798,14 +1547,14 @@ exports.updateTrackingId = async (req, res) => {
     // --- START: NEW FILE UPLOAD LOGIC ---
     let imageUrl = null;
     if (req.file) {
-        // 1. Upload the file to Cloudinary
-        const result = await cloudinary.uploader.upload(req.file.path, {
-            folder: "shipment_images"
-        });
-        imageUrl = result.secure_url;
+      // 1. Upload the file to Cloudinary
+      const result = await cloudinary.uploader.upload(req.file.path, {
+        folder: "shipment_images"
+      });
+      imageUrl = result.secure_url;
 
-        // 2. Clean up the temporary file from your server
-        fs.unlinkSync(req.file.path);
+      // 2. Clean up the temporary file from your server
+      fs.unlinkSync(req.file.path);
     }
     // --- END: NEW FILE UPLOAD LOGIC ---
 
@@ -816,238 +1565,238 @@ exports.updateTrackingId = async (req, res) => {
     }
     prescription.trackingId = trackingId;
     prescription.isProductShipped = true;
-    prescription.shippedDate = new Date(shippedDate); 
+    prescription.shippedDate = new Date(shippedDate);
     await prescription.save({ validateBeforeSave: false });
 
-    
+
     // --- Update the MedicinePreparationSummary (Modified Logic) ---
     const updateData = {
-        "packagingUsed.0.shipmentId": trackingId,
-        "packagingUsed.0.deliveryPartner": deliveryPartner,
-        "packagingUsed.0.shippedDate": shippedDate,
-        "packagingUsed.0.arrivalDate": arrivalDate
+      "packagingUsed.0.shipmentId": trackingId,
+      "packagingUsed.0.deliveryPartner": deliveryPartner,
+      "packagingUsed.0.shippedDate": shippedDate,
+      "packagingUsed.0.arrivalDate": arrivalDate
     };
 
     // Conditionally add the image URL to the update if it exists
     if (imageUrl) {
-        updateData["packagingUsed.0.shipmentImageForMessenger"] = imageUrl;
+      updateData["packagingUsed.0.shipmentImageForMessenger"] = imageUrl;
     }
 
     await MedicinePreparationSummary.updateOne(
       { prescriptionId: prescriptionId },
       { $set: updateData }
     );
-    
+
     res.json({ message: "Tracking ID and shipping details updated successfully." });
-    
+
   } catch (err) {
     console.error("Error updating tracking ID:", err);
     res.status(500).json({ message: "Internal server error" });
   }
 };
 exports.startPrescription = async (req, res) => {
-  try {
-    const { prescriptionId } = req.params;
-    const { startDate: startDatePayload } = req.body;
+  try {
+    const { prescriptionId } = req.params;
+    const { startDate: startDatePayload } = req.body;
 
-    if (!prescriptionId || !startDatePayload) {
-      return res.status(400).json({ message: "Missing prescriptionId or startDate in request" });
-    }
+    if (!prescriptionId || !startDatePayload) {
+      return res.status(400).json({ message: "Missing prescriptionId or startDate in request" });
+    }
 
-    const prescription = await Prescription.findById(prescriptionId);
-    if (!prescription) {
-      return res.status(404).json({ message: "Prescription not found" });
-    }
+    const prescription = await Prescription.findById(prescriptionId);
+    if (!prescription) {
+      return res.status(404).json({ message: "Prescription not found" });
+    }
 
-    const startDate = moment.utc(startDatePayload).startOf("day");
-    const duration = parseInt(prescription.medicineCourse, 10) || 0;
-    const endDate = moment(startDate).add(duration - 1, "days");
+    const startDate = moment.utc(startDatePayload).startOf("day");
+    const duration = parseInt(prescription.medicineCourse, 10) || 0;
+    const endDate = moment(startDate).add(duration - 1, "days");
 
-    prescription.startDate = startDate.toDate();
-    prescription.endDate = endDate.toDate();
-    await prescription.save();
+    prescription.startDate = startDate.toDate();
+    prescription.endDate = endDate.toDate();
+    await prescription.save();
 
-    const remindersToInsert = [];
+    const remindersToInsert = [];
 
-    for (const [index, med] of (prescription.prescriptionItems || []).entries()) {
-      const {
-        medicineName = `Unnamed Medicine #${index}`,
-        form, // ✅ Get the form here**
+    for (const [index, med] of (prescription.prescriptionItems || []).entries()) {
+      const {
+        medicineName = `Unnamed Medicine #${index}`,
+        form, // Get the form here**
         dispenseQuantity,
-        medicineConsumption: dosage = "",
-        additionalComments: instructions = "",
-        standardSchedule = [],
-        frequentSchedule = [],
-        parallelConsumption = null,
-      } = med || {};
+        medicineConsumption: dosage = "",
+        additionalComments: instructions = "",
+        standardSchedule = [],
+        frequentSchedule = [],
+        parallelConsumption = null,
+      } = med || {};
 
-      // Standard Schedule
-      for (const sched of standardSchedule) {
-        const { day, timing = {} } = sched;
-        if (!day || !timing || typeof timing !== "object") continue;
+      // Standard Schedule
+      for (const sched of standardSchedule) {
+        const { day, timing = {} } = sched;
+        if (!day || !timing || typeof timing !== "object") continue;
 
-        const doseDate = moment(startDate).add(day - 1, "days").format("YYYY-MM-DD");
+        const doseDate = moment(startDate).add(day - 1, "days").format("YYYY-MM-DD");
 
-        const timeSlots = Object.values(timing)
-          .map(slot => slot?.time)
-          .filter(Boolean); 
+        const timeSlots = Object.values(timing)
+          .map(slot => slot?.time)
+          .filter(Boolean);
 
-        for (const time of timeSlots) {
-          remindersToInsert.push({
-            patientId: prescription.patientId,
-            doctorId: prescription.doctorId,
-            prescriptionId,
-            medicineName,
-            form, // ✅ Add the form to the reminder**
+        for (const time of timeSlots) {
+          remindersToInsert.push({
+            patientId: prescription.patientId,
+            doctorId: prescription.doctorId,
+            prescriptionId,
+            medicineName,
+            form, // Add the form to the reminder**
             dispenseQuantity,
-            medicineConsumption: dosage,
-            dosage,
-            instructions,
-            date: doseDate,
-            doseTime: time,
-            taken: false,
-            notificationType: "reminder",
-          });
-        }
-      }
-
-      // Frequent Schedule
-      for (const sched of frequentSchedule) {
-        const { day, frequentFrequency } = sched;
-        if (!day || !frequentFrequency) continue;
-
-        const { doses = 0, hours = 0, minutes = 0 } = frequentFrequency;
-        const baseDate = moment(startDate).add(day - 1, "days");
-        const baseTime = moment(baseDate).hour(8).minute(0);
-
-        for (let i = 0; i < doses; i++) {
-          const doseTime = baseTime.clone().add(i * (hours * 60 + minutes), "minutes");
-          remindersToInsert.push({
-            patientId: prescription.patientId,
-            doctorId: prescription.doctorId,
-            prescriptionId,
-            medicineName,
-            form, // ✅ Add the form to the reminder**
-            dispenseQuantity,
-            medicineConsumption: dosage,
-            dosage,
-            instructions,
-            date: doseTime.format("YYYY-MM-DD"),
-            doseTime: doseTime.format("HH:mm"),
-            taken: false,
-            notificationType: "reminder",
-          });
-        }
-      }
-
-      // Parallel Consumption
-      if (parallelConsumption) {
-        const { schedule = [], startTime = "08:00", intervalHours = 0, intervalMinutes = 0, totalDoses = 0 } = parallelConsumption;
-
-        if (schedule.length > 0) {
-          for (const { day, time } of schedule) {
-            const doseDate = moment(startDate).add(day - 1, "days").format("YYYY-MM-DD");
-            remindersToInsert.push({
-              patientId: prescription.patientId,
-              doctorId: prescription.doctorId,
-              prescriptionId,
-              medicineName,
-              form, // ✅ Add the form to the reminder**
-              dispenseQuantity,
-              medicineConsumption: dosage,
-              dosage,
-              instructions,
-              date: doseDate,
-              doseTime: time,
-              taken: false,
-              notificationType: "reminder",
-            });
-          }
-        } else if (totalDoses > 0) {
-          const [sh, sm] = startTime.split(":").map(Number);
-          const baseTime = moment(startDate).hour(sh || 8).minute(sm || 0);
-
-          for (let i = 0; i < totalDoses; i++) {
-            const doseTime = baseTime.clone().add(i * (intervalHours * 60 + intervalMinutes), "minutes");
-            remindersToInsert.push({
-              patientId: prescription.patientId,
-              doctorId: prescription.doctorId,
-              prescriptionId,
-              medicineName,
-              form, // ✅ Add the form to the reminder**
-              dispenseQuantity,
-              medicineConsumption: dosage,
-              dosage,
-              instructions,
-              date: doseTime.format("YYYY-MM-DD"),
-              doseTime: doseTime.format("HH:mm"),
-              taken: false,
-              notificationType: "reminder",
-            });
-          }
-        }
-      }
-    }
-
-    if (remindersToInsert.length > 0) {
-      try {
-        await NotificationReminderSettings.insertMany(remindersToInsert, { ordered: false });
-      } catch (insertErr) {
-        console.error("Reminder Insert Error:", insertErr.message);
-      }
-    }
-// --- NEW: LOGIC TO SCHEDULE FOLLOW-UP CALLS ---
-    try {
-        // Only schedule calls if the course is long enough
-        if (duration >= 3) {
-            const patientId = prescription.patientId;
-            
-            // Calculate three equally spaced days for the calls (e.g., at 25%, 50%, 75% of the course)
-            const callDays = new Set([
-                Math.round(duration * 0.25),
-                Math.round(duration * 0.50),
-                Math.round(duration * 0.75)
-            ]);
-
-            // Ensure we don't schedule a call on day 0
-            callDays.delete(0);
-
-            const followUpCallObjects = [];
-            for (const day of callDays) {
-                // Calculate the actual date for the call
-                const callDate = moment(startDate).add(day, "days").toDate();
-                followUpCallObjects.push({
-                    date: callDate,
-                    callMade: false // Default to false
-                });
-            }
-
-            if (followUpCallObjects.length > 0) {
-                // Push the new call schedule objects into the patient's record
-                await Patient.findByIdAndUpdate(patientId, {
-                    $push: {
-                        followUpCallsMade: { $each: followUpCallObjects }
-                    }
-                });
-                console.log(`Scheduled ${followUpCallObjects.length} follow-up calls for patient ${patientId}`);
-            }
+            medicineConsumption: dosage,
+            dosage,
+            instructions,
+            date: doseDate,
+            doseTime: time,
+            taken: false,
+            notificationType: "reminder",
+          });
         }
+      }
+
+      // Frequent Schedule
+      for (const sched of frequentSchedule) {
+        const { day, frequentFrequency } = sched;
+        if (!day || !frequentFrequency) continue;
+
+        const { doses = 0, hours = 0, minutes = 0 } = frequentFrequency;
+        const baseDate = moment(startDate).add(day - 1, "days");
+        const baseTime = moment(baseDate).hour(8).minute(0);
+
+        for (let i = 0; i < doses; i++) {
+          const doseTime = baseTime.clone().add(i * (hours * 60 + minutes), "minutes");
+          remindersToInsert.push({
+            patientId: prescription.patientId,
+            doctorId: prescription.doctorId,
+            prescriptionId,
+            medicineName,
+            form, // Add the form to the reminder**
+            dispenseQuantity,
+            medicineConsumption: dosage,
+            dosage,
+            instructions,
+            date: doseTime.format("YYYY-MM-DD"),
+            doseTime: doseTime.format("HH:mm"),
+            taken: false,
+            notificationType: "reminder",
+          });
+        }
+      }
+
+      // Parallel Consumption
+      if (parallelConsumption) {
+        const { schedule = [], startTime = "08:00", intervalHours = 0, intervalMinutes = 0, totalDoses = 0 } = parallelConsumption;
+
+        if (schedule.length > 0) {
+          for (const { day, time } of schedule) {
+            const doseDate = moment(startDate).add(day - 1, "days").format("YYYY-MM-DD");
+            remindersToInsert.push({
+              patientId: prescription.patientId,
+              doctorId: prescription.doctorId,
+              prescriptionId,
+              medicineName,
+              form, // Add the form to the reminder**
+              dispenseQuantity,
+              medicineConsumption: dosage,
+              dosage,
+              instructions,
+              date: doseDate,
+              doseTime: time,
+              taken: false,
+              notificationType: "reminder",
+            });
+          }
+        } else if (totalDoses > 0) {
+          const [sh, sm] = startTime.split(":").map(Number);
+          const baseTime = moment(startDate).hour(sh || 8).minute(sm || 0);
+
+          for (let i = 0; i < totalDoses; i++) {
+            const doseTime = baseTime.clone().add(i * (intervalHours * 60 + intervalMinutes), "minutes");
+            remindersToInsert.push({
+              patientId: prescription.patientId,
+              doctorId: prescription.doctorId,
+              prescriptionId,
+              medicineName,
+              form, // Add the form to the reminder**
+              dispenseQuantity,
+              medicineConsumption: dosage,
+              dosage,
+              instructions,
+              date: doseTime.format("YYYY-MM-DD"),
+              doseTime: doseTime.format("HH:mm"),
+              taken: false,
+              notificationType: "reminder",
+            });
+          }
+        }
+      }
+    }
+
+    if (remindersToInsert.length > 0) {
+      try {
+        await NotificationReminderSettings.insertMany(remindersToInsert, { ordered: false });
+      } catch (insertErr) {
+        console.error("Reminder Insert Error:", insertErr.message);
+      }
+    }
+    // --- NEW: LOGIC TO SCHEDULE FOLLOW-UP CALLS ---
+    try {
+      // Only schedule calls if the course is long enough
+      if (duration >= 3) {
+        const patientId = prescription.patientId;
+
+        // Calculate three equally spaced days for the calls (e.g., at 25%, 50%, 75% of the course)
+        const callDays = new Set([
+          Math.round(duration * 0.25),
+          Math.round(duration * 0.50),
+          Math.round(duration * 0.75)
+        ]);
+
+        // Ensure we don't schedule a call on day 0
+        callDays.delete(0);
+
+        const followUpCallObjects = [];
+        for (const day of callDays) {
+          // Calculate the actual date for the call
+          const callDate = moment(startDate).add(day, "days").toDate();
+          followUpCallObjects.push({
+            date: callDate,
+            callMade: false // Default to false
+          });
+        }
+
+        if (followUpCallObjects.length > 0) {
+          // Push the new call schedule objects into the patient's record
+          await Patient.findByIdAndUpdate(patientId, {
+            $push: {
+              followUpCallsMade: { $each: followUpCallObjects }
+            }
+          });
+          console.log(`Scheduled ${followUpCallObjects.length} follow-up calls for patient ${patientId}`);
+        }
+      }
     } catch (callScheduleError) {
-        console.error("Error scheduling follow-up calls:", callScheduleError);
-        // This error will be logged but won't stop the main function from succeeding
+      console.error("Error scheduling follow-up calls:", callScheduleError);
+      // This error will be logged but won't stop the main function from succeeding
     }
     // --- END OF NEW LOGIC ---
 
-    res.status(200).json({
-      message: "Prescription started. Reminders created where possible."
-    });
-  } catch (error) {
-    console.error("Unhandled Error in startPrescription:", error.message);
-    res.status(500).json({
-      message: "Something went wrong while starting the prescription",
-      error: error.message,
-    });
-  }
+    res.status(200).json({
+      message: "Prescription started. Reminders created where possible."
+    });
+  } catch (error) {
+    console.error("Unhandled Error in startPrescription:", error.message);
+    res.status(500).json({
+      message: "Something went wrong while starting the prescription",
+      error: error.message,
+    });
+  }
 };
 
 /**
@@ -1057,56 +1806,56 @@ exports.startPrescription = async (req, res) => {
  * @body    { "date": "YYYY-MM-DD", "callMade": true | false }
  */
 exports.updateFollowUpCallStatus = async (req, res) => {
-    try {
-        const { patientId } = req.params;
-        const { date, callMade } = req.body;
+  try {
+    const { patientId } = req.params;
+    const { date, callMade } = req.body;
 
-        // 1. Validate all inputs
-        if (!mongoose.Types.ObjectId.isValid(patientId)) {
-            return res.status(400).json({ message: "Invalid Patient ID format." });
-        }
-        if (!date || typeof callMade !== 'boolean') {
-            return res.status(400).json({ message: "A 'date' (YYYY-MM-DD) and a 'callMade' boolean are required." });
-        }
-
-        // 2. Find the patient
-        const patient = await Patient.findById(patientId);
-        if (!patient) {
-            return res.status(404).json({ message: "Patient not found." });
-        }
-
-        // 3. Find the specific call record in the array
-        let callRecordFound = false;
-        const targetDate = new Date(date);
-        targetDate.setUTCHours(0, 0, 0, 0);
-
-        patient.followUpCallsMade.forEach(call => {
-            const callDate = new Date(call.date);
-            callDate.setUTCHours(0, 0, 0, 0);
-            if (callDate.getTime() === targetDate.getTime()) {
-                call.callMade = callMade;
-                callRecordFound = true;
-            }
-        });
-
-        // 4. Check if a record for that date was found
-        if (!callRecordFound) {
-            return res.status(404).json({ message: `No follow-up call scheduled for this patient on ${date}.` });
-        }
-
-        // 5. Save the updated patient document
-        const updatedPatient = await patient.save();
-
-        res.status(200).json({
-            success: true,
-            message: `Follow-up call status for ${date} updated successfully.`,
-            data: updatedPatient,
-        });
-
-    } catch (error) {
-        console.error("Error updating follow-up call status:", error);
-        res.status(500).json({ success: false, message: "Internal server error" });
+    // 1. Validate all inputs
+    if (!mongoose.Types.ObjectId.isValid(patientId)) {
+      return res.status(400).json({ message: "Invalid Patient ID format." });
     }
+    if (!date || typeof callMade !== 'boolean') {
+      return res.status(400).json({ message: "A 'date' (YYYY-MM-DD) and a 'callMade' boolean are required." });
+    }
+
+    // 2. Find the patient
+    const patient = await Patient.findById(patientId);
+    if (!patient) {
+      return res.status(404).json({ message: "Patient not found." });
+    }
+
+    // 3. Find the specific call record in the array
+    let callRecordFound = false;
+    const targetDate = new Date(date);
+    targetDate.setUTCHours(0, 0, 0, 0);
+
+    patient.followUpCallsMade.forEach(call => {
+      const callDate = new Date(call.date);
+      callDate.setUTCHours(0, 0, 0, 0);
+      if (callDate.getTime() === targetDate.getTime()) {
+        call.callMade = callMade;
+        callRecordFound = true;
+      }
+    });
+
+    // 4. Check if a record for that date was found
+    if (!callRecordFound) {
+      return res.status(404).json({ message: `No follow-up call scheduled for this patient on ${date}.` });
+    }
+
+    // 5. Save the updated patient document
+    const updatedPatient = await patient.save();
+
+    res.status(200).json({
+      success: true,
+      message: `Follow-up call status for ${date} updated successfully.`,
+      data: updatedPatient,
+    });
+
+  } catch (error) {
+    console.error("Error updating follow-up call status:", error);
+    res.status(500).json({ success: false, message: "Internal server error" });
+  }
 };
 /**
  * @desc    Get a list of all patients with scheduled follow-up calls.
@@ -1114,24 +1863,24 @@ exports.updateFollowUpCallStatus = async (req, res) => {
  * @access  Private (Admin/Doctor)
  */
 exports.getFollowUpCallList = async (req, res) => {
-    try {
-        // Find patients where the 'followUpCallsMade' array exists and is not empty.
-        // We also select only the fields we need for a clean response.
-        const patientsWithCalls = await Patient.find(
-            { "followUpCallsMade.0": { $exists: true } }, // Efficiently finds non-empty arrays
-            { name: 1, followUpCallsMade: 1 } // Selects only name and the calls array
-        ).sort({ name: 1 });
+  try {
+    // Find patients where the 'followUpCallsMade' array exists and is not empty.
+    // We also select only the fields we need for a clean response.
+    const patientsWithCalls = await Patient.find(
+      { "followUpCallsMade.0": { $exists: true } }, // Efficiently finds non-empty arrays
+      { name: 1, followUpCallsMade: 1 } // Selects only name and the calls array
+    ).sort({ name: 1 });
 
-        res.status(200).json({
-            success: true,
-            count: patientsWithCalls.length,
-            data: patientsWithCalls,
-        });
+    res.status(200).json({
+      success: true,
+      count: patientsWithCalls.length,
+      data: patientsWithCalls,
+    });
 
-    } catch (error) {
-        console.error("Error fetching follow-up call list:", error);
-        res.status(500).json({ success: false, message: "Internal server error" });
-    }
+  } catch (error) {
+    console.error("Error fetching follow-up call list:", error);
+    res.status(500).json({ success: false, message: "Internal server error" });
+  }
 };
 exports.getDeliveryStatusByPatient = async (req, res) => {
   try {
@@ -1148,12 +1897,12 @@ exports.getDeliveryStatusByPatient = async (req, res) => {
         .json({ message: "No prescriptions found for this patient." });
     }
 
-    // ✅ 1. Use Promise.all to handle the async call inside the map
+    // 1. Use Promise.all to handle the async call inside the map
     const simplified = await Promise.all(
       prescriptions.map(async (prescription) => {
-        // ✅ 2. Fetch the corresponding packaging details
+        // 2. Fetch the corresponding packaging details
         const summary = await MedicinePreparationSummary.findOne(
-            { prescriptionId: prescription._id }
+          { prescriptionId: prescription._id }
         ).select("packagingUsed");
 
         // Prepare the object with all the required data
@@ -1167,7 +1916,7 @@ exports.getDeliveryStatusByPatient = async (req, res) => {
             qty: item.dispenseQuantity,
             uom: item.uom,
           })),
-          // ✅ 3. Add the packaging details to the response
+          // 3. Add the packaging details to the response
           packagingDetails: summary?.packagingUsed || [],
         };
       })
@@ -1189,9 +1938,12 @@ exports.getDoctorByFollow = async (req, res) => {
       return res.status(404).json({ message: "Doctor not found" });
     }
 
-    res.status(200).json(doctor); } catch(err){
+    res.status(200).json(doctor);
+  } catch (err) {
     console.error("Error fetching doctor details:", err);
-    res.status(500).json({ message: "Server Error" })}};
+    res.status(500).json({ message: "Server Error" })
+  }
+};
 
 exports.getDoctorPatientMedicationSummary = async (req, res) => {
   try {
@@ -1295,71 +2047,71 @@ exports.getDoctorPatientMedicationSummary = async (req, res) => {
  * @access  Private
  */
 exports.markAppointmentAsNoShow = async (req, res) => {
-    try {
-        const { appointmentId } = req.params;
-        const { noShow } = req.body;
+  try {
+    const { appointmentId } = req.params;
+    const { noShow } = req.body;
 
-        // 1. Validate inputs
-        if (!mongoose.Types.ObjectId.isValid(appointmentId)) {
-            return res.status(400).json({ message: "Invalid Appointment ID format." });
-        }
-        if (typeof noShow !== 'boolean') {
-            return res.status(400).json({ message: "A 'noShow' boolean value is required in the body." });
-        }
-
-        let updatedAppointment;
-        let message;
-
-        if (noShow === true) {
-            // --- SCENARIO 1: APPOINTMENT WAS MISSED ---
-            // Just update noShow to true, as requested.
-            updatedAppointment = await Appointment.findByIdAndUpdate(
-                appointmentId,
-                { noShow: true, status: 'completed' }, // Also marking status as completed
-                { new: true }
-            );
-            message = "Appointment successfully marked as no-show.";
-
-        } else {
-            // --- SCENARIO 2: APPOINTMENT WAS COMPLETED SUCCESSFULLY ---
-            
-            // 1. Update the appointment's follow status
-            updatedAppointment = await Appointment.findByIdAndUpdate(
-                appointmentId,
-                { 
-                    follow: "Prescription",
-                    status: "completed",
-                    noShow: false // Explicitly set noShow to false
-                },
-                { new: true }
-            );
-
-            if (updatedAppointment) {
-                // 2. Update the patient's follow and stage status
-                await Patient.findByIdAndUpdate(updatedAppointment.patient, {
-                    follow: "Prescription",
-                    stage: "Prescription"
-                });
-            }
-            message = "Appointment successfully completed and patient moved to Prescription stage.";
-        }
-
-        // Check if the appointment was found
-        if (!updatedAppointment) {
-            return res.status(404).json({ message: "Appointment not found." });
-        }
-
-        // Send the final response
-        res.status(200).json({
-            success: true,
-            message: message,
-            appointment: updatedAppointment,
-        });
-
-    } catch (error) {
-        console.error("Error concluding appointment:", error);
-        res.status(500).json({ success: false, message: "Internal server error" });
+    // 1. Validate inputs
+    if (!mongoose.Types.ObjectId.isValid(appointmentId)) {
+      return res.status(400).json({ message: "Invalid Appointment ID format." });
     }
+    if (typeof noShow !== 'boolean') {
+      return res.status(400).json({ message: "A 'noShow' boolean value is required in the body." });
+    }
+
+    let updatedAppointment;
+    let message;
+
+    if (noShow === true) {
+      // --- SCENARIO 1: APPOINTMENT WAS MISSED ---
+      // Just update noShow to true, as requested.
+      updatedAppointment = await Appointment.findByIdAndUpdate(
+        appointmentId,
+        { noShow: true, status: 'completed' }, // Also marking status as completed
+        { new: true }
+      );
+      message = "Appointment successfully marked as no-show.";
+
+    } else {
+      // --- SCENARIO 2: APPOINTMENT WAS COMPLETED SUCCESSFULLY ---
+
+      // 1. Update the appointment's follow status
+      updatedAppointment = await Appointment.findByIdAndUpdate(
+        appointmentId,
+        {
+          follow: "Prescription",
+          status: "completed",
+          noShow: false // Explicitly set noShow to false
+        },
+        { new: true }
+      );
+
+      if (updatedAppointment) {
+        // 2. Update the patient's follow and stage status
+        await Patient.findByIdAndUpdate(updatedAppointment.patient, {
+          follow: "Prescription",
+          stage: "Prescription"
+        });
+      }
+      message = "Appointment successfully completed and patient moved to Prescription stage.";
+    }
+
+    // Check if the appointment was found
+    if (!updatedAppointment) {
+      return res.status(404).json({ message: "Appointment not found." });
+    }
+
+    // Send the final response
+    res.status(200).json({
+      success: true,
+      message: message,
+      appointment: updatedAppointment,
+    });
+
+  } catch (error) {
+    console.error("Error concluding appointment:", error);
+    res.status(500).json({ success: false, message: "Internal server error" });
+  }
 };
 
 /**
@@ -1368,71 +2120,71 @@ exports.markAppointmentAsNoShow = async (req, res) => {
  * @access  Private (Admin)
  */
 exports.getDoctorAttendanceReport = async (req, res) => {
-    try {
-        // REMOVED: No longer need startDate or endDate from req.query
+  try {
+    // REMOVED: No longer need startDate or endDate from req.query
 
-        // 2. Build the aggregation pipeline
-        const pipeline = [
-            // Stage 1: Deconstruct the attendanceRecords array
-            {
-                $unwind: "$attendanceRecords"
-            },
-            
-            // REMOVED: The $match stage for date filtering is now gone.
+    // 2. Build the aggregation pipeline
+    const pipeline = [
+      // Stage 1: Deconstruct the attendanceRecords array
+      {
+        $unwind: "$attendanceRecords"
+      },
 
-            // Stage 2: Group back by doctor to calculate counts for each one
-            {
-                $group: {
-                    _id: "$_id", // Group by the doctor's ID
-                    name: { $first: "$name" },
-                    employeeID: { $first: "$employeeID" },
-                    department: { $first: "$department" },
-                    role: { $first: "$role" },
-                    // Sum up the counts for each status
-                    presentCount: {
-                        $sum: { $cond: [{ $eq: ["$attendanceRecords.status", "Present"] }, 1, 0] }
-                    },
-                    absentCount: {
-                        $sum: { $cond: [{ $eq: ["$attendanceRecords.status", "Absent"] }, 1, 0] }
-                    },
-                    lateCount: {
-                        $sum: { $cond: [{ $eq: ["$attendanceRecords.status", "Late"] }, 1, 0] }
-                    }
-                }
-            },
-            // Stage 3: Format the final output
-            {
-                $project: {
-                    _id: 0,
-                    doctorId: "$_id",
-                    doctorName: "$name",
-                    employeeID: 1,
-                    department: 1,
-                    role: 1,
-                    presentCount: 1,
-                    absentCount: 1,
-                    lateCount: 1
-                }
-            },
-            // Stage 4: (Optional) Sort the results by name
-            {
-                $sort: { doctorName: 1 }
-            }
-        ];
+      // REMOVED: The $match stage for date filtering is now gone.
 
-        // 3. Execute the aggregation and send the response
-        const report = await Doctor.aggregate(pipeline);
+      // Stage 2: Group back by doctor to calculate counts for each one
+      {
+        $group: {
+          _id: "$_id", // Group by the doctor's ID
+          name: { $first: "$name" },
+          employeeID: { $first: "$employeeID" },
+          department: { $first: "$department" },
+          role: { $first: "$role" },
+          // Sum up the counts for each status
+          presentCount: {
+            $sum: { $cond: [{ $eq: ["$attendanceRecords.status", "Present"] }, 1, 0] }
+          },
+          absentCount: {
+            $sum: { $cond: [{ $eq: ["$attendanceRecords.status", "Absent"] }, 1, 0] }
+          },
+          lateCount: {
+            $sum: { $cond: [{ $eq: ["$attendanceRecords.status", "Late"] }, 1, 0] }
+          }
+        }
+      },
+      // Stage 3: Format the final output
+      {
+        $project: {
+          _id: 0,
+          doctorId: "$_id",
+          doctorName: "$name",
+          employeeID: 1,
+          department: 1,
+          role: 1,
+          presentCount: 1,
+          absentCount: 1,
+          lateCount: 1
+        }
+      },
+      // Stage 4: (Optional) Sort the results by name
+      {
+        $sort: { doctorName: 1 }
+      }
+    ];
 
-        res.status(200).json({
-            success: true,
-            count: report.length,
-            data: report,
-        });
+    // 3. Execute the aggregation and send the response
+    const report = await Doctor.aggregate(pipeline);
 
-    } catch (error) {
-        console.error("Error fetching doctor attendance report:", error);
-        res.status(500).json({ success: false, message: "Internal server error" });
-    }
+    res.status(200).json({
+      success: true,
+      count: report.length,
+      data: report,
+    });
+
+  } catch (error) {
+    console.error("Error fetching doctor attendance report:", error);
+    res.status(500).json({ success: false, message: "Internal server error" });
+  }
 };
 /**
  * @desc    Update the shipment lost status of a prescription.
@@ -1441,114 +2193,114 @@ exports.getDoctorAttendanceReport = async (req, res) => {
  * @body    { "shipmentLost": true | false }
  */
 exports.markShipmentAsLost = async (req, res) => {
-    try {
-        const { prescriptionId } = req.params;
-        const { shipmentLost } = req.body;
+  try {
+    const { prescriptionId } = req.params;
+    const { shipmentLost } = req.body;
 
-        // 1. Validate inputs
-        if (!mongoose.Types.ObjectId.isValid(prescriptionId)) {
-            return res.status(400).json({ message: "Invalid Prescription ID format." });
-        }
-        if (typeof shipmentLost !== 'boolean') {
-            return res.status(400).json({ message: "A 'shipmentLost' boolean value is required in the body." });
-        }
-
-        let updatedPrescription;
-        let message;
-
-        if (shipmentLost === true) {
-            // --- SCENARIO 1: Shipment is marked as LOST ---
-            // Reset the process back to preparation stage
-            
-            // 1. Update the prescription
-            updatedPrescription = await Prescription.findByIdAndUpdate(
-                prescriptionId,
-                { 
-                    shipmentLost: true,
-                    isProductShipped: false, // Reset shipped status
-                    updatedAt: new Date()
-                },
-                { new: true }
-            );
-
-            if (updatedPrescription) {
-                // 2. Update the associated appointment
-                await Appointment.findByIdAndUpdate(
-                    updatedPrescription.appointmentID,
-                    {
-                        follow: "Medicine Preparation",
-                        medicinePrepared: false // Reset prepared status
-                    }
-                );
-            }
-            message = "Shipment marked as lost. Process has been reset to 'Medicine Preparation'.";
-
-        } else {
-            // --- SCENARIO 2: Reverting a "lost" status back to NOT LOST ---
-            updatedPrescription = await Prescription.findByIdAndUpdate(
-                prescriptionId,
-                { 
-                    shipmentLost: false,
-                    updatedAt: new Date()
-                },
-                { new: true }
-            );
-            message = "Shipment status has been reverted to not lost.";
-        }
-
-        // 3. Check if the prescription was found
-        if (!updatedPrescription) {
-            return res.status(404).json({ message: "Prescription not found." });
-        }
-
-        // 4. Send a successful response
-        res.status(200).json({
-            success: true,
-            message: message,
-            data: updatedPrescription,
-        });
-
-    } catch (error) {
-        console.error("Error updating shipment lost status:", error);
-        res.status(500).json({ success: false, message: "Internal server error" });
+    // 1. Validate inputs
+    if (!mongoose.Types.ObjectId.isValid(prescriptionId)) {
+      return res.status(400).json({ message: "Invalid Prescription ID format." });
     }
+    if (typeof shipmentLost !== 'boolean') {
+      return res.status(400).json({ message: "A 'shipmentLost' boolean value is required in the body." });
+    }
+
+    let updatedPrescription;
+    let message;
+
+    if (shipmentLost === true) {
+      // --- SCENARIO 1: Shipment is marked as LOST ---
+      // Reset the process back to preparation stage
+
+      // 1. Update the prescription
+      updatedPrescription = await Prescription.findByIdAndUpdate(
+        prescriptionId,
+        {
+          shipmentLost: true,
+          isProductShipped: false, // Reset shipped status
+          updatedAt: new Date()
+        },
+        { new: true }
+      );
+
+      if (updatedPrescription) {
+        // 2. Update the associated appointment
+        await Appointment.findByIdAndUpdate(
+          updatedPrescription.appointmentID,
+          {
+            follow: "Medicine Preparation",
+            medicinePrepared: false // Reset prepared status
+          }
+        );
+      }
+      message = "Shipment marked as lost. Process has been reset to 'Medicine Preparation'.";
+
+    } else {
+      // --- SCENARIO 2: Reverting a "lost" status back to NOT LOST ---
+      updatedPrescription = await Prescription.findByIdAndUpdate(
+        prescriptionId,
+        {
+          shipmentLost: false,
+          updatedAt: new Date()
+        },
+        { new: true }
+      );
+      message = "Shipment status has been reverted to not lost.";
+    }
+
+    // 3. Check if the prescription was found
+    if (!updatedPrescription) {
+      return res.status(404).json({ message: "Prescription not found." });
+    }
+
+    // 4. Send a successful response
+    res.status(200).json({
+      success: true,
+      message: message,
+      data: updatedPrescription,
+    });
+
+  } catch (error) {
+    console.error("Error updating shipment lost status:", error);
+    res.status(500).json({ success: false, message: "Internal server error" });
+  }
 };/**
  * @desc    Allow phone calls for a specific patient.
  * @route   PATCH /api/patients/:patientId/allow-calls
  * @access  Private
  */
 exports.allowPhoneCalls = async (req, res) => {
-    try {
-        const { patientId } = req.params;
+  try {
+    const { patientId } = req.params;
 
-        // 1. Validate the patient ID format
-        if (!mongoose.Types.ObjectId.isValid(patientId)) {
-            return res.status(400).json({ message: "Invalid Patient ID format." });
-        }
-
-        // 2. Find the patient and update the 'phoneAllowed' field
-        const updatedPatient = await Patient.findByIdAndUpdate(
-            patientId,
-            { phoneAllowed: true },
-            { new: true } // This option returns the updated document
-        );
-
-        // 3. Check if the patient was found
-        if (!updatedPatient) {
-            return res.status(404).json({ message: "Patient not found." });
-        }
-
-        // 4. Send a successful response
-        res.status(200).json({
-            success: true,
-            message: "Phone calls are now allowed for this patient.",
-            data: updatedPatient,
-        });
-
-    } catch (error) {
-        console.error("Error allowing phone calls:", error);
-        res.status(500).json({ success: false, message: "Internal server error" });
+    // 1. Validate the patient ID format
+    if (!mongoose.Types.ObjectId.isValid(patientId)) {
+      return res.status(400).json({ message: "Invalid Patient ID format." });
     }
+
+    // 2. Find the patient and update the 'phoneAllowed' field
+    const updatedPatient = await Patient.findByIdAndUpdate(
+      patientId,
+      { phoneAllowed: true },
+      { new: true } // This option returns the updated document
+    );
+
+    // 3. Check if the patient was found
+    if (!updatedPatient) {
+      return res.status(404).json({ message: "Patient not found." });
+    }
+
+    // 4. Send a successful response
+    res.status(200).json({
+      success: true,
+      message: "Phone calls are now allowed for this patient.",
+      data: updatedPatient,
+    });
+
+  } catch (error) {
+    console.error("Error allowing phone calls:", error);
+    res.status(500).json({ success: false, message: "Internal server error" });
+  }
 };
 /**
  * @desc    Increment the phone calls received count for a patient by 1.
@@ -1556,37 +2308,37 @@ exports.allowPhoneCalls = async (req, res) => {
  * @access  Private
  */
 exports.incrementCallCount = async (req, res) => {
-    try {
-        const { patientId } = req.params;
+  try {
+    const { patientId } = req.params;
 
-        // 1. Validate the patient ID format
-        if (!mongoose.Types.ObjectId.isValid(patientId)) {
-            return res.status(400).json({ message: "Invalid Patient ID format." });
-        }
-
-        // 2. Find the patient and increment the 'phoneReceived' field
-        const updatedPatient = await Patient.findByIdAndUpdate(
-            patientId,
-            { $inc: { phoneReceived: 1 } }, // Use the $inc operator to increment
-            { new: true } // Return the updated document
-        );
-
-        // 3. Check if the patient was found
-        if (!updatedPatient) {
-            return res.status(404).json({ message: "Patient not found." });
-        }
-
-        // 4. Send a successful response
-        res.status(200).json({
-            success: true,
-            message: "Patient call count incremented successfully.",
-            data: updatedPatient,
-        });
-
-    } catch (error) {
-        console.error("Error incrementing call count:", error);
-        res.status(500).json({ success: false, message: "Internal server error" });
+    // 1. Validate the patient ID format
+    if (!mongoose.Types.ObjectId.isValid(patientId)) {
+      return res.status(400).json({ message: "Invalid Patient ID format." });
     }
+
+    // 2. Find the patient and increment the 'phoneReceived' field
+    const updatedPatient = await Patient.findByIdAndUpdate(
+      patientId,
+      { $inc: { phoneReceived: 1 } }, // Use the $inc operator to increment
+      { new: true } // Return the updated document
+    );
+
+    // 3. Check if the patient was found
+    if (!updatedPatient) {
+      return res.status(404).json({ message: "Patient not found." });
+    }
+
+    // 4. Send a successful response
+    res.status(200).json({
+      success: true,
+      message: "Patient call count incremented successfully.",
+      data: updatedPatient,
+    });
+
+  } catch (error) {
+    console.error("Error incrementing call count:", error);
+    res.status(500).json({ success: false, message: "Internal server error" });
+  }
 };
 /**
  * @desc    Mark or update a doctor's attendance for a specific day.
@@ -1595,60 +2347,60 @@ exports.incrementCallCount = async (req, res) => {
  * @body    { "status": "Present" | "Absent" | "Late", "date": "YYYY-MM-DD", "notes": "Optional comment" }
  */
 exports.markDoctorAttendance = async (req, res) => {
-    try {
-        const { doctorId } = req.params;
-        const { status, date, notes } = req.body;
+  try {
+    const { doctorId } = req.params;
+    const { status, date, notes } = req.body;
 
-        // 1. Validate inputs
-        if (!mongoose.Types.ObjectId.isValid(doctorId)) {
-            return res.status(400).json({ message: "Invalid Doctor ID format." });
-        }
-        if (!status || !['Present', 'Absent', 'Late'].includes(status)) {
-            return res.status(400).json({ message: "A valid status ('Present', 'Absent', 'Late') is required." });
-        }
-
-        // 2. Find the doctor
-        const doctor = await Doctor.findById(doctorId);
-        if (!doctor) {
-            return res.status(404).json({ message: "Doctor not found." });
-        }
-
-        // 3. Prepare the date for the record (use provided date or today's date)
-        const recordDate = date ? new Date(date) : new Date();
-        recordDate.setUTCHours(0, 0, 0, 0); // Normalize to the start of the day
-
-        // 4. Check if a record for this date already exists
-        const existingRecordIndex = doctor.attendanceRecords.findIndex(record => {
-            const existingDate = new Date(record.date);
-            existingDate.setUTCHours(0, 0, 0, 0);
-            return existingDate.getTime() === recordDate.getTime();
-        });
-
-        if (existingRecordIndex > -1) {
-            // If record exists, update it
-            doctor.attendanceRecords[existingRecordIndex].status = status;
-            doctor.attendanceRecords[existingRecordIndex].notes = notes || doctor.attendanceRecords[existingRecordIndex].notes;
-        } else {
-            // If no record exists, add a new one
-            doctor.attendanceRecords.push({
-                date: recordDate,
-                status: status,
-                notes: notes
-            });
-        }
-
-        const updatedDoctor = await doctor.save();
-
-        res.status(200).json({
-            success: true,
-            message: `Attendance for ${doctor.name} on ${recordDate.toISOString().split('T')[0]} marked as ${status}.`,
-            data: updatedDoctor
-        });
-
-    } catch (error) {
-        console.error("Error marking doctor attendance:", error);
-        res.status(500).json({ success: false, message: "Internal server error" });
+    // 1. Validate inputs
+    if (!mongoose.Types.ObjectId.isValid(doctorId)) {
+      return res.status(400).json({ message: "Invalid Doctor ID format." });
     }
+    if (!status || !['Present', 'Absent', 'Late'].includes(status)) {
+      return res.status(400).json({ message: "A valid status ('Present', 'Absent', 'Late') is required." });
+    }
+
+    // 2. Find the doctor
+    const doctor = await Doctor.findById(doctorId);
+    if (!doctor) {
+      return res.status(404).json({ message: "Doctor not found." });
+    }
+
+    // 3. Prepare the date for the record (use provided date or today's date)
+    const recordDate = date ? new Date(date) : new Date();
+    recordDate.setUTCHours(0, 0, 0, 0); // Normalize to the start of the day
+
+    // 4. Check if a record for this date already exists
+    const existingRecordIndex = doctor.attendanceRecords.findIndex(record => {
+      const existingDate = new Date(record.date);
+      existingDate.setUTCHours(0, 0, 0, 0);
+      return existingDate.getTime() === recordDate.getTime();
+    });
+
+    if (existingRecordIndex > -1) {
+      // If record exists, update it
+      doctor.attendanceRecords[existingRecordIndex].status = status;
+      doctor.attendanceRecords[existingRecordIndex].notes = notes || doctor.attendanceRecords[existingRecordIndex].notes;
+    } else {
+      // If no record exists, add a new one
+      doctor.attendanceRecords.push({
+        date: recordDate,
+        status: status,
+        notes: notes
+      });
+    }
+
+    const updatedDoctor = await doctor.save();
+
+    res.status(200).json({
+      success: true,
+      message: `Attendance for ${doctor.name} on ${recordDate.toISOString().split('T')[0]} marked as ${status}.`,
+      data: updatedDoctor
+    });
+
+  } catch (error) {
+    console.error("Error marking doctor attendance:", error);
+    res.status(500).json({ success: false, message: "Internal server error" });
+  }
 };
 exports.getTodaysAppointments = async (req, res) => {
   try {
@@ -1686,14 +2438,14 @@ exports.getTodaysAppointments = async (req, res) => {
       appointmentId: appt._id,
       timeSlot: appt.timeSlot,
       status: appt.status,
-      diseaseName:appt.diseaseName,
-      consultingFor:appt.consultingFor,
+      diseaseName: appt.diseaseName,
+      consultingFor: appt.consultingFor,
       patient: appt.patient
         ? {
-            id: appt.patient._id,
-            name: appt.patient.name,
-            phone: appt.patient.phone,
-          }
+          id: appt.patient._id,
+          name: appt.patient.name,
+          phone: appt.patient.phone,
+        }
         : null, // Handle case where patient might be deleted
     }));
 
@@ -1734,11 +2486,11 @@ exports.getAppointmentWithTimedata = async (req, res) => {
   }
 };
 
-exports.getAppointedPatients = async (req,res)=>{
+exports.getAppointedPatients = async (req, res) => {
   try {
-    const appointments = await Appointment.find({doctor:req.query.id});
+    const appointments = await Appointment.find({ doctor: req.query.id });
     const appointedPatients = [...new Set(appointments.map(patient => patient.patient.toString()))];
-    const patientDetails = await Patient.find({_id:{$in:appointedPatients}})
+    const patientDetails = await Patient.find({ _id: { $in: appointedPatients } })
     res.json(patientDetails)
   } catch (error) {
     console.log(error)
@@ -1748,12 +2500,12 @@ exports.getAppointedPatients = async (req,res)=>{
 exports.consultationNotes = async (req, res) => {
   try {
     console.log('Received consultation note data:', req.body); // Debug log
-    
+
     // Validate required fields
     const { patientId, userId, note } = req.body;
-    
+
     if (!patientId || !userId || !note) {
-      return res.status(400).json({ 
+      return res.status(400).json({
         success: false,
         message: 'Missing required fields: patientId, userId, and note are required',
         received: req.body
@@ -1769,20 +2521,20 @@ exports.consultationNotes = async (req, res) => {
     });
 
     console.log('Saving consultation note:', consultationNote); // Debug log
-    
+
     const savedNote = await consultationNote.save();
-    
+
     console.log('Successfully saved note:', savedNote); // Debug log
-    
+
     res.status(201).json({
       success: true,
       message: 'Consultation note saved successfully',
       data: savedNote
     });
-    
+
   } catch (error) {
     console.error('Error saving consultation note:', error); // Detailed error log
-    
+
     // Handle different types of errors
     if (error.name === 'ValidationError') {
       return res.status(400).json({
@@ -1791,7 +2543,7 @@ exports.consultationNotes = async (req, res) => {
         errors: Object.values(error.errors).map(err => err.message)
       });
     }
-    
+
     if (error.code === 11000) {
       return res.status(400).json({
         success: false,
@@ -1799,8 +2551,8 @@ exports.consultationNotes = async (req, res) => {
         error: error.message
       });
     }
-    
-    res.status(500).json({ 
+
+    res.status(500).json({
       success: false,
       message: 'Internal Server Error',
       error: process.env.NODE_ENV === 'development' ? error.message : 'Something went wrong'
@@ -1808,9 +2560,9 @@ exports.consultationNotes = async (req, res) => {
   }
 };
 
-exports.secondFormDetails = async (req,res) =>{
+exports.secondFormDetails = async (req, res) => {
   try {
-    const response = await chronicModel.find({userId:req.query.id})
+    const response = await chronicModel.find({ userId: req.query.id })
     res.json(response);
   } catch (error) {
     console.log(error);
@@ -1831,82 +2583,82 @@ exports.getTotalAppointments = async (req, res) => {
   }
 };
 exports.chatPatientWithDoctorAndIsReadCount = async (req, res) => {
-    const doctorId = req.user._id.toString();
+  const doctorId = req.user._id.toString();
 
-    try {
-        // Step 1: Find all messages where the doctor is the receiver
-        const result = await Message.find({ receiver: doctorId });
+  try {
+    // Step 1: Find all messages where the doctor is the receiver
+    const result = await Message.find({ receiver: doctorId });
 
-        // Step 2: Collect all patient (sender) IDs
-        const patientIds = result.map(app => app.sender);
+    // Step 2: Collect all patient (sender) IDs
+    const patientIds = result.map(app => app.sender);
 
-        // Step 3: Fetch the FULL PATIENT PROFILE for each of those patients
-        const patientFullDetails = await Promise.all(
-            patientIds.map(async (id) => {
-                // ✅ CHANGE 1: Query the 'Patient' model instead of 'PatientDetails'
-                // We find the patient by their main unique _id.
-                return await Patient.findOne({ _id: id }).select("-password");
-            })
-        );
+    // Step 3: Fetch the FULL PATIENT PROFILE for each of those patients
+    const patientFullDetails = await Promise.all(
+      patientIds.map(async (id) => {
+        // CHANGE 1: Query the 'Patient' model instead of 'PatientDetails'
+        // We find the patient by their main unique _id.
+        return await Patient.findOne({ _id: id }).select("-password");
+      })
+    );
 
-        // Step 4: Filter out any null results and create a unique list of patients by phone
-        const uniqueData = Array.from(
-            new Map(
-                patientFullDetails
-                    .filter(item => item !== null)
-                    .map(item => [item.phone, item])
-            ).values()
-        );
+    // Step 4: Filter out any null results and create a unique list of patients by phone
+    const uniqueData = Array.from(
+      new Map(
+        patientFullDetails
+          .filter(item => item !== null)
+          .map(item => [item.phone, item])
+      ).values()
+    );
 
-        // Step 5: For each unique patient, count their unread messages
-        const unreadCounts = uniqueData.map(patient => {
-            const count = result.filter(
-                // ✅ CHANGE 2: Match the sender with the patient's '_id'
-                // The Patient model uses '_id', not 'patientId'.
-                msg => msg.sender === patient._id.toString() && msg.isRead === false
-            ).length;
+    // Step 5: For each unique patient, count their unread messages
+    const unreadCounts = uniqueData.map(patient => {
+      const count = result.filter(
+        // CHANGE 2: Match the sender with the patient's '_id'
+        // The Patient model uses '_id', not 'patientId'.
+        msg => msg.sender === patient._id.toString() && msg.isRead === false
+      ).length;
 
-            return {
-                patientId: patient._id,
-                isReadFalseCount: count
-            };
-        });
-        
-        if (uniqueData.length === 0) {
-            return res.status(200).json({ 
-                success: true, 
-                message: "No patient chat history found.",
-                uniqueData: [],
-                unreadCounts: []
-            });
-        }
+      return {
+        patientId: patient._id,
+        isReadFalseCount: count
+      };
+    });
 
-        // Return the successful response with the full patient profiles
-        return res.status(200).json({
-            success: true,
-            message: "Successfully fetched patientIds and unread counts",
-            uniqueData,
-            unreadCounts
-        });
-
-    } catch (error) {
-        console.error("Error in chatPatientWithDoctorAndIsReadCount: ", error);
-        return res.status(500).json({ success: false, message: "Internal server error" });
+    if (uniqueData.length === 0) {
+      return res.status(200).json({
+        success: true,
+        message: "No patient chat history found.",
+        uniqueData: [],
+        unreadCounts: []
+      });
     }
+
+    // Return the successful response with the full patient profiles
+    return res.status(200).json({
+      success: true,
+      message: "Successfully fetched patientIds and unread counts",
+      uniqueData,
+      unreadCounts
+    });
+
+  } catch (error) {
+    console.error("Error in chatPatientWithDoctorAndIsReadCount: ", error);
+    return res.status(500).json({ success: false, message: "Internal server error" });
+  }
 };
 exports.addFollowUpCall = async (req, res) => {
   try {
-    const { 
-      appointmentId, 
-      callDate, 
-      status, 
-      remarks 
+    const {
+      appointmentId,
+      callDate,
+      status,
+      remarks
     } = req.body;
 
     if (!appointmentId || !callDate) {
-      return res.status(400).json({ 
-        success: false, 
-        message: "Appointment ID and Call Date are required" 
+      return res.status(400).json({
+        success: false,
+        message: "Appointment ID and Call Date are required"
       });
     }
 
@@ -1941,10 +2693,10 @@ exports.addFollowUpCall = async (req, res) => {
 
   } catch (error) {
     console.error("Error adding follow-up call:", error);
-    res.status(500).json({ 
-      success: false, 
-      message: "Internal server error", 
-      error: error.message 
+    res.status(500).json({
+      success: false,
+      message: "Internal server error",
+      error: error.message
     });
   }
 };
@@ -1953,18 +2705,18 @@ exports.incrementCallCountByOne = async (req, res) => {
     const { appointmentId } = req.body;
 
     if (!appointmentId) {
-      return res.status(400).json({ 
-        success: false, 
-        message: "Appointment ID is required" 
+      return res.status(400).json({
+        success: false,
+        message: "Appointment ID is required"
       });
     }
 
     const updatedAppointment = await Appointment.findByIdAndUpdate(
       appointmentId,
-      { 
+      {
         $inc: { callCount: 1 },        // Increment count by 1
         $set: { lastCallMade: new Date() } // Set timestamp to NOW
-      }, 
+      },
       { new: true } // Returns the updated document
     );
 
@@ -2027,7 +2779,7 @@ exports.getPrescriptionsByAppointmentForNewDash = async (req, res) => {
 
     // 5. Process Prescriptions
     const processedPrescriptions = prescriptions.map(presc => {
-      
+
       // A. Extract Medicine Names
       const medicineNames = (presc.prescriptionItems && presc.prescriptionItems.length > 0)
         ? presc.prescriptionItems.map(item => item.medicineName).join(", ")
@@ -2036,29 +2788,29 @@ exports.getPrescriptionsByAppointmentForNewDash = async (req, res) => {
       // B. Determine Status (Schema Field: prescriptionStatus)
       // Default to "Active" if missing (as per your Schema default), or "-" if you prefer.
       // We prioritize the explicit schema field.
-      const pStatus = presc.prescriptionStatus || "Active"; 
+      const pStatus = presc.prescriptionStatus || "Active";
 
       // C. Update Status Count
       // Only increment if it matches one of our valid keys to keep the object clean
       if (statusCounts.hasOwnProperty(pStatus)) {
         statusCounts[pStatus]++;
-      } 
+      }
       // Optional: If you have dirty data (e.g. "In Progress"), you might want to map it to "Active" here.
 
       // D. Safe Access for Nested Appointment Fields
-      const apptDiseaseType = (appointment.diseaseType && appointment.diseaseType.name) 
-        ? appointment.diseaseType.name 
+      const apptDiseaseType = (appointment.diseaseType && appointment.diseaseType.name)
+        ? appointment.diseaseType.name
         : "-";
 
       return {
         prescriptionId: check(presc._id),
         prescriptionUniqueId: check(presc.prescriptionUniqueId),
-        
+
         // Fields from Appointment Schema
         appointmentUniqueId: check(appointment.appointmentUniqueId),
         diseaseType: check(apptDiseaseType),
-        consultingFor: check(appointment.diseaseName), 
-        
+        consultingFor: check(appointment.diseaseName),
+
         // Fields from Prescription Schema
         createdAt: check(presc.createdAt),
         medicineNames: medicineNames,
@@ -2108,11 +2860,11 @@ exports.closePrescriptionsByAppointment = async (req, res) => {
     // updateMany finds all matching documents and sets the status to "Closed"
     const result = await Prescription.updateMany(
       { $or: queryConditions },
-      { 
-        $set: { 
+      {
+        $set: {
           prescriptionStatus: "Closed",
           updatedAt: Date.now() // Keep timestamp fresh
-        } 
+        }
       }
     );
 
@@ -2181,8 +2933,8 @@ exports.getActiveRemindersByAppointment = async (req, res) => {
     const reminders = await NotificationReminderSettings.find({
       prescriptionId: { $in: activePrescriptionIds }
     })
-    .sort({ date: 1, doseTime: 1 }) // Sorted chronologically
-    .lean();
+      .sort({ date: 1, doseTime: 1 }) // Sorted chronologically
+      .lean();
 
     // 5. Map the results to your requested fields
     const formattedReminders = reminders.map(reminder => ({
@@ -2283,31 +3035,31 @@ exports.getPatientHistoryForNewDash = async (req, res) => {
 
     // 3. Process Appointments
     const processedAppointments = await Promise.all(appointments.map(async (appt) => {
-      
+
       const queryConditions = [
         { appointment: appt._id },
-        { appointmentID: appt._id } 
+        { appointmentID: appt._id }
       ];
 
       if (appt.prescriptionID) {
         queryConditions.push({ _id: appt.prescriptionID });
       }
 
-      const prescriptions = await Prescription.find({ 
+      const prescriptions = await Prescription.find({
         $or: queryConditions
       }).lean();
 
       let status = 'Unknown';
       const currentDate = new Date();
       const hasPrescriptions = prescriptions.length > 0;
-      
+
       const allPrescriptionsExpired = hasPrescriptions && prescriptions.every(p => {
         return p.endDate && new Date(p.endDate) < currentDate;
       });
 
       if (hasPrescriptions && allPrescriptionsExpired) {
         status = 'Completed';
-      } else if (appt.follow && appt.follow.toLowerCase() === 'patient care') { 
+      } else if (appt.follow && appt.follow.toLowerCase() === 'patient care') {
         status = 'Ongoing';
       } else if (['Consultation', 'Prescription', 'Payment', 'Medicine Preparation'].includes(appt.follow)) {
         status = 'New';
@@ -2319,10 +3071,10 @@ exports.getPatientHistoryForNewDash = async (req, res) => {
 
       return {
         appointmentId: check(appt._id, "Appointment ID"),
-        appointmentUniqueId: check(appt.appointmentUniqueId,"-"),
-        diseaseType: check(dType, "Disease Type"), 
+        appointmentUniqueId: check(appt.appointmentUniqueId, "-"),
+        diseaseType: check(dType, "Disease Type"),
         consultingFor: check(appt.diseaseName, "Consulting For"),
-        prescriptionCount: prescriptions.length, 
+        prescriptionCount: prescriptions.length,
         appointmentDate: check(appt.appointmentDate, "Appointment Date"),
         createdAt: check(appt.createdAt, "Created At"),
         status: check(status, "Status")
@@ -2334,7 +3086,7 @@ exports.getPatientHistoryForNewDash = async (req, res) => {
 
     if (appointments.length > 0) {
       const now = new Date();
-      
+
       // Find the first appointment where date is Valid AND <= Today
       const pastAppt = appointments.find(appt => {
         const d = new Date(appt.appointmentDate);
@@ -2355,10 +3107,10 @@ exports.getPatientHistoryForNewDash = async (req, res) => {
         address: check(patient.address, "-"),
         city: check(patient.currentLocation, "-"),
         source: check(patient.patientEntry, "-"),
-        phoneNumber: check(patient.phone,"-"),
-        
+        phoneNumber: check(patient.phone, "-"),
+
         // This is the safety net:
-        lastVisit: checkDate(lastVisitVal) 
+        lastVisit: checkDate(lastVisitVal)
       },
       appointments: processedAppointments
     };
@@ -2377,13 +3129,13 @@ exports.getPrescriptionRemindersForNewDash = async (req, res) => {
     // 1. Fetch Reminders
     // We sort by 'date' (ASC) and then 'doseTime' (ASC) so the frontend gets an ordered timeline
     const reminders = await NotificationReminderSettings.find({ prescriptionId: prescriptionId })
-      .sort({ date: 1, doseTime: 1 }) 
+      .sort({ date: 1, doseTime: 1 })
       .lean();
 
     if (!reminders || reminders.length === 0) {
-      return res.status(200).json({ 
-        message: "No reminders found for this prescription", 
-        data: [] 
+      return res.status(200).json({
+        message: "No reminders found for this prescription",
+        data: []
       });
     }
 
@@ -2425,15 +3177,15 @@ exports.updatePrescriptionSpecificStatus = async (req, res) => {
     // Validate against allowed Enum values (Active, Hold, Closed)
     const validStatuses = ["Active", "Hold", "Closed"];
     if (!validStatuses.includes(status)) {
-      return res.status(400).json({ 
-        message: `Invalid status. Allowed values are: ${validStatuses.join(", ")}` 
+      return res.status(400).json({
+        message: `Invalid status. Allowed values are: ${validStatuses.join(", ")}`
       });
     }
 
     // 2. Find and Update
     const updatedPrescription = await Prescription.findByIdAndUpdate(
       prescriptionId,
-      { 
+      {
         prescriptionStatus: status,
         updatedAt: Date.now() // Good practice to update timestamp
       },
@@ -2462,18 +3214,18 @@ exports.updatePrescriptionSpecificStatus = async (req, res) => {
 };
 exports.updateFollowUpCall = async (req, res) => {
   try {
-    const { 
-      appointmentId, 
+    const {
+      appointmentId,
       originalCallDate, // Used to find the specific log entry
       newCallDate,      // Optional: If you are rescheduling the time
-      status, 
-      remarks 
+      status,
+      remarks
     } = req.body;
 
     if (!appointmentId || !originalCallDate) {
-      return res.status(400).json({ 
-        success: false, 
-        message: "Appointment ID and Original Call Date are required" 
+      return res.status(400).json({
+        success: false,
+        message: "Appointment ID and Original Call Date are required"
       });
     }
 
@@ -2490,25 +3242,25 @@ exports.updateFollowUpCall = async (req, res) => {
     );
 
     if (callIndex === -1) {
-      return res.status(404).json({ 
-        success: false, 
-        message: "Follow-up call record not found for this date" 
+      return res.status(404).json({
+        success: false,
+        message: "Follow-up call record not found for this date"
       });
     }
 
     // 2. Update fields if provided
     if (status) appointment.followUpCalls[callIndex].status = status;
     if (remarks) appointment.followUpCalls[callIndex].remarks = remarks;
-    
+
     // 3. Handle Date Change (Rescheduling)
     if (newCallDate) {
       appointment.followUpCalls[callIndex].callDate = newCallDate;
       appointment.followUpCalls[callIndex].rescheduleCount += 1;
-      
+
       // OPTIONAL: If this was the call driving the main 'followUpTimestamp', update that too.
       // This logic checks if the call we are moving was the one currently set on the main document.
       if (new Date(appointment.followUpTimestamp).getTime() === new Date(originalCallDate).getTime()) {
-         appointment.followUpTimestamp = newCallDate;
+        appointment.followUpTimestamp = newCallDate;
       }
     }
 
@@ -2523,10 +3275,10 @@ exports.updateFollowUpCall = async (req, res) => {
 
   } catch (error) {
     console.error("Error updating follow-up call:", error);
-    res.status(500).json({ 
-      success: false, 
-      message: "Internal server error", 
-      error: error.message 
+    res.status(500).json({
+      success: false,
+      message: "Internal server error",
+      error: error.message
     });
   }
 };
@@ -2574,7 +3326,7 @@ exports.rescheduleWelcomeCall = async (req, res) => {
       {
         $set: {
           "newPatientFollowUp.scheduledTime": combinedDateTime,
-          "newPatientFollowUp.status": "Pending", 
+          "newPatientFollowUp.status": "Pending",
           "newPatientFollowUp.remarks": remarks || "Rescheduled by staff"
         },
         $push: {
@@ -2610,16 +3362,16 @@ exports.updateWelcomeCallStatus = async (req, res) => {
     // Validate Status Enum
     const validStatuses = ['Pending', 'Overdue', 'Rescheduled', 'Lost', 'Completed'];
     if (!validStatuses.includes(status)) {
-      return res.status(400).json({ 
-        success: false, 
-        message: `Invalid status. Allowed: ${validStatuses.join(', ')}` 
+      return res.status(400).json({
+        success: false,
+        message: `Invalid status. Allowed: ${validStatuses.join(', ')}`
       });
     }
 
     // 1. Prepare the dynamic updates
     let updateFields = {
       "newPatientFollowUp.status": status,
-      ...(remarks && { "newPatientFollowUp.remarks": remarks }) 
+      ...(remarks && { "newPatientFollowUp.remarks": remarks })
     };
 
     // 2. Logic for "Lost" status
@@ -2681,15 +3433,15 @@ exports.getPatientCallLogs = async (req, res) => {
       email: patient.email || "-",
       gender: patient.gender || "-",
       source: patient.patientEntry || "Direct", // Maps to 'patientEntry'
-      
+
       // Location Details
       city: patient.currentLocation || "-",
-      address: patient.address || "-", 
+      address: patient.address || "-",
       // Note: Country/Pincode are not separate fields in your schema, 
       // so we return the full address.
-      
+
       diseaseName: medDetails ? medDetails.diseaseName : "-",
-      
+
       // Current Status
       currentStatus: patient.newPatientFollowUp?.status || "Pending",
       scheduledTime: patient.newPatientFollowUp?.scheduledTime || null
@@ -2697,7 +3449,7 @@ exports.getPatientCallLogs = async (req, res) => {
 
     // 4. Get the Call Log (History)
     // We sort it so the most recent events appear first
-    const callLogs = (patient.newPatientFollowUp?.history || []).sort((a, b) => 
+    const callLogs = (patient.newPatientFollowUp?.history || []).sort((a, b) =>
       new Date(b.timestamp) - new Date(a.timestamp)
     );
 
@@ -2742,17 +3494,17 @@ exports.getNewPatientDashboard = async (req, res) => {
               $group: {
                 _id: null,
                 totalRegistered: { $sum: 1 },
-                completed: { 
-                  $sum: { $cond: [{ $eq: ["$newPatientFollowUp.status", "Completed"] }, 1, 0] } 
+                completed: {
+                  $sum: { $cond: [{ $eq: ["$newPatientFollowUp.status", "Completed"] }, 1, 0] }
                 },
-                rescheduled: { 
-                  $sum: { $cond: [{ $eq: ["$newPatientFollowUp.status", "Rescheduled"] }, 1, 0] } 
+                rescheduled: {
+                  $sum: { $cond: [{ $eq: ["$newPatientFollowUp.status", "Rescheduled"] }, 1, 0] }
                 },
-                overdue: { 
-                  $sum: { $cond: [{ $eq: ["$newPatientFollowUp.status", "Overdue"] }, 1, 0] } 
+                overdue: {
+                  $sum: { $cond: [{ $eq: ["$newPatientFollowUp.status", "Overdue"] }, 1, 0] }
                 },
-                lost: { 
-                  $sum: { $cond: [{ $eq: ["$newPatientFollowUp.status", "Lost"] }, 1, 0] } 
+                lost: {
+                  $sum: { $cond: [{ $eq: ["$newPatientFollowUp.status", "Lost"] }, 1, 0] }
                 }
               }
             },
@@ -2788,7 +3540,7 @@ exports.getNewPatientDashboard = async (req, res) => {
 
           // --- BLOCK C: TABLE LIST ---
           "tableList": [
-            { $sort: { createdAt: -1 } }, 
+            { $sort: { createdAt: -1 } },
             {
               $project: {
                 _id: 1,
@@ -2800,25 +3552,25 @@ exports.getNewPatientDashboard = async (req, res) => {
                 // --- FETCHING FROM patientDetails (via medDetails alias) ---
                 diseaseName: { $ifNull: ["$medDetails.diseaseName", "-"] },
                 consultingFor: { $ifNull: ["$medDetails.consultingFor", "-"] },
-                diseaseType: { $ifNull: ["$medDetails.diseaseType.name", "-"] }, 
+                diseaseType: { $ifNull: ["$medDetails.diseaseType.name", "-"] },
                 // ----------------------------------
 
                 scheduledTime: { $ifNull: ["$newPatientFollowUp.scheduledTime", "-"] },
 
                 // Last Call Attempt Logic
-                lastCallAttempt: { 
-                    $let: {
-                        vars: { 
-                          lastLog: { 
-                            $arrayElemAt: [ { $slice: [ "$newPatientFollowUp.history", -1 ] }, 0 ] 
-                          } 
-                        },
-                        in: { $ifNull: ["$$lastLog.timestamp", "-"] }
-                    }
+                lastCallAttempt: {
+                  $let: {
+                    vars: {
+                      lastLog: {
+                        $arrayElemAt: [{ $slice: ["$newPatientFollowUp.history", -1] }, 0]
+                      }
+                    },
+                    in: { $ifNull: ["$$lastLog.timestamp", "-"] }
+                  }
                 },
 
                 callsMade: { $ifNull: ["$newPatientFollowUp.callsMade", "-"] },
-                
+
                 rescheduledTime: {
                   $cond: {
                     if: { $eq: ["$newPatientFollowUp.status", "Rescheduled"] },
@@ -2839,9 +3591,9 @@ exports.getNewPatientDashboard = async (req, res) => {
 
     res.status(200).json({
       success: true,
-      kpis: result.kpis[0] || { 
-          totalRegistered: 0, completed: 0, rescheduled: 0, 
-          overdue: 0, lost: 0, slaCompletionPercentage: 0 
+      kpis: result.kpis[0] || {
+        totalRegistered: 0, completed: 0, rescheduled: 0,
+        overdue: 0, lost: 0, slaCompletionPercentage: 0
       },
       pieChart: result.callAttemptsBreakdown,
       tableData: result.tableList
@@ -2858,8 +3610,8 @@ exports.getPrescriptionFollowUpReport = async (req, res) => {
     const appointments = await Appointment.find({
       prescriptionID: { $exists: true, $ne: null },
     })
-      .populate("patient", "patientUniqueId name phone") 
-      .lean(); 
+      .populate("patient", "patientUniqueId name phone")
+      .lean();
 
     // ============================================================
     // --- NEW ADDITION: CALCULATE CHART STATISTICS ---
@@ -2870,21 +3622,21 @@ exports.getPrescriptionFollowUpReport = async (req, res) => {
     let globalTotalCalls = 0;
 
     appointments.forEach(appt => {
-        const calls = appt.followUpCalls || [];
-        globalTotalCalls += calls.length;
+      const calls = appt.followUpCalls || [];
+      globalTotalCalls += calls.length;
 
-        calls.forEach(call => {
-            if (call.status === 'Pending') globalPending++;
-            if (call.status === 'Rescheduled') globalRescheduled++;
-            if (call.status === 'Completed') globalCompleted++;
-        });
+      calls.forEach(call => {
+        if (call.status === 'Pending') globalPending++;
+        if (call.status === 'Rescheduled') globalRescheduled++;
+        if (call.status === 'Completed') globalCompleted++;
+      });
     });
 
     // Calculate Completion Rate (Percentage)
     // Formula: (Total Completed / Total Calls) * 100
-    const completionRate = globalTotalCalls > 0 
-        ? Math.round((globalCompleted / globalTotalCalls) * 100) 
-        : 0;
+    const completionRate = globalTotalCalls > 0
+      ? Math.round((globalCompleted / globalTotalCalls) * 100)
+      : 0;
     // ============================================================
 
 
@@ -2894,11 +3646,11 @@ exports.getPrescriptionFollowUpReport = async (req, res) => {
 
       // A. Calculate Counts
       const totalFollowUps = calls.length;
-      
+
       const completedCount = calls.filter(
         (c) => c.status === "Completed"
       ).length;
-      
+
       const missedCount = calls.filter(
         (c) => c.status === "Missed"
       ).length;
@@ -2912,14 +3664,14 @@ exports.getPrescriptionFollowUpReport = async (req, res) => {
       const pastCalls = calls
         .filter((c) => c.status === "Completed" || c.status === "Missed")
         .sort((a, b) => new Date(b.callDate) - new Date(a.callDate));
-      
+
       const lastCall = pastCalls.length > 0 ? pastCalls[0] : null;
 
       // C. Find "Next" Follow-Up (Usually "Pending")
       const pendingCalls = calls
         .filter((c) => c.status === "Pending")
         .sort((a, b) => new Date(a.callDate) - new Date(b.callDate));
-        
+
       const nextCall = pendingCalls.length > 0 ? pendingCalls[0] : null;
 
       // D. Return the "Line Item"
@@ -2933,10 +3685,10 @@ exports.getPrescriptionFollowUpReport = async (req, res) => {
         patientName: appt.patient?.name || "Unknown",
         // ADDED: Phone Number
         phoneNumber: appt.patient?.phone || "N/A",
-        
+
         // Appointment Details
         appointmentDate: appt.appointmentDate,
-        timeSlot: appt.timeSlot, 
+        timeSlot: appt.timeSlot,
         prescriptionId: appt.prescriptionID,
 
         // Follow-Up Stats
@@ -2960,10 +3712,10 @@ exports.getPrescriptionFollowUpReport = async (req, res) => {
       success: true,
       // --- NEW ADDITION: STATS OBJECT FOR CHART ---
       stats: {
-          pending: globalPending,
-          rescheduled: globalRescheduled,
-          completed: globalCompleted,
-          completionRate: completionRate
+        pending: globalPending,
+        rescheduled: globalRescheduled,
+        completed: globalCompleted,
+        completionRate: completionRate
       },
       // --------------------------------------------
       count: reportData.length,
@@ -2998,22 +3750,22 @@ exports.getPatientCallReport = async (req, res) => {
       phoneNumber: patient.phone,
       email: patient.email || "-",
       gender: patient.gender || "-",
-      source: patient.patientEntry || "Direct", 
-      
+      source: patient.patientEntry || "Direct",
+
       // Location Details
       city: patient.currentLocation || "-",
-      address: patient.address || "-", 
-      
+      address: patient.address || "-",
+
       // Use the fetched details to get diseaseName
       diseaseName: details ? details.diseaseName : "-",
-      
+
       // Current Status
       currentStatus: patient.newPatientFollowUp?.status || "Pending",
       scheduledTime: patient.newPatientFollowUp?.scheduledTime || null
     };
 
     // 4. Get the Call Log (History)
-    const callLogs = (patient.newPatientFollowUp?.history || []).sort((a, b) => 
+    const callLogs = (patient.newPatientFollowUp?.history || []).sort((a, b) =>
       new Date(b.timestamp) - new Date(a.timestamp)
     );
 
@@ -3038,9 +3790,9 @@ exports.getTotalAppointmentsForDoctor = async (req, res) => {
       doctor: doctorId,
     });
 
-    res.status(200).json({ 
-        success: true, 
-        totalAppointments: totalAppointments 
+    res.status(200).json({
+      success: true,
+      totalAppointments: totalAppointments
     });
 
   } catch (error) {
@@ -3067,9 +3819,9 @@ exports.getTodaysAppointmentCount = async (req, res) => {
       },
     });
 
-    res.status(200).json({ 
-        success: true, 
-        count: todaysCount 
+    res.status(200).json({
+      success: true,
+      count: todaysCount
     });
 
   } catch (error) {

@@ -32,7 +32,7 @@ patientUniqueId: {
     },
     newExisting: {
       type: String,
-      enum: ["New", "Existing"],
+      enum: ["New", "Existing","Emergency"],
       default: "New",
       required: false,
     },
