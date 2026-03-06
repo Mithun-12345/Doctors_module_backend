@@ -113,7 +113,7 @@ exports.createPatient = asyncHandler(async (req, res) => {
   // --- Create Patient Record (Password logic is REMOVED) ---
   const newPatient = new Patient({
     name, age, phone, whatsappNumber, email, gender,
-    patientEntry, currentLocation,
+    patientEntry, currentLocation, phoneAllowed: "true",
     patientUniqueId: newPatientUniqueId, 
     // Note: We no longer create a password here.
     requiresPasswordReset: true,
